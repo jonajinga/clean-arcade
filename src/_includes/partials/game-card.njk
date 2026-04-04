@@ -1,14 +1,7 @@
 <a href="/games/{{ g.slug }}/" class="game-card" data-category="{{ g.category }}" data-tags="{{ g.tags | join(',') }}" data-difficulty="{{ g.difficulty }}" data-date="{{ g.dateAdded }}" data-title="{{ g.title }}">
   <div class="game-card__thumb">
     <div class="game-card__thumb-placeholder" style="background: var(--cat-{{ g.category }})">
-      <span>{{ g.title }}</span>
-    </div>
-  </div>
-  <div class="game-card__body">
-    <h3 class="game-card__title">{{ g.title }}</h3>
-    <div class="game-card__meta">
-      <span class="badge badge--sm" title="{{ g.category | capitalize }}">{{ g.category }}</span>
-      {% if g.multiplayer %}<span class="badge badge--sm" title="Multiplayer">MP</span>{% endif %}
+      <span class="game-card__title">{{ g.title }}</span>
     </div>
   </div>
 </a>
