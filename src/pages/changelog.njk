@@ -1,0 +1,22 @@
+---
+layout: layouts/page.njk
+title: "Changelog"
+description: "What's new in Clean Arcade — version history and updates."
+permalink: /changelog/
+---
+<div class="changelog-list">
+  {% for entry in changelog %}
+    <div class="changelog-entry">
+      <div class="changelog-entry__header">
+        <span class="changelog-entry__version">v{{ entry.version }}</span>
+        <span class="changelog-entry__date">{{ entry.date }}</span>
+      </div>
+      <h3>{{ entry.title }}</h3>
+      <ul>
+        {% for change in entry.changes %}
+          <li>{{ change }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endfor %}
+</div>

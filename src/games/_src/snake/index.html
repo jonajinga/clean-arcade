@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
+    .placeholder { text-align: center; }
+    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .placeholder p { color: #94a3b8; }
+    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+  <div class="placeholder">
+    <h1>Snake</h1>
+    <p>Game coming soon</p>
+    <canvas id="game" width="400" height="300"></canvas>
+  </div>
+  <script>
+    var c = document.getElementById("game");
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(0, 0, 400, 300);
+    ctx.fillStyle = "#6366f1";
+    ctx.font = "20px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText("Snake", 200, 150);
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<div class="hamburger-panel" id="hamburger-panel" aria-hidden="true">
+  <div class="hamburger-panel__overlay" onclick="closeHamburger()"></div>
+  <div class="hamburger-panel__content" role="dialog" aria-label="Navigation menu">
+    <button class="hamburger-panel__close" onclick="closeHamburger()" aria-label="Close menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <nav aria-label="Mobile navigation">
+      <ul class="hamburger-panel__nav">
+        {% for item in navigation %}
+          <li>
+            <a href="{{ item.url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>
+              {{ item.label }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </nav>
+    <div class="hamburger-panel__extras">
+      <div class="gtranslate_wrapper"></div>
+    </div>
+  </div>
+</div>

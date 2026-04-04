@@ -1,0 +1,36 @@
+---json
+{
+  "permalink": "/feed.xml",
+  "eleventyExcludeFromCollections": true,
+  "metadata": {
+    "title": "Clean Arcade Blog",
+    "subtitle": "Updates, game spotlights, and news from Clean Arcade.",
+    "language": "en",
+    "url": "https://cleanarcade.com/",
+    "author": {
+      "name": "Pikes Peak Web Designs"
+    }
+  }
+}
+---
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="{{ metadata.language }}">
+  <title>{{ metadata.title }}</title>
+  <subtitle>{{ metadata.subtitle }}</subtitle>
+  <link href="{{ metadata.url }}feed.xml" rel="self" type="application/atom+xml"/>
+  <link href="{{ metadata.url }}" rel="alternate" type="text/html"/>
+  <updated>{{ collections.posts | getNewestCollectionItemDate | dateToRfc3339 }}</updated>
+  <id>{{ metadata.url }}</id>
+  <author>
+    <name>{{ metadata.author.name }}</name>
+  </author>
+  {%- for post in collections.posts | head(20) %}
+  <entry>
+    <title>{{ post.data.title }}</title>
+    <link href="{{ metadata.url }}{{ post.url }}"/>
+    <updated>{{ post.date | dateToRfc3339 }}</updated>
+    <id>{{ metadata.url }}{{ post.url }}</id>
+    <content type="html">{{ post.content | htmlToAbsoluteUrls(metadata.url + post.url) }}</content>
+  </entry>
+  {%- endfor %}
+</feed>

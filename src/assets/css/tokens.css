@@ -1,0 +1,102 @@
+/* === Design Tokens === */
+:root {
+  /* Colors */
+  --navy-950: #0f172a;
+  --navy-900: #1e293b;
+  --navy-800: #1e3a5f;
+  --navy-700: #334155;
+  --slate-600: #475569;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
+  --white: #ffffff;
+
+  /* Accent */
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: #a5b4fc;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+
+  /* Category colors */
+  --cat-puzzle: #7c4dff;
+  --cat-arcade: #ff5252;
+  --cat-card: #26a69a;
+  --cat-board: #8d6e63;
+  --cat-word: #29b6f6;
+  --cat-strategy: #ff7043;
+  --cat-sports: #66bb6a;
+  --cat-racing: #ffa726;
+  --cat-action: #ec407a;
+  --cat-simulation: #ab47bc;
+
+  /* Semantic */
+  --bg: var(--white);
+  --bg-alt: var(--slate-50);
+  --bg-card: var(--white);
+  --text: var(--navy-900);
+  --text-muted: var(--slate-600);
+  --heading: var(--navy-950);
+  --link: var(--accent);
+  --link-hover: var(--accent-hover);
+  --border: var(--slate-200);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.06), 0 12px 24px rgba(0, 0, 0, 0.08);
+
+  /* Typography */
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", var(--font-body);
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  --text-2xl: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  --text-3xl: clamp(1.875rem, 1.4rem + 1.5vw, 2.5rem);
+  --text-4xl: clamp(2.25rem, 1.6rem + 2vw, 3.25rem);
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  --space-section: clamp(3rem, 2rem + 4vw, 6rem);
+
+  /* Layout */
+  --max-width: 1200px;
+  --radius: 0;
+  --radius-sm: 0;
+  --radius-lg: 0;
+  --header-height: 64px;
+}
+
+/* === Dark Mode === */
+[data-mode="dark"] {
+  --bg: var(--navy-950);
+  --bg-alt: var(--navy-900);
+  --bg-card: var(--navy-900);
+  --text: var(--slate-300);
+  --text-muted: var(--slate-400);
+  --heading: var(--slate-100);
+  --link: var(--accent-light);
+  --link-hover: var(--white);
+  --border: var(--navy-700);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.3), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

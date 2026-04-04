@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="{{ meta.language }}" data-mode="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} | {{ meta.shortTitle }}</title>
+  <meta name="description" content="{{ description or meta.description }}">
+  <meta name="author" content="{{ meta.author }}">
+  <meta name="theme-color" content="{{ meta.themeColor }}">
+  <link rel="canonical" href="{{ meta.url }}{{ page.url }}">
+
+  {# Open Graph #}
+  <meta property="og:title" content="{{ title }} | {{ meta.shortTitle }}">
+  <meta property="og:description" content="{{ description or meta.description }}">
+  <meta property="og:url" content="{{ meta.url }}{{ page.url }}">
+  <meta property="og:image" content="{{ meta.url }}{{ ogImage or meta.ogImage }}">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="{{ meta.locale }}">
+  <meta property="og:site_name" content="{{ meta.title }}">
+
+  {# Twitter Card #}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ title }} | {{ meta.shortTitle }}">
+  <meta name="twitter:description" content="{{ description or meta.description }}">
+  <meta name="twitter:image" content="{{ meta.url }}{{ ogImage or meta.ogImage }}">
+
+  {# Bunny Fonts #}
+  <link rel="preconnect" href="https://fonts.bunny.net">
+  <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700|space-grotesk:500,600,700" rel="stylesheet">
+
+  {# CSS — single concatenated file with cache bust #}
+  <link rel="stylesheet" href="/assets/css/global.css?v={{ "" | year }}">
+
+  {# Pagefind CSS #}
+  <link rel="stylesheet" href="/pagefind/pagefind-ui.css">
+
+  {# Dark mode — inline to prevent flash #}
+  <script>
+    (function(){
+      var m = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-mode", m);
+    })();
+  </script>
+
+  {# RSS #}
+  <link rel="alternate" type="application/atom+xml" title="{{ meta.title }}" href="{{ meta.url }}/feed.xml">
+
+  {# JSON-LD #}
+  {% include "partials/schema-org.njk" %}
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {% include "partials/header.njk" %}
+  {% include "partials/hamburger-panel.njk" %}
+
+  <main id="main">
+    {{ content | safe }}
+  </main>
+
+  {% include "partials/footer.njk" %}
+
+  {# Back to top #}
+  <button class="back-to-top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3L3 10h4v7h6v-7h4L10 3z" fill="currentColor"/></svg>
+  </button>
+
+  {# GTranslate #}
+  <script>
+    window.gtranslateSettings = {
+      default_language: "en",
+      languages: ["en","es","fr","de","pt","zh-CN","ja","ko","ar","hi"],
+      wrapper_selector: ".gtranslate_wrapper"
+    };
+  </script>
+  <script src="https://cdn.gtranslate.net/widgets/latest/float.js" defer></script>
+
+  {# Pagefind #}
+  <script src="/pagefind/pagefind-ui.js" defer></script>
+
+  {# Site JS #}
+  <script src="/assets/js/theme-toggle.js" defer></script>
+  <script src="/assets/js/nav.js" defer></script>
+  <script src="/assets/js/search.js" defer></script>
+
+  {# Back to top visibility #}
+  <script>
+    (function(){
+      var btn = document.querySelector(".back-to-top");
+      if(!btn) return;
+      window.addEventListener("scroll", function(){
+        btn.classList.toggle("visible", window.scrollY > 600);
+      });
+    })();
+  </script>
+
+  {# Umami analytics — uncomment when configured
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="YOUR-ID"></script>
+  #}
+</body>
+</html>

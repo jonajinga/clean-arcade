@@ -1,0 +1,53 @@
+---
+layout: layouts/base.njk
+title: "Free Browser Games"
+description: "200 free browser games — no ads, no tracking, just play. Puzzle, arcade, card, board, word, strategy, and more."
+---
+<section class="hero" data-pagefind-body>
+  <div class="container">
+    <h1 class="hero__title">Clean games. Zero clutter.</h1>
+    <p class="hero__subtitle">200 free browser games with no ads, no pop-ups, no tracking. Just pick a game and play.</p>
+    <div class="hero__actions">
+      <a href="#games" class="btn btn--primary btn--lg">Browse Games</a>
+      <a href="/features/" class="btn btn--outline btn--lg">Learn More</a>
+    </div>
+    <div class="hero__stats">
+      <div class="hero__stat">
+        <div class="hero__stat-value">{{ games | length }}</div>
+        <div class="hero__stat-label">Games</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">{{ categories | length }}</div>
+        <div class="hero__stat-label">Categories</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">0</div>
+        <div class="hero__stat-label">Ads</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="categories">
+  <div class="container">
+    <h2 class="text-center">Categories</h2>
+    <div class="categories-strip">
+      {% for cat in categories %}
+        <a href="#games" class="category-card" onclick="filterGames('{{ cat.slug }}')">
+          <span class="category-card__label">{{ cat.label }}</span>
+          <span class="text-muted" style="font-size: var(--text-xs);">{{ cat.description }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section--alt" id="games">
+  <div class="container">
+    <h2 class="text-center" style="margin-bottom: var(--space-xl);">All Games</h2>
+    {% set gameList = games %}
+    {% include "partials/game-grid.njk" %}
+  </div>
+</section>
+
+<script src="/assets/js/game-filter.js" defer></script>

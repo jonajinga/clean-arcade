@@ -1,0 +1,20 @@
+---
+layout: layouts/base.njk
+---
+<article class="section post" data-pagefind-body>
+  <div class="container post__container">
+    <header class="post__header">
+      <h1>{{ title }}</h1>
+      <div class="post__meta">
+        <time datetime="{{ date | htmlDateString }}">{{ date | readableDate }}</time>
+        <span class="post__reading-time">{{ content | readingTime }}</span>
+      </div>
+    </header>
+    <div class="post__body">
+      {{ content | safe }}
+    </div>
+    <footer class="post__footer">
+      <a href="/blog/" class="btn btn--outline">&larr; All posts</a>
+    </footer>
+  </div>
+</article>

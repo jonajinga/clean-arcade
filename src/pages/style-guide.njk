@@ -1,0 +1,81 @@
+---
+layout: layouts/page.njk
+title: "Style Guide"
+description: "Clean Arcade design system — colors, typography, and components."
+permalink: /style-guide/
+eleventyExcludeFromCollections: true
+---
+<div class="style-section">
+  <h2>Colors</h2>
+  <div class="color-swatches">
+    <div class="color-swatch">
+      <div class="color-swatch__preview" style="background: var(--navy-950);"></div>
+      <div class="color-swatch__label">Navy 950</div>
+      <div class="color-swatch__value">#0f172a</div>
+    </div>
+    <div class="color-swatch">
+      <div class="color-swatch__preview" style="background: var(--accent);"></div>
+      <div class="color-swatch__label">Accent</div>
+      <div class="color-swatch__value">#6366f1</div>
+    </div>
+    <div class="color-swatch">
+      <div class="color-swatch__preview" style="background: var(--green);"></div>
+      <div class="color-swatch__label">Green</div>
+      <div class="color-swatch__value">#22c55e</div>
+    </div>
+    <div class="color-swatch">
+      <div class="color-swatch__preview" style="background: var(--red);"></div>
+      <div class="color-swatch__label">Red</div>
+      <div class="color-swatch__value">#ef4444</div>
+    </div>
+    <div class="color-swatch">
+      <div class="color-swatch__preview" style="background: var(--amber);"></div>
+      <div class="color-swatch__label">Amber</div>
+      <div class="color-swatch__value">#f59e0b</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top: var(--space-xl);">Category Colors</h3>
+  <div class="color-swatches">
+    {% for cat in categories %}
+      <div class="color-swatch">
+        <div class="color-swatch__preview" style="background: var(--cat-{{ cat.slug }});"></div>
+        <div class="color-swatch__label">{{ cat.label }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="style-section">
+  <h2>Typography</h2>
+  <div class="type-sample">
+    <h1>Heading 1 — Space Grotesk</h1>
+    <h2>Heading 2 — Space Grotesk</h2>
+    <h3>Heading 3 — Space Grotesk</h3>
+    <p>Body text — Inter. Clean Arcade is built on a simple idea: games should be fun, not frustrating.</p>
+    <p class="text-muted">Muted text for secondary information and descriptions.</p>
+  </div>
+</div>
+
+<div class="style-section">
+  <h2>Buttons</h2>
+  <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-lg);">
+    <button class="btn btn--primary">Primary</button>
+    <button class="btn btn--outline">Outline</button>
+    <button class="btn btn--primary btn--sm">Small</button>
+    <button class="btn btn--primary btn--lg">Large</button>
+  </div>
+</div>
+
+<div class="style-section">
+  <h2>Badges</h2>
+  <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+    <span class="badge badge--category">Category</span>
+    <span class="badge badge--multiplayer">Multiplayer</span>
+    <span class="badge badge--easy">Easy</span>
+    <span class="badge badge--medium">Medium</span>
+    <span class="badge badge--hard">Hard</span>
+    <span class="badge badge--mobile">Mobile OK</span>
+    <span class="badge badge--desktop">Desktop only</span>
+  </div>
+</div>

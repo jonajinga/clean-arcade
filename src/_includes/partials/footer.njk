@@ -1,0 +1,30 @@
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <div class="site-footer__grid">
+      <div class="site-footer__brand">
+        <span class="logo-text">{{ meta.shortTitle }}</span>
+        <p>{{ meta.description }}</p>
+      </div>
+      <div class="site-footer__links">
+        <h3>Navigate</h3>
+        <ul>
+          {% for item in navigation %}
+            <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="site-footer__links">
+        <h3>Resources</h3>
+        <ul>
+          <li><a href="/style-guide/">Style Guide</a></li>
+          <li><a href="/feed.xml">RSS Feed</a></li>
+          <li><a href="/sitemap.xml">Sitemap</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="site-footer__bottom">
+      <p>&copy; {{ "" | year }} {{ meta.title }}. All rights reserved.</p>
+      <p>Website by <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a></p>
+    </div>
+  </div>
+</footer>

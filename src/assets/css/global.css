@@ -1,0 +1,4 @@
+/* Clean Arcade — global.css
+   This file is the build entry point.
+   All CSS partials are concatenated at build time via eleventy.config.js.
+   Do NOT add @import statements. */

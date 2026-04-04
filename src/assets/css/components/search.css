@@ -1,0 +1,38 @@
+/* === Search Modal === */
+.search-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  background: rgba(0, 0, 0, 0.6);
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0.2s, opacity 0.2s;
+}
+
+.search-modal.open {
+  visibility: visible;
+  opacity: 1;
+}
+
+.search-modal__content {
+  background: var(--bg);
+  width: min(600px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Pagefind UI overrides */
+.pagefind-ui__search-input {
+  font-family: var(--font-body) !important;
+  border-radius: 0 !important;
+}
+
+.pagefind-ui__result-link {
+  color: var(--accent) !important;
+}

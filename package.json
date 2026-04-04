@@ -1,0 +1,31 @@
+{
+  "name": "clean-arcade",
+  "version": "1.0.0",
+  "description": "200 free browser games — no ads, no tracking, just play",
+  "type": "module",
+  "scripts": {
+    "start": "npx @11ty/eleventy --serve --port=8080",
+    "dev": "npx @11ty/eleventy --serve --port=8080",
+    "build": "npx @11ty/eleventy && npx pagefind --site _site",
+    "clean": "npx rimraf _site"
+  },
+  "keywords": [
+    "games",
+    "arcade",
+    "html5",
+    "browser-games"
+  ],
+  "author": "Pikes Peak Web Designs",
+  "license": "ISC",
+  "devDependencies": {
+    "@11ty/eleventy": "^3.1.5",
+    "@11ty/eleventy-img": "^6.0.4",
+    "@11ty/eleventy-plugin-rss": "^3.0.0",
+    "@sardine/eleventy-plugin-tinyhtml": "^0.2.0",
+    "luxon": "^3.7.2",
+    "pagefind": "^1.4.0"
+  },
+  "dependencies": {
+    "trystero": "^0.18.0"
+  }
+}

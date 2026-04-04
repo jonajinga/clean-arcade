@@ -1,0 +1,52 @@
+---
+layout: layouts/page.njk
+title: "My Games"
+description: "Your recently played and favorite games — saved locally in your browser."
+permalink: /my-games/
+---
+<p class="text-muted">Your game history and favorites are stored locally in your browser. Nothing is sent to any server.</p>
+
+<div style="margin-top: var(--space-2xl);">
+  <h2>Favorites</h2>
+  <div class="game-grid" id="favorites-grid">
+    <p class="text-muted" id="no-favorites">No favorites yet. Click the heart on any game to save it here.</p>
+  </div>
+</div>
+
+<div style="margin-top: var(--space-2xl);">
+  <h2>Recently Played</h2>
+  <div class="game-grid" id="recent-grid">
+    <p class="text-muted" id="no-recent">No games played yet. Go play something!</p>
+  </div>
+</div>
+
+<script>
+  var ALL_GAMES = {{ games | dump | safe }};
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var favSlugs = JSON.parse(localStorage.getItem("ca-favorites") || "[]");
+    var recentData = JSON.parse(localStorage.getItem("ca-recent") || "[]");
+
+    renderGrid("favorites-grid", "no-favorites", favSlugs);
+    renderGrid("recent-grid", "no-recent", recentData.map(function (r) { return r.slug; }));
+  });
+
+  function renderGrid(gridId, emptyId, slugs) {
+    var grid = document.getElementById(gridId);
+    var empty = document.getElementById(emptyId);
+    if (!slugs.length) return;
+    if (empty) empty.hidden = true;
+
+    slugs.forEach(function (slug) {
+      var game = ALL_GAMES.find(function (g) { return g.slug === slug; });
+      if (!game) return;
+      var card = document.createElement("a");
+      card.href = "/games/" + game.slug + "/";
+      card.className = "game-card";
+      card.innerHTML =
+        '<div class="game-card__thumb"><div class="game-card__thumb-placeholder" style="background: var(--cat-' + game.category + ')"><span>' + game.title + '</span></div></div>' +
+        '<div class="game-card__body"><h3 class="game-card__title">' + game.title + '</h3></div>';
+      grid.appendChild(card);
+    });
+  }
+</script>

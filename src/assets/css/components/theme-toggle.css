@@ -1,0 +1,16 @@
+/* === Theme Toggle === */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+}
+
+[data-mode="light"] .theme-toggle__moon { display: none; }
+[data-mode="dark"] .theme-toggle__sun { display: none; }

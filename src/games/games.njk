@@ -1,0 +1,13 @@
+---
+pagination:
+  data: games
+  size: 1
+  alias: game
+  addAllPagesToCollections: true
+layout: layouts/game.njk
+tags: gamePage
+permalink: /games/{{ game.slug }}/
+eleventyComputed:
+  title: "{{ game.title }}"
+  description: "{{ game.description }}"
+---

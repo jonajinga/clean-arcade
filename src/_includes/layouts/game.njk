@@ -1,0 +1,108 @@
+---
+layout: layouts/base.njk
+---
+<section class="section game-page" data-pagefind-body>
+  <div class="container">
+    {# Breadcrumb #}
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/">Home</a></li>
+        <li><a href="/#games">Games</a></li>
+        <li aria-current="page">{{ game.title }}</li>
+      </ol>
+    </nav>
+
+    {# Game header #}
+    <header class="game-page__header">
+      <h1>{{ game.title }}</h1>
+      <div class="game-page__badges">
+        <span class="badge badge--category">{{ game.category }}</span>
+        <span class="badge badge--difficulty badge--{{ game.difficulty }}">{{ game.difficulty }}</span>
+        {% if game.multiplayer %}
+          <span class="badge badge--multiplayer">Multiplayer</span>
+        {% endif %}
+        {% if game.mobileSupport %}
+          <span class="badge badge--mobile">Mobile OK</span>
+        {% else %}
+          <span class="badge badge--desktop">Desktop only</span>
+        {% endif %}
+      </div>
+    </header>
+
+    {# Game iframe #}
+    <div class="game-embed">
+      <div class="game-embed__wrapper">
+        <iframe
+          id="game-frame"
+          src="{{ game.gamePath }}"
+          title="Play {{ game.title }}"
+          sandbox="allow-scripts allow-same-origin"
+          loading="lazy"
+        ></iframe>
+        <div class="game-embed__loading" id="game-loading">
+          <span>Loading game...</span>
+        </div>
+      </div>
+      <div class="game-embed__controls">
+        <button class="btn btn--sm" onclick="document.getElementById('game-frame').requestFullscreen()" aria-label="Fullscreen">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Fullscreen
+        </button>
+        <button class="btn btn--sm" id="favorite-btn" onclick="toggleFavorite('{{ game.slug }}')" aria-label="Favorite">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 14s-5.5-3.5-5.5-7A3.5 3.5 0 018 4a3.5 3.5 0 015.5 3c0 3.5-5.5 7-5.5 7z" stroke="currentColor" stroke-width="1.5" fill="none" id="heart-path"/></svg>
+          <span id="fav-label">Favorite</span>
+        </button>
+        <button class="btn btn--sm" onclick="shareGame('{{ game.title }}', '{{ game.slug }}')" aria-label="Share">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 8h8M12 8l-3-3M12 8l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Share
+        </button>
+      </div>
+    </div>
+
+    {# Mobile warning #}
+    {% if not game.mobileSupport %}
+      <div class="game-page__mobile-warning" role="alert">
+        This game works best on a desktop or tablet with a keyboard.
+      </div>
+    {% endif %}
+
+    {# Controls #}
+    <div class="game-page__info">
+      <div class="game-page__controls">
+        <h2>Controls</h2>
+        <p>{{ game.controls }}</p>
+      </div>
+      <div class="game-page__description">
+        <h2>About</h2>
+        <p>{{ game.description }}</p>
+      </div>
+    </div>
+
+    {# Multiplayer UI #}
+    {% if game.multiplayer %}
+      {% include "partials/multiplayer-ui.njk" %}
+    {% endif %}
+
+    {# Related games #}
+    <div class="game-page__related">
+      <h2>More {{ game.category | capitalize }} Games</h2>
+      <div class="game-grid game-grid--small">
+        {% set related = games | where("category", game.category) | rejectattr("slug", game.slug) | head(4) %}
+        {% for g in related %}
+          {% include "partials/game-card.njk" %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  var GAME_SLUG = "{{ game.slug }}";
+</script>
+<script src="/assets/js/game-loader.js" defer></script>
+<script src="/assets/js/save-system.js" defer></script>
+<script src="/assets/js/my-games.js" defer></script>
+<script src="/assets/js/share.js" defer></script>
+{% if game.multiplayer %}
+<script type="module" src="/assets/js/multiplayer.js"></script>
+{% endif %}
