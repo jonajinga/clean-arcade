@@ -342,8 +342,8 @@ body {
         gameOver = true;
         document.getElementById('final-text').textContent = 'Score: ' + score;
         document.getElementById('gameover-overlay').classList.remove('hidden');
-        saveState();
       }
+      saveState();
     }
     return moved;
   }
@@ -378,7 +378,7 @@ body {
   }
 
   function saveState() {
-    try { parent.postMessage({ type: 'ca-save', slug: '2048', state: { highScore: bestScore } }, '*'); } catch(e) {}
+    try { parent.postMessage({ type: 'ca-save', slug: '2048', state: { grid: grid, score: score, best: bestScore, won: won, over: gameOver } }, '*'); } catch(e) {}
   }
 
   window.newGame = function() {
@@ -432,10 +432,27 @@ body {
   }, {passive: true});
 
   // Parent save/load
+  var stateRestored = false;
   window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'ca-load') {
-      if (e.data.state && typeof e.data.state.highScore === 'number') {
-        bestScore = e.data.state.highScore;
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      var s = e.data.state;
+      if (s.grid) {
+        // Full state restore
+        grid = s.grid;
+        score = s.score || 0;
+        bestScore = s.best || 0;
+        won = !!s.won;
+        gameOver = !!s.over;
+        stateRestored = true;
+        document.getElementById('start-overlay').classList.add('hidden');
+        renderGrid();
+        if (gameOver) {
+          document.getElementById('final-text').textContent = 'Score: ' + score;
+          document.getElementById('gameover-overlay').classList.remove('hidden');
+        }
+      } else if (typeof s.highScore === 'number') {
+        // Legacy: high score only
+        bestScore = s.highScore;
         document.getElementById('best-display').textContent = bestScore;
       }
     }

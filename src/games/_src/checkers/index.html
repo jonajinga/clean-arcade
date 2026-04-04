@@ -323,6 +323,7 @@
 
       render();
       updateStatus();
+      save();
 
       // Force jump selection
       var jumps = getAllJumps(currentPlayer);
@@ -465,16 +466,53 @@
     /* --- Save / Load --- */
     function save() {
       try {
-        parent.postMessage({ type: 'ca-save', slug: 'checkers', state: { wins: scores } }, '*');
+        // Serialize board: convert objects to plain data
+        var boardData = [];
+        for (var r = 0; r < SIZE; r++) {
+          boardData[r] = [];
+          for (var c = 0; c < SIZE; c++) {
+            var p = board[r][c];
+            boardData[r][c] = p ? { color: p.color, king: p.king } : null;
+          }
+        }
+        parent.postMessage({ type: 'ca-save', slug: 'checkers', state: {
+          board: boardData,
+          currentPlayer: currentPlayer,
+          wins: scores,
+          mode: mode,
+          gameOver: gameOver
+        } }, '*');
       } catch(e) {}
     }
 
     window.addEventListener('message', function(e) {
       if (!e.data) return;
       if (e.data.type === 'ca-load' && e.data.state) {
-        if (e.data.state.wins) {
-          scores = e.data.state.wins;
+        var s = e.data.state;
+        if (s.wins) {
+          scores = s.wins;
           updateScores();
+        }
+        if (s.board) {
+          // Full state restore
+          board = s.board;
+          currentPlayer = s.currentPlayer || 'red';
+          gameOver = !!s.gameOver;
+          if (s.mode) {
+            mode = s.mode;
+            document.getElementById('btnComputer').className = mode === 'computer' ? 'active' : '';
+            document.getElementById('btnLocal').className = mode === 'local' ? 'active' : '';
+            document.getElementById('btnMulti').className = mode === 'multi' ? 'active' : '';
+          }
+          selected = null;
+          validMoves = [];
+          mustJump = false;
+          multiJumpPiece = null;
+          render();
+          updateStatus();
+          if (!gameOver && mode === 'computer' && currentPlayer === 'black') {
+            setTimeout(computerMove, 500);
+          }
         }
       }
       if (e.data.type === 'peer-data' && e.data.slug === 'checkers') {

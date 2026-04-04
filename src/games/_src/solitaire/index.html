@@ -205,6 +205,7 @@ function render(){
   // Auto button visibility
   document.getElementById('auto-btn').style.display=canAutoComplete()?'inline-block':'none';
 
+  saveState();
   checkWin();
 }
 
@@ -368,14 +369,42 @@ function checkWin(){
   }
 }
 
+function serializeCards(arr){return arr.map(function(c){return{suit:c.suit,rank:c.rank,up:c.up};});}
 function saveState(){
-  try{parent.postMessage({type:'ca-save',slug:'solitaire',state:{wins:wins,highScore:bestMoves===Infinity?0:bestMoves}},'*');}catch(e){}
+  try{parent.postMessage({type:'ca-save',slug:'solitaire',state:{
+    stock:serializeCards(stock),
+    waste:serializeCards(waste),
+    foundations:fnd.map(serializeCards),
+    tableau:tab.map(serializeCards),
+    moveCount:moveCount,
+    secs:secs,
+    done:done,
+    wins:wins,
+    highScore:bestMoves===Infinity?0:bestMoves
+  }},'*');}catch(e){}
 }
 
+function restoreCards(arr){return arr.map(function(c){return{suit:c.suit,rank:c.rank,up:c.up};});}
+var loadedFullState=false;
 window.addEventListener('message',function(e){
   if(e.data&&e.data.type==='ca-load'&&e.data.state){
-    wins=e.data.state.wins||0;
-    bestMoves=e.data.state.highScore||Infinity;
+    var s=e.data.state;
+    wins=s.wins||0;
+    bestMoves=s.highScore||Infinity;
+    if(s.tableau){
+      clearInterval(tmr);
+      stock=restoreCards(s.stock||[]);
+      waste=restoreCards(s.waste||[]);
+      fnd=(s.foundations||[[],[],[],[]]).map(restoreCards);
+      tab=(s.tableau).map(restoreCards);
+      moveCount=s.moveCount||0;
+      secs=s.secs||0;
+      done=s.done||false;
+      sel=null;
+      loadedFullState=true;
+      if(!done){tmr=setInterval(function(){if(!done){secs++;updStats();}},1000);}
+      render();
+    }
   }
 });
 

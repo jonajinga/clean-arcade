@@ -416,7 +416,21 @@ canvas {
     if (gameOver) return;
     paused = !paused;
     document.getElementById('pause-overlay').classList.toggle('hidden', !paused);
-    if (!paused) {
+    if (paused) {
+      // Save full state when pausing
+      try {
+        parent.postMessage({ type: 'ca-save', slug: 'tetris-clone', state: {
+          board: board,
+          piece: piece ? { shape: piece.shape, x: piece.x, y: piece.y, color: piece.color } : null,
+          nextPiece: nextPiece ? { shape: nextPiece.shape, x: nextPiece.x, y: nextPiece.y, color: nextPiece.color } : null,
+          score: score,
+          level: level,
+          lines: lines,
+          highScore: highScore,
+          dropTime: dropTime
+        } }, '*');
+      } catch(e) {}
+    } else {
       lastDrop = performance.now();
       animId = requestAnimationFrame(loop);
     }
@@ -493,9 +507,33 @@ canvas {
 
   // Parent save/load messages
   window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'ca-load') {
-      if (e.data.state && typeof e.data.state.highScore === 'number') {
-        highScore = e.data.state.highScore;
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      var s = e.data.state;
+      if (typeof s.highScore === 'number') {
+        highScore = s.highScore;
+      }
+      if (s.board) {
+        // Full state restore — start paused
+        board = s.board;
+        score = s.score || 0;
+        level = s.level || 1;
+        lines = s.lines || 0;
+        dropTime = s.dropTime || Math.max(100, 1000 - (level - 1) * 80);
+        gameOver = false;
+        paused = true;
+        if (s.piece) {
+          piece = { shape: s.piece.shape, x: s.piece.x, y: s.piece.y, color: s.piece.color };
+        }
+        if (s.nextPiece) {
+          nextPiece = { shape: s.nextPiece.shape, x: s.nextPiece.x, y: s.nextPiece.y, color: s.nextPiece.color };
+        }
+        document.getElementById('start-overlay').classList.add('hidden');
+        document.getElementById('gameover-overlay').classList.add('hidden');
+        document.getElementById('pause-overlay').classList.remove('hidden');
+        document.getElementById('pause-btn').style.display = 'block';
+        updateUI();
+        resize();
+        drawNext();
       }
     }
   });

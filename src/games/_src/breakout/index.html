@@ -55,6 +55,18 @@
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
   .hidden { display: none !important; }
+  #pauseBtn {
+    position: absolute;
+    background: rgba(30,41,59,0.85);
+    color: #94a3b8;
+    border: 1px solid #334155;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    z-index: 10;
+    line-height: 1;
+  }
+  #pauseBtn:hover { color: #e2e8f0; }
 </style>
 </head>
 <body>
@@ -64,6 +76,7 @@
   LIVES: <span id="livesEl">3</span> &nbsp;&nbsp;
   LEVEL: <span id="levelEl">1</span>
 </div>
+<button id="pauseBtn" class="hidden" onclick="window._togglePause()">&#10074;&#10074;</button>
 <canvas id="c"></canvas>
 <div id="overlay">
   <h1 id="overlayTitle">Breakout</h1>
@@ -96,18 +109,46 @@
   var W, H, brickW, brickH, paddleW;
   var score, highScore = 0, lives, level;
   var ball, paddle, bricks;
-  var ballSpeed, ballLaunched, running, gameOverFlag;
+  var ballSpeed, ballLaunched, running, gameOverFlag, paused;
   var keys = {};
+  var pauseBtn = document.getElementById("pauseBtn");
 
   /* ---- parent save/load ---- */
   var SLUG = "breakout";
   function saveHigh() {
     try { parent.postMessage({ type: "ca-save", slug: SLUG, state: { highScore: highScore } }, "*"); } catch (e) {}
   }
+  function saveFullState() {
+    try {
+      var brickStates = [];
+      for (var i = 0; i < bricks.length; i++) brickStates.push(bricks[i].alive);
+      parent.postMessage({ type: "ca-save", slug: SLUG, state: {
+        highScore: highScore, score: score, lives: lives, level: level,
+        ballX: ball.x, ballY: ball.y, ballDX: ball.dx, ballDY: ball.dy,
+        paddleX: paddle.x, brickAlive: brickStates, ballLaunched: ballLaunched
+      }}, "*");
+    } catch (e) {}
+  }
   window.addEventListener("message", function (e) {
     if (e.data && e.data.type === "ca-load" && e.data.state) {
       highScore = e.data.state.highScore || 0;
       hiEl.textContent = highScore;
+      if (e.data.state.brickAlive) {
+        var s = e.data.state;
+        score = s.score; lives = s.lives; level = s.level;
+        scoreEl.textContent = score; livesEl.textContent = lives; levelEl.textContent = level;
+        buildBricks();
+        for (var i = 0; i < bricks.length && i < s.brickAlive.length; i++) bricks[i].alive = s.brickAlive[i];
+        paddle = { x: s.paddleX, y: H - 40, w: paddleW, h: PADDLE_H };
+        ball = { x: s.ballX, y: s.ballY, dx: s.ballDX, dy: s.ballDY };
+        ballLaunched = s.ballLaunched;
+        ballSpeed = BASE_SPEED + (level - 1) * SPEED_INC;
+        running = true; gameOverFlag = false; paused = true;
+        overlay.classList.add("hidden");
+        pauseBtn.classList.remove("hidden");
+        draw();
+        drawPauseOverlay();
+      }
     }
   });
 
@@ -126,6 +167,8 @@
     overlay.style.height = canvas.height + "px";
     overlay.style.left = canvas.offsetLeft + "px";
     overlay.style.top = canvas.offsetTop + "px";
+    pauseBtn.style.left = (canvas.offsetLeft + canvas.width - 36) + "px";
+    pauseBtn.style.top = canvas.offsetTop + "px";
     if (paddle) {
       paddle.w = paddleW;
       paddle.y = H - 40;
@@ -142,9 +185,11 @@
     livesEl.textContent = 3;
     levelEl.textContent = 1;
     gameOverFlag = false;
+    paused = false;
     running = true;
     overlay.classList.add("hidden");
     finalScoreEl.classList.add("hidden");
+    pauseBtn.classList.remove("hidden");
     buildBricks();
     resetBall();
   }
@@ -266,6 +311,8 @@
   function doGameOver() {
     running = false;
     gameOverFlag = true;
+    paused = false;
+    pauseBtn.classList.add("hidden");
     overlayTitle.textContent = "Game Over";
     finalScoreEl.textContent = "Score: " + score + "  |  Level: " + level;
     finalScoreEl.classList.remove("hidden");
@@ -312,9 +359,34 @@
     }
   }
 
+  /* ---- pause ---- */
+  function togglePause() {
+    if (!running || gameOverFlag) return;
+    paused = !paused;
+    if (paused) {
+      saveFullState();
+      draw();
+      drawPauseOverlay();
+    }
+  }
+  window._togglePause = togglePause;
+
+  function drawPauseOverlay() {
+    ctx.fillStyle = "rgba(15,23,42,0.7)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "bold " + Math.max(24, W * 0.06) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Paused", W / 2, H / 2);
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+  }
+
   /* ---- loop ---- */
   function loop() {
     requestAnimationFrame(loop);
+    if (paused) return;
     update();
     draw();
   }
@@ -323,7 +395,9 @@
   document.addEventListener("keydown", function (e) {
     keys[e.key] = true;
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].indexOf(e.key) !== -1) e.preventDefault();
+    if (e.key === "p" || e.key === "P") { togglePause(); return; }
     if (e.key === " ") {
+      if (paused) { togglePause(); return; }
       if (!running && gameOverFlag) initGame();
       else if (!ballLaunched && running) ballLaunched = true;
     }
@@ -377,6 +451,7 @@
   bricks = [];
   running = false;
   gameOverFlag = false;
+  paused = false;
   ballLaunched = false;
   resize();
   buildBricks();

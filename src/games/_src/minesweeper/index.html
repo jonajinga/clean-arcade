@@ -351,9 +351,10 @@ var MS = (function() {
       placeMines(idx);
       startTimer();
     }
-    if (mines[idx]) { gameLose(idx); return; }
+    if (mines[idx]) { gameLose(idx); saveState(); return; }
     reveal(idx);
     checkWin();
+    if (!gameOver) saveState();
   }
 
   function reveal(idx) {
@@ -380,6 +381,7 @@ var MS = (function() {
     flagsPlaced += flagged[idx] ? 1 : -1;
     updateCellDOM(idx);
     updateMineCounter();
+    saveState();
   }
 
   function updateCellDOM(idx) {
@@ -478,14 +480,111 @@ var MS = (function() {
     document.getElementById('stats').textContent = 'Wins: ' + wins;
   }
 
+  function getTimerSecs() {
+    if (!startTime) return 0;
+    return Math.min(999, Math.floor((Date.now() - startTime) / 1000));
+  }
   function saveState() {
-    try { parent.postMessage({ type: 'ca-save', slug: 'minesweeper', state: { wins: wins } }, '*'); } catch(e) {}
+    var total = rows * cols;
+    var gridState = [];
+    for (var i = 0; i < total; i++) {
+      gridState.push({ mine: mines[i], revealed: revealed[i], flagged: flagged[i], adjacent: grid[i] });
+    }
+    var status = gameOver ? (gameWon ? 'won' : 'lost') : 'playing';
+    try { parent.postMessage({ type: 'ca-save', slug: 'minesweeper', state: {
+      grid: gridState,
+      rows: rows,
+      cols: cols,
+      mineCount: mineCount,
+      diff: diff,
+      timerSecs: getTimerSecs(),
+      status: status,
+      firstClick: firstClick,
+      flagsPlaced: flagsPlaced,
+      wins: wins
+    } }, '*'); } catch(e) {}
+  }
+
+  function restoreFullState(s) {
+    diff = s.diff || 'easy';
+    cols = s.cols; rows = s.rows; mineCount = s.mineCount;
+    var total = rows * cols;
+    grid = new Array(total);
+    mines = new Array(total);
+    revealed = new Array(total);
+    flagged = new Array(total);
+    for (var i = 0; i < total; i++) {
+      var c = s.grid[i];
+      grid[i] = c.adjacent;
+      mines[i] = c.mine;
+      revealed[i] = c.revealed;
+      flagged[i] = c.flagged;
+    }
+    firstClick = s.firstClick;
+    flagsPlaced = s.flagsPlaced || 0;
+    gameWon = s.status === 'won';
+    gameOver = s.status !== 'playing';
+    wins = s.wins || 0;
+
+    // Update difficulty button
+    document.querySelectorAll('.controls button').forEach(function(b) { b.classList.remove('active'); });
+    var diffBtn = document.getElementById('btn-' + diff);
+    if (diffBtn) diffBtn.classList.add('active');
+
+    // Rebuild board DOM
+    renderBoard();
+    // Apply revealed/flagged state to DOM
+    for (var i = 0; i < total; i++) {
+      if (revealed[i] || flagged[i]) updateCellDOM(i);
+    }
+
+    updateMineCounter();
+    updateStats();
+
+    // Restore timer
+    if (timerInt) clearInterval(timerInt);
+    timerInt = null;
+    var savedSecs = s.timerSecs || 0;
+    var ts = savedSecs.toString();
+    while (ts.length < 3) ts = '0' + ts;
+    document.getElementById('timer').textContent = ts;
+
+    if (!gameOver && !firstClick) {
+      // Resume timer from saved seconds
+      startTime = Date.now() - savedSecs * 1000;
+      timerInt = setInterval(function() {
+        var sec = Math.min(999, Math.floor((Date.now() - startTime) / 1000));
+        var str = sec.toString();
+        while (str.length < 3) str = '0' + str;
+        document.getElementById('timer').textContent = str;
+      }, 1000);
+    }
+
+    // Restore smiley and message
+    if (gameWon) {
+      document.getElementById('smiley').innerHTML = '&#128526;';
+      document.getElementById('message').textContent = 'You Win!';
+      document.getElementById('message').className = 'message win';
+    } else if (gameOver) {
+      document.getElementById('smiley').innerHTML = '&#128565;';
+      document.getElementById('message').textContent = 'Game Over!';
+      document.getElementById('message').className = 'message lose';
+    } else {
+      document.getElementById('smiley').innerHTML = '&#128578;';
+      document.getElementById('message').textContent = '';
+      document.getElementById('message').className = 'message';
+    }
   }
 
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'ca-load' && e.data.state) {
-      wins = e.data.state.wins || 0;
-      updateStats();
+      var s = e.data.state;
+      if (s.grid) {
+        restoreFullState(s);
+      } else {
+        wins = s.wins || 0;
+        updateStats();
+      }
     }
   });
 

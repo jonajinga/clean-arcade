@@ -54,12 +54,25 @@
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
   .hidden { display: none !important; }
+  #pauseBtn {
+    position: absolute;
+    background: rgba(30,41,59,0.85);
+    color: #94a3b8;
+    border: 1px solid #334155;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    z-index: 10;
+    line-height: 1;
+  }
+  #pauseBtn:hover { color: #e2e8f0; }
 </style>
 </head>
 <body>
 <div id="hud">
   SCORE: <span id="scoreEl">0</span> &nbsp;&nbsp; HIGH SCORE: <span id="hiEl">0</span>
 </div>
+<button id="pauseBtn" class="hidden" onclick="window._togglePause()">&#10074;&#10074;</button>
 <canvas id="c"></canvas>
 <div id="overlay">
   <h1 id="overlayTitle">Snake</h1>
@@ -84,17 +97,40 @@
   var overlayMsg = document.getElementById("overlayMsg");
   var finalScoreEl = document.getElementById("finalScore");
 
-  var cell, score, highScore = 0, snake, dir, nextDir, food, running, gameOver, lastTick;
+  var cell, score, highScore = 0, snake, dir, nextDir, food, running, gameOver, paused, lastTick;
+  var pauseBtn = document.getElementById("pauseBtn");
 
   /* ---- parent save/load ---- */
   var SLUG = "snake";
   function saveHigh() {
     try { parent.postMessage({ type: "ca-save", slug: SLUG, state: { highScore: highScore } }, "*"); } catch (e) {}
   }
+  function saveFullState() {
+    try {
+      parent.postMessage({ type: "ca-save", slug: SLUG, state: {
+        highScore: highScore, score: score,
+        snake: snake.slice(), food: { x: food.x, y: food.y },
+        dirX: dir.x, dirY: dir.y
+      }}, "*");
+    } catch (e) {}
+  }
   window.addEventListener("message", function (e) {
     if (e.data && e.data.type === "ca-load" && e.data.state) {
       highScore = e.data.state.highScore || 0;
       hiEl.textContent = highScore;
+      if (e.data.state.snake) {
+        var s = e.data.state;
+        score = s.score; scoreEl.textContent = score;
+        snake = s.snake; food = s.food;
+        dir = { x: s.dirX, y: s.dirY };
+        nextDir = { x: s.dirX, y: s.dirY };
+        running = true; gameOver = false; paused = true;
+        lastTick = performance.now();
+        overlay.classList.add("hidden");
+        pauseBtn.classList.remove("hidden");
+        draw();
+        drawPauseOverlay();
+      }
     }
   });
 
@@ -109,6 +145,8 @@
     overlay.style.height = canvas.height + "px";
     overlay.style.left = canvas.offsetLeft + "px";
     overlay.style.top = canvas.offsetTop + "px";
+    pauseBtn.style.left = (canvas.offsetLeft + canvas.width - 36) + "px";
+    pauseBtn.style.top = canvas.offsetTop + "px";
     draw();
   }
   window.addEventListener("resize", resize);
@@ -124,7 +162,9 @@
     placeFood();
     running = true;
     gameOver = false;
+    paused = false;
     overlay.classList.add("hidden");
+    pauseBtn.classList.remove("hidden");
     finalScoreEl.classList.add("hidden");
     lastTick = performance.now();
   }
@@ -163,6 +203,8 @@
   function die() {
     running = false;
     gameOver = true;
+    paused = false;
+    pauseBtn.classList.add("hidden");
     overlayTitle.textContent = "Game Over";
     finalScoreEl.textContent = "Score: " + score;
     finalScoreEl.classList.remove("hidden");
@@ -209,10 +251,36 @@
     }
   }
 
+  /* ---- pause ---- */
+  function togglePause() {
+    if (!running || gameOver) return;
+    paused = !paused;
+    if (paused) {
+      saveFullState();
+      draw();
+      drawPauseOverlay();
+    } else {
+      lastTick = performance.now();
+    }
+  }
+  window._togglePause = togglePause;
+
+  function drawPauseOverlay() {
+    ctx.fillStyle = "rgba(15,23,42,0.7)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "bold " + Math.max(24, canvas.width * 0.06) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Paused", canvas.width / 2, canvas.height / 2);
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+  }
+
   /* ---- loop ---- */
   function loop(now) {
     requestAnimationFrame(loop);
-    if (!running) return;
+    if (!running || paused) return;
     var interval = Math.max(MIN_INTERVAL, BASE_INTERVAL - score * 3);
     if (now - lastTick >= interval) {
       lastTick = now;
@@ -223,8 +291,10 @@
 
   /* ---- input: keyboard ---- */
   document.addEventListener("keydown", function (e) {
+    if (e.key === "p" || e.key === "P") { togglePause(); return; }
     if (e.key === " " || e.code === "Space") {
       e.preventDefault();
+      if (paused) { togglePause(); return; }
       if (!running) init();
       return;
     }
@@ -275,6 +345,7 @@
   food = { x: 15, y: 10 };
   running = false;
   gameOver = false;
+  paused = false;
   resize();
   draw();
   requestAnimationFrame(loop);
