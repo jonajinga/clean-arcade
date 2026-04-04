@@ -145,7 +145,6 @@ canvas {
       <h3>Next</h3>
       <canvas id="next-canvas"></canvas>
     </div>
-    <button class="btn" onclick="togglePause()" id="pause-btn" style="display:none;" title="Pause">&#10074;&#10074;</button>
   </div>
 </div>
 
@@ -155,6 +154,7 @@ canvas {
   <button class="touch-btn" id="t-down">&#9660;</button>
   <button class="touch-btn" id="t-drop" style="font-size:11px;width:48px;">DROP</button>
   <button class="touch-btn" id="t-right">&#9654;</button>
+  <button class="touch-btn" id="pause-btn" onclick="togglePause()" style="display:none;" title="Pause">&#10074;&#10074;</button>
 </div>
 
 <script>
@@ -467,23 +467,12 @@ canvas {
     var dy = t.clientY - touchStartY;
     var dt = Date.now() - touchStartTime;
 
-    if (Math.abs(dx) < 25 && Math.abs(dy) < 25 && dt < 300) {
-      var rect = canvas.getBoundingClientRect();
-      var tapX = t.clientX - rect.left;
-      var tapY = t.clientY - rect.top;
-      if (tapY < rect.height * 0.25) {
-        var r = rotateShape(piece.shape);
-        var kicks = [0, -1, 1, -2, 2];
-        for (var i = 0; i < kicks.length; i++) {
-          if (valid(r, piece.x + kicks[i], piece.y)) { piece.shape = r; piece.x += kicks[i]; break; }
-        }
-      } else if (tapX < rect.width * 0.35) {
-        if (valid(piece.shape, piece.x - 1, piece.y)) piece.x--;
-      } else if (tapX > rect.width * 0.65) {
-        if (valid(piece.shape, piece.x + 1, piece.y)) piece.x++;
-      } else {
-        while (valid(piece.shape, piece.x, piece.y + 1)) piece.y++;
-        lock(); lastDrop = performance.now();
+    if (Math.abs(dx) < 30 && Math.abs(dy) < 30 && dt < 300) {
+      /* Any tap on canvas = rotate */
+      var r = rotateShape(piece.shape);
+      var kicks = [0, -1, 1, -2, 2];
+      for (var i = 0; i < kicks.length; i++) {
+        if (valid(r, piece.x + kicks[i], piece.y)) { piece.shape = r; piece.x += kicks[i]; break; }
       }
     } else if (Math.abs(dy) > Math.abs(dx) && dy > 50) {
       while (valid(piece.shape, piece.x, piece.y + 1)) piece.y++;
