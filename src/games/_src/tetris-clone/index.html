@@ -96,6 +96,12 @@ canvas {
   .panel-box { flex: 1; min-width: 70px; padding: 8px; }
   .panel-box .value { font-size: 18px; }
 }
+.touch-controls { display: none; padding: 8px; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.touch-btn { width: 56px; height: 56px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.touch-btn:active { background: #334155; }
+.touch-row { display: flex; gap: 6px; justify-content: center; }
+@media (pointer: coarse) { .touch-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; } }
+@media (hover: none) { .touch-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; } }
 </style>
 </head>
 <body>
@@ -138,6 +144,20 @@ canvas {
       <canvas id="next-canvas"></canvas>
     </div>
     <button class="btn" onclick="togglePause()" id="pause-btn" style="display:none;">Pause</button>
+  </div>
+</div>
+
+<div class="touch-controls" id="touch-controls">
+  <div class="touch-row">
+    <button class="touch-btn" id="t-rotate">&#8635;</button>
+  </div>
+  <div class="touch-row">
+    <button class="touch-btn" id="t-left">&#9664;</button>
+    <button class="touch-btn" id="t-down">&#9660;</button>
+    <button class="touch-btn" id="t-right">&#9654;</button>
+  </div>
+  <div class="touch-row">
+    <button class="touch-btn" id="t-drop" style="width:100%;max-width:180px;font-size:14px;height:44px;">DROP</button>
   </div>
 </div>
 
@@ -491,6 +511,27 @@ canvas {
   window.addEventListener('resize', resize);
   board = createBoard();
   resize();
+
+  /* On-screen touch buttons */
+  function touchBtn(id, fn) {
+    var b = document.getElementById(id);
+    if (b) b.addEventListener('touchstart', function(e) { e.preventDefault(); fn(); draw(); }, {passive:false});
+    if (b) b.addEventListener('click', function(e) { fn(); draw(); });
+  }
+  touchBtn('t-left', function() { if (piece && valid(piece.shape, piece.x-1, piece.y)) piece.x--; });
+  touchBtn('t-right', function() { if (piece && valid(piece.shape, piece.x+1, piece.y)) piece.x++; });
+  touchBtn('t-down', function() { if (piece && valid(piece.shape, piece.x, piece.y+1)) piece.y++; });
+  touchBtn('t-rotate', function() {
+    if (!piece) return;
+    var r = rotateShape(piece.shape);
+    var kicks = [0,-1,1,-2,2];
+    for (var i=0;i<kicks.length;i++) { if (valid(r, piece.x+kicks[i], piece.y)) { piece.shape=r; piece.x+=kicks[i]; break; } }
+  });
+  touchBtn('t-drop', function() {
+    if (!piece) return;
+    while (valid(piece.shape, piece.x, piece.y+1)) piece.y++;
+    lock(); lastDrop = performance.now();
+  });
 })();
 </script>
 </body>

@@ -11,25 +11,25 @@ bodyClass: game-active
         <span class="game-embed__meta">{{ game.difficulty }}{% if game.multiplayer %} / MP{% endif %}</span>
       </div>
       <div class="game-embed__bar-right">
-        <button class="icon-btn" id="info-toggle" title="Info &amp; controls" onclick="toggleInfo()">
+        <button class="icon-btn" id="info-toggle" title="Info &amp; controls">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v5M8 4.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
-        <button class="icon-btn" title="Share" onclick="shareGame('{{ game.title }}','{{ game.slug }}')">
+        <button class="icon-btn" id="share-btn" title="Share">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
         </button>
-        <button class="icon-btn" id="fs-btn" title="Fullscreen (F)" onclick="toggleFS()">
+        <button class="icon-btn" id="fs-btn" title="Fullscreen">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
     </div>
 
-    {# Info overlay — hidden by default via class, not attribute #}
+    {# Info overlay #}
     <div class="game-overlay" id="game-overlay">
       <div class="game-overlay__content">
         <p><strong>Controls:</strong> {{ game.controls }}</p>
         <p><strong>About:</strong> {{ game.description }}</p>
         {% if not game.mobileSupport %}<p style="color:var(--slate-600)">Desktop or tablet recommended.</p>{% endif %}
-        <button class="game-overlay__close" onclick="toggleInfo()">Close</button>
+        <button class="game-overlay__close" id="overlay-close">Close</button>
       </div>
     </div>
 
@@ -55,40 +55,8 @@ bodyClass: game-active
 
 <script>
 var GAME_SLUG = "{{ game.slug }}";
-
-/* --- Info overlay --- */
-function toggleInfo() {
-  document.getElementById("game-overlay").classList.toggle("visible");
-}
-
-/* --- Fullscreen --- */
-function toggleFS() {
-  var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-  if (fsEl) {
-    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    return;
-  }
-  /* Try game-embed first, then documentElement as fallback */
-  var targets = [
-    document.getElementById("game-embed"),
-    document.documentElement
-  ];
-  for (var i = 0; i < targets.length; i++) {
-    var t = targets[i];
-    try {
-      if (t.requestFullscreen) { t.requestFullscreen().catch(function(){}); return; }
-      if (t.webkitRequestFullscreen) { t.webkitRequestFullscreen(); return; }
-    } catch(e) { /* try next */ }
-  }
-}
-
-/* Keyboard: F to toggle fullscreen, Esc closes info */
-document.addEventListener("keydown", function(e) {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-  if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFS(); }
-  if (e.key === "Escape") document.getElementById("game-overlay").classList.remove("visible");
-});
 </script>
+<script src="/assets/js/game-page.js" defer></script>
 <script src="/assets/js/game-loader.js" defer></script>
 <script src="/assets/js/save-system.js" defer></script>
 <script src="/assets/js/my-games.js" defer></script>
