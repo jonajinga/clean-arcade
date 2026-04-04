@@ -111,7 +111,7 @@
   /* ---- sizing ---- */
   function resize() {
     W = Math.min(window.innerWidth - 16, 600);
-    H = Math.min(window.innerHeight - 60, 700);
+    H = window.innerHeight - 50;
     if (H > W * 1.17) H = Math.floor(W * 1.17);
     if (W > H * 0.86) W = Math.min(W, Math.floor(H * 0.86));
     canvas.width = W;

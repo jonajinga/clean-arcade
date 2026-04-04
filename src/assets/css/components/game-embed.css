@@ -65,8 +65,15 @@
 .game-embed__viewport {
   position: relative;
   width: 100%;
-  height: calc(75vh - 36px);
+  height: calc(100dvh - 36px);
   min-height: 300px;
+}
+
+/* Desktop: cap it so it doesn't get absurdly tall */
+@media (min-width: 768px) {
+  .game-embed__viewport {
+    height: calc(85vh - 36px);
+  }
 }
 
 .game-embed__viewport iframe {

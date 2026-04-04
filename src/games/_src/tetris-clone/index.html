@@ -93,13 +93,15 @@ canvas {
 .hidden { display: none !important; }
 
 @media (max-width: 500px) {
-  .game-wrapper { flex-direction: column; align-items: center; gap: 10px; }
-  .side-panel { flex-direction: row; flex-wrap: wrap; gap: 8px; min-width: 0; justify-content: center; }
-  .panel-box { flex: 1; min-width: 70px; padding: 8px; }
-  .panel-box .value { font-size: 18px; }
+  .game-wrapper { flex-direction: column; align-items: center; gap: 4px; padding: 4px; }
+  .side-panel { flex-direction: row; flex-wrap: wrap; gap: 4px; min-width: 0; justify-content: center; }
+  .panel-box { flex: 1; min-width: 50px; padding: 4px 6px; }
+  .panel-box h3 { font-size: 9px; margin-bottom: 2px; }
+  .panel-box .value { font-size: 14px; }
+  #next-canvas { display: none; }
 }
-.touch-controls { display: none; padding: 4px; }
-.touch-btn { width: 44px; height: 38px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.touch-controls { display: none; padding: 2px 4px; }
+.touch-btn { width: 40px; height: 34px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .touch-btn:active { background: #475569; }
 .touch-row { display: flex; gap: 4px; justify-content: center; }
 @media (pointer: coarse) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
@@ -183,10 +185,10 @@ canvas {
     var maxH = window.innerHeight - 40;
     var maxW = window.innerWidth - 180;
     if (window.innerWidth <= 500) {
-      maxW = window.innerWidth - 30;
-      maxH = window.innerHeight - 140;
+      maxW = window.innerWidth - 16;
+      maxH = window.innerHeight - 90;
     }
-    var b = Math.floor(Math.min(maxH / ROWS, maxW / COLS, 30));
+    var b = Math.floor(Math.min(maxH / ROWS, maxW / COLS, 36));
     b = Math.max(b, 14);
     canvas.width = COLS * b;
     canvas.height = ROWS * b;
