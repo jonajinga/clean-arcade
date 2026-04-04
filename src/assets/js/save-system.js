@@ -3,7 +3,6 @@ var SaveSystem = {
   save: function (slug, data) {
     try {
       localStorage.setItem("ca-save-" + slug, JSON.stringify(data));
-      showSaveToast();
     } catch (e) {
       console.warn("Save failed:", e);
     }
@@ -34,19 +33,6 @@ var SaveSystem = {
     return saves;
   },
 };
-
-function showSaveToast() {
-  var toast = document.getElementById("save-toast");
-  if (!toast) return;
-  toast.hidden = false;
-  toast.classList.add("show");
-  setTimeout(function () {
-    toast.classList.remove("show");
-    setTimeout(function () {
-      toast.hidden = true;
-    }, 200);
-  }, 2000);
-}
 
 /* Listen for save messages from game iframes */
 window.addEventListener("message", function (e) {

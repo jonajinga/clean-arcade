@@ -3,27 +3,32 @@ layout: layouts/base.njk
 bodyClass: game-active
 ---
 <section class="game-page" data-pagefind-body>
-  {# Game iframe — edge to edge #}
   <div class="game-embed" id="game-embed">
     <div class="game-embed__bar">
       <div class="game-embed__bar-left">
         <a href="/" class="game-embed__back" title="Back to games">&larr;</a>
         <h1 class="game-embed__title">{{ game.title }}</h1>
-        <div class="game-page__badges">
-          <span class="badge badge--{{ game.difficulty }}" title="{{ game.difficulty | capitalize }}">{{ game.difficulty }}</span>
-          {% if game.multiplayer %}<span class="badge" title="Multiplayer">MP</span>{% endif %}
-        </div>
+        <span class="game-embed__meta">{{ game.difficulty }}{% if game.multiplayer %} / MP{% endif %}</span>
       </div>
       <div class="game-embed__bar-right">
-        <button class="icon-btn" id="favorite-btn" onclick="toggleFavorite('{{ game.slug }}')" title="Favorite">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 14s-5.5-3.5-5.5-7A3.5 3.5 0 018 4a3.5 3.5 0 015.5 3c0 3.5-5.5 7-5.5 7z" stroke="currentColor" stroke-width="1.5" fill="none" id="heart-path"/></svg>
+        <button class="icon-btn" id="info-btn" onclick="document.getElementById('game-info-popup').toggleAttribute('hidden')" title="Game info &amp; controls">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v5M8 4.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
         <button class="icon-btn" onclick="shareGame('{{ game.title }}', '{{ game.slug }}')" title="Share">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
         </button>
-        <button class="icon-btn" onclick="goFullscreen()" title="Fullscreen (F)">
+        <button class="icon-btn" onclick="goFullscreen()" title="Fullscreen (F)" id="fs-btn">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
+      </div>
+    </div>
+    {# Info popup #}
+    <div class="game-info-popup" id="game-info-popup" hidden>
+      <div class="game-info-popup__inner">
+        <p><strong>Controls:</strong> {{ game.controls }}</p>
+        <p><strong>About:</strong> {{ game.description }}</p>
+        {% if not game.mobileSupport %}<p class="text-muted">Desktop or tablet recommended.</p>{% endif %}
+        <button class="game-info-popup__close" onclick="document.getElementById('game-info-popup').hidden=true">Close</button>
       </div>
     </div>
     <div class="game-embed__viewport" id="game-viewport">
@@ -38,27 +43,13 @@ bodyClass: game-active
     </div>
   </div>
 
+  {% if game.multiplayer %}
   <div class="container">
-    {# Mobile warning #}
-    {% if not game.mobileSupport %}
-      <p class="game-page__notice">Desktop or tablet recommended for this game.</p>
-    {% endif %}
+    {% include "partials/multiplayer-ui.njk" %}
+  </div>
+  {% endif %}
 
-    {# Controls + About #}
-    <details class="game-page__details">
-      <summary>Game info &amp; controls</summary>
-      <div class="game-page__info">
-        <div><strong>Controls:</strong> {{ game.controls }}</div>
-        <div><strong>About:</strong> {{ game.description }}</div>
-      </div>
-    </details>
-
-    {# Multiplayer UI #}
-    {% if game.multiplayer %}
-      {% include "partials/multiplayer-ui.njk" %}
-    {% endif %}
-
-    {# Related games #}
+  <div class="container">
     <div class="game-page__related">
       <h2>More {{ game.category | capitalize }} Games</h2>
       <div class="game-grid game-grid--small">
@@ -71,28 +62,39 @@ bodyClass: game-active
   </div>
 </section>
 
-{% include "partials/save-indicator.njk" %}
-
 <script>
   var GAME_SLUG = "{{ game.slug }}";
 
   function goFullscreen() {
-    var el = document.getElementById("game-embed");
-    var rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-    if (rfs) {
-      rfs.call(el);
-    } else {
-      /* Fallback: try the iframe directly */
-      var iframe = document.getElementById("game-frame");
-      var rfs2 = iframe.requestFullscreen || iframe.webkitRequestFullscreen || iframe.msRequestFullscreen;
-      if (rfs2) rfs2.call(iframe);
+    var embed = document.getElementById("game-embed");
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      return;
+    }
+    if (embed.requestFullscreen) { embed.requestFullscreen(); }
+    else if (embed.webkitRequestFullscreen) { embed.webkitRequestFullscreen(); }
+    else if (embed.msRequestFullscreen) { embed.msRequestFullscreen(); }
+    else {
+      var f = document.getElementById("game-frame");
+      if (f.requestFullscreen) f.requestFullscreen();
+      else if (f.webkitRequestFullscreen) f.webkitRequestFullscreen();
     }
   }
+
+  document.addEventListener("fullscreenchange", function() {
+    document.getElementById("game-embed").classList.toggle("is-fullscreen", !!document.fullscreenElement);
+  });
+  document.addEventListener("webkitfullscreenchange", function() {
+    document.getElementById("game-embed").classList.toggle("is-fullscreen", !!document.webkitFullscreenElement);
+  });
 
   document.addEventListener("keydown", function(e) {
     if ((e.key === "f" || e.key === "F") && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
       e.preventDefault();
       goFullscreen();
+    }
+    if (e.key === "Escape") {
+      document.getElementById("game-info-popup").hidden = true;
     }
   });
 </script>
