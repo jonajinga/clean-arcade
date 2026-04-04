@@ -62,6 +62,11 @@
   color: var(--white);
 }
 
+/* Hide fullscreen button on mobile */
+@media (pointer: coarse), (hover: none) {
+  #fs-btn { display: none; }
+}
+
 .game-embed__viewport {
   position: relative;
   width: 100%;
