@@ -14,10 +14,10 @@ body {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  min-height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  touch-action: pan-y;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -182,12 +182,17 @@ canvas {
   highScore = 0;
 
   function resize() {
-    var maxH = window.innerHeight - 40;
-    var maxW = window.innerWidth - 180;
-    if (window.innerWidth <= 500) {
-      maxW = window.innerWidth - 16;
-      maxH = window.innerHeight - 90;
+    var isMobile = window.innerWidth <= 500;
+    var sideP = document.querySelector('.side-panel');
+    var touchC = document.getElementById('touch-controls');
+    var chrome = 16;
+    if (isMobile) {
+      chrome += (sideP ? sideP.offsetHeight : 40) + (touchC && touchC.offsetHeight > 0 ? touchC.offsetHeight : 42) + 8;
+    } else {
+      chrome = 40;
     }
+    var maxH = window.innerHeight - chrome;
+    var maxW = isMobile ? window.innerWidth - 16 : window.innerWidth - 180;
     var b = Math.floor(Math.min(maxH / ROWS, maxW / COLS, 36));
     b = Math.max(b, 14);
     canvas.width = COLS * b;
