@@ -6,31 +6,21 @@
 }
 
 .feature-card {
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   background: var(--bg-card);
   border: 1px solid var(--border);
 }
 
-.feature-card__icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--white);
-  margin-bottom: var(--space-md);
-  font-size: var(--text-xl);
-}
-
 .feature-card h3 {
-  font-size: var(--text-lg);
-  margin-bottom: var(--space-sm);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .feature-card p {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-muted);
+  line-height: 1.5;
 }
 
 /* Changelog */

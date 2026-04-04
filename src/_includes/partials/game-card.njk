@@ -7,9 +7,8 @@
   <div class="game-card__body">
     <h3 class="game-card__title">{{ g.title }}</h3>
     <div class="game-card__meta">
-      <span class="badge badge--sm badge--category" title="{{ g.category | capitalize }}">{{ g.category }}</span>
-      {% if g.multiplayer %}<span class="badge badge--sm badge--multiplayer" title="Multiplayer">&#9775;</span>{% endif %}
-      {% if g.mobileSupport %}<span class="badge badge--sm badge--mobile" title="Mobile friendly">&#9743;</span>{% endif %}
+      <span class="badge badge--sm" title="{{ g.category | capitalize }}">{{ g.category }}</span>
+      {% if g.multiplayer %}<span class="badge badge--sm" title="Multiplayer">MP</span>{% endif %}
     </div>
   </div>
 </a>
