@@ -28,11 +28,8 @@
   <link rel="preconnect" href="https://fonts.bunny.net">
   <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700|space-grotesk:500,600,700" rel="stylesheet">
 
-  {# CSS — single concatenated file with cache bust #}
+  {# CSS #}
   <link rel="stylesheet" href="/assets/css/global.css?v={{ "" | year }}">
-
-  {# Pagefind CSS #}
-  <link rel="stylesheet" href="/pagefind/pagefind-ui.css">
 
   {# Dark mode — inline to prevent flash #}
   <script>
@@ -48,7 +45,7 @@
   {# JSON-LD #}
   {% include "partials/schema-org.njk" %}
 </head>
-<body>
+<body{% if bodyClass %} class="{{ bodyClass }}"{% endif %}>
   <a class="skip-link" href="#main">Skip to content</a>
 
   {% include "partials/header.njk" %}
@@ -61,21 +58,24 @@
   {% include "partials/footer.njk" %}
 
   {# Back to top #}
-  <button class="back-to-top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3L3 10h4v7h6v-7h4L10 3z" fill="currentColor"/></svg>
+  <button class="back-to-top" aria-label="Back to top" title="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3L3 10h4v7h6v-7h4L10 3z" fill="currentColor"/></svg>
   </button>
 
-  {# GTranslate #}
+  {# GTranslate — dropdown mode, not floating #}
   <script>
     window.gtranslateSettings = {
       default_language: "en",
-      languages: ["en","es","fr","de","pt","zh-CN","ja","ko","ar","hi"],
-      wrapper_selector: ".gtranslate_wrapper"
+      languages: ["en","es","fr","de","pt","it","nl","pl","ru","uk","zh-CN","zh-TW","ja","ko","ar","hi","bn","vi","th","id","ms","tr","sv","da","no","fi","cs","ro","hu","el","he","sw"],
+      wrapper_selector: ".gtranslate_wrapper",
+      flag_style: "3d",
+      alt_flags: {"en":"usa"}
     };
   </script>
-  <script src="https://cdn.gtranslate.net/widgets/latest/float.js" defer></script>
+  <script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
 
   {# Pagefind #}
+  <link rel="stylesheet" href="/pagefind/pagefind-ui.css">
   <script src="/pagefind/pagefind-ui.js" defer></script>
 
   {# Site JS #}
@@ -83,19 +83,22 @@
   <script src="/assets/js/nav.js" defer></script>
   <script src="/assets/js/search.js" defer></script>
 
-  {# Back to top visibility #}
+  {# Back to top + header minimize on game pages #}
   <script>
     (function(){
       var btn = document.querySelector(".back-to-top");
-      if(!btn) return;
+      var header = document.getElementById("site-header");
+      var isGame = document.body.classList.contains("game-active");
+      var lastY = 0;
       window.addEventListener("scroll", function(){
-        btn.classList.toggle("visible", window.scrollY > 600);
+        var y = window.scrollY;
+        if(btn) btn.classList.toggle("visible", y > 400);
+        if(isGame && header){
+          header.classList.toggle("header--mini", y > 80);
+        }
+        lastY = y;
       });
     })();
   </script>
-
-  {# Umami analytics — uncomment when configured
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="YOUR-ID"></script>
-  #}
 </body>
 </html>

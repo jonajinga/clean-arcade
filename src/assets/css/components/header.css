@@ -6,6 +6,7 @@
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   height: var(--header-height);
+  transition: height 0.2s, box-shadow 0.2s;
 }
 
 .site-header__inner {
@@ -18,39 +19,51 @@
 .site-header__logo {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 6px;
   color: var(--heading);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   white-space: nowrap;
 }
 
-.site-header__logo:hover {
-  color: var(--accent);
-}
-
-.logo-icon {
-  display: flex;
-}
+.site-header__logo:hover { color: var(--accent); }
+.site-header__logo svg { flex-shrink: 0; }
 
 .site-header__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 2px;
 }
 
-.search-toggle,
-.hamburger-btn {
-  display: flex;
+/* Icon buttons — used globally */
+.icon-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  color: var(--text);
+  width: 36px;
+  height: 36px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
 }
 
-.search-toggle:hover,
-.hamburger-btn:hover {
+.icon-btn:hover {
   color: var(--accent);
+  background: var(--bg-alt);
 }
+
+/* Theme toggle icon visibility */
+[data-mode="light"] .theme-icon__moon { display: none; }
+[data-mode="dark"] .theme-icon__sun { display: none; }
+
+/* Minimized header on game pages */
+.header--mini {
+  height: 40px;
+  box-shadow: var(--shadow);
+}
+
+.header--mini .logo-text { display: none; }
+.header--mini .icon-btn { width: 32px; height: 32px; }

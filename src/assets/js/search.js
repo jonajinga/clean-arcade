@@ -6,8 +6,9 @@ function openSearch() {
   if (!searchModal) {
     searchModal = document.createElement("div");
     searchModal.className = "search-modal";
-    searchModal.innerHTML =
-      '<div class="search-modal__content" id="pagefind-container"></div>';
+    searchModal.setAttribute("role", "dialog");
+    searchModal.setAttribute("aria-label", "Search");
+    searchModal.innerHTML = '<div class="search-modal__content" id="pagefind-container"></div>';
     searchModal.addEventListener("click", function (e) {
       if (e.target === searchModal) closeSearch();
     });
@@ -17,13 +18,18 @@ function openSearch() {
   searchModal.classList.add("open");
   document.body.style.overflow = "hidden";
 
-  if (!pagefindLoaded && typeof PagefindUI !== "undefined") {
-    new PagefindUI({
-      element: "#pagefind-container",
-      showSubResults: true,
-      showImages: false,
-    });
-    pagefindLoaded = true;
+  if (!pagefindLoaded) {
+    if (typeof PagefindUI !== "undefined") {
+      new PagefindUI({
+        element: "#pagefind-container",
+        showSubResults: true,
+        showImages: false,
+      });
+      pagefindLoaded = true;
+    } else {
+      document.getElementById("pagefind-container").innerHTML =
+        '<p class="search-modal__fallback">Search is available after a production build.<br>Run <code>npm run build</code> to generate the search index.</p>';
+    }
   }
 
   setTimeout(function () {

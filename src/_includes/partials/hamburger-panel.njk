@@ -1,21 +1,26 @@
 <div class="hamburger-panel" id="hamburger-panel" aria-hidden="true">
   <div class="hamburger-panel__overlay" onclick="closeHamburger()"></div>
   <div class="hamburger-panel__content" role="dialog" aria-label="Navigation menu">
-    <button class="hamburger-panel__close" onclick="closeHamburger()" aria-label="Close menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
-    <nav aria-label="Mobile navigation">
+    <div class="hamburger-panel__top">
+      <span class="hamburger-panel__title">Menu</span>
+      <button class="icon-btn" onclick="closeHamburger()" aria-label="Close menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <nav aria-label="Navigation">
       <ul class="hamburger-panel__nav">
         {% for item in navigation %}
           <li>
-            <a href="{{ item.url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>
+            <a href="{{ item.url }}"{% if page.url == item.url %} aria-current="page"{% endif %} onclick="closeHamburger()">
               {{ item.label }}
             </a>
           </li>
         {% endfor %}
       </ul>
     </nav>
-    <div class="hamburger-panel__extras">
+    <hr class="hamburger-panel__divider">
+    <div class="hamburger-panel__section">
+      <span class="hamburger-panel__label">Translate</span>
       <div class="gtranslate_wrapper"></div>
     </div>
   </div>

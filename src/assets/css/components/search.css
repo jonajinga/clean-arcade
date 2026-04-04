@@ -6,11 +6,11 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: 12vh;
   background: rgba(0, 0, 0, 0.6);
   visibility: hidden;
   opacity: 0;
-  transition: visibility 0.2s, opacity 0.2s;
+  transition: visibility 0.15s, opacity 0.15s;
 }
 
 .search-modal.open {
@@ -20,11 +20,19 @@
 
 .search-modal__content {
   background: var(--bg);
-  width: min(600px, 90vw);
+  width: min(560px, 92vw);
   max-height: 60vh;
   overflow-y: auto;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
+  padding: var(--space-md);
+}
+
+.search-modal__fallback {
+  text-align: center;
+  padding: var(--space-xl);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 /* Pagefind UI overrides */

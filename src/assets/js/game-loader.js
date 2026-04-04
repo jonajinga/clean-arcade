@@ -1,13 +1,9 @@
 /* Game Loader — iframe communication bridge */
 document.addEventListener("DOMContentLoaded", function () {
   var iframe = document.getElementById("game-frame");
-  var loading = document.getElementById("game-loading");
   if (!iframe) return;
 
-  /* Hide loading indicator when game loads */
   iframe.addEventListener("load", function () {
-    if (loading) loading.hidden = true;
-
     /* Send config to game */
     var mode = document.documentElement.getAttribute("data-mode") || "light";
     iframe.contentWindow.postMessage(
