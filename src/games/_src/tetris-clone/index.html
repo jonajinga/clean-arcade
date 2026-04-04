@@ -98,12 +98,12 @@ canvas {
   .panel-box { flex: 1; min-width: 70px; padding: 8px; }
   .panel-box .value { font-size: 18px; }
 }
-.touch-controls { display: none; padding: 10px 8px; gap: 8px; width: 100%; max-width: 240px; }
-.touch-btn { width: 56px; height: 56px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.touch-btn:active { background: #334155; }
-.touch-row { display: flex; gap: 6px; justify-content: center; width: 100%; }
-@media (pointer: coarse) { .touch-controls { display: flex; flex-direction: column; align-items: center; } }
-@media (hover: none) { .touch-controls { display: flex; flex-direction: column; align-items: center; } }
+.touch-controls { display: none; padding: 4px; }
+.touch-btn { width: 44px; height: 38px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.touch-btn:active { background: #475569; }
+.touch-row { display: flex; gap: 4px; justify-content: center; }
+@media (pointer: coarse) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
+@media (hover: none) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
 </style>
 </head>
 <body>
@@ -150,17 +150,11 @@ canvas {
 </div>
 
 <div class="touch-controls" id="touch-controls">
-  <div class="touch-row">
-    <button class="touch-btn" id="t-rotate">&#8635;</button>
-  </div>
-  <div class="touch-row">
-    <button class="touch-btn" id="t-left">&#9664;</button>
-    <button class="touch-btn" id="t-down">&#9660;</button>
-    <button class="touch-btn" id="t-right">&#9654;</button>
-  </div>
-  <div class="touch-row">
-    <button class="touch-btn" id="t-drop" style="width:100%;max-width:180px;font-size:14px;height:44px;">DROP</button>
-  </div>
+  <button class="touch-btn" id="t-left">&#9664;</button>
+  <button class="touch-btn" id="t-rotate">&#8635;</button>
+  <button class="touch-btn" id="t-down">&#9660;</button>
+  <button class="touch-btn" id="t-drop" style="font-size:11px;width:48px;">DROP</button>
+  <button class="touch-btn" id="t-right">&#9654;</button>
 </div>
 
 <script>
@@ -190,7 +184,7 @@ canvas {
     var maxW = window.innerWidth - 180;
     if (window.innerWidth <= 500) {
       maxW = window.innerWidth - 30;
-      maxH = window.innerHeight - 250;
+      maxH = window.innerHeight - 140;
     }
     var b = Math.floor(Math.min(maxH / ROWS, maxW / COLS, 30));
     b = Math.max(b, 14);
