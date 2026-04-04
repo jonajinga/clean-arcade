@@ -105,21 +105,19 @@
   color: var(--accent);
 }
 
-.hamburger-panel__label {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+/* GTranslate — shown when translate icon is tapped */
+.gt-select-wrap {
+  display: none;
+  margin-bottom: var(--space-sm);
 }
 
-/* GTranslate dropdown override — match site style */
-.hamburger-panel .gtranslate_wrapper select,
+.gt-select-wrap.visible {
+  display: block;
+}
+
 .gtranslate_wrapper select {
   width: 100%;
-  padding: 8px;
+  padding: 6px 8px;
   font-size: var(--text-xs);
   font-family: var(--font-body);
   color: var(--text);

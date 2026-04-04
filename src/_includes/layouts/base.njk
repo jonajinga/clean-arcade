@@ -9,6 +9,11 @@
   <meta name="theme-color" content="{{ meta.themeColor }}">
   <link rel="canonical" href="{{ meta.url }}{{ page.url }}">
 
+  {# Favicon + PWA #}
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/img/icon-192.svg">
+  <link rel="manifest" href="/manifest.json">
+
   {# Open Graph #}
   <meta property="og:title" content="{{ title }} | {{ meta.shortTitle }}">
   <meta property="og:description" content="{{ description or meta.description }}">
@@ -97,6 +102,13 @@
         lastY = y;
       });
     })();
+  </script>
+
+  {# Service Worker #}
+  <script>
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.register("/sw.js");
+    }
   </script>
 </body>
 </html>
