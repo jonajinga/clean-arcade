@@ -6,28 +6,435 @@
   <title>Connect Four</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
+    body {
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      min-height: 100vh; background: #0f172a; color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 1rem; user-select: none;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; text-align: center; }
+    .controls { display: flex; gap: 0.5rem; margin: 0.5rem 0; flex-wrap: wrap; justify-content: center; }
+    button {
+      background: #334155; color: #e2e8f0; border: 1px solid #475569;
+      padding: 0.4rem 1rem; border-radius: 0; cursor: pointer; font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+    button:hover { background: #475569; }
+    button.active { background: #6366f1; border-color: #818cf8; }
+    .score {
+      display: flex; gap: 1.5rem; margin: 0.4rem 0; font-size: 0.9rem; align-items: center;
+    }
+    .score-red { color: #ef4444; font-weight: 700; }
+    .score-yellow { color: #facc15; font-weight: 700; }
+    .score-draw { color: #94a3b8; }
+    .status {
+      font-size: 1rem; min-height: 1.5rem; margin: 0.3rem 0; text-align: center;
+      font-weight: 600;
+    }
+    .status.red { color: #ef4444; }
+    .status.yellow { color: #facc15; }
+    .status.draw { color: #94a3b8; }
+    .board-wrapper { position: relative; }
+    .preview-row {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      width: var(--board-w); margin: 0 auto;
+    }
+    .preview-cell {
+      display: flex; align-items: center; justify-content: center;
+      height: calc(var(--cell) * 0.6); cursor: pointer;
+    }
+    .preview-disc {
+      width: calc(var(--cell) * 0.5); height: calc(var(--cell) * 0.5);
+      border-radius: 50%; opacity: 0; transition: opacity 0.15s;
+    }
+    .preview-disc.show-red { opacity: 0.5; background: #ef4444; }
+    .preview-disc.show-yellow { opacity: 0.5; background: #facc15; }
+    .board {
+      display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(6, 1fr);
+      gap: 4px; padding: 8px;
+      background: #1e40af; border-radius: 0;
+      width: var(--board-w); height: var(--board-h);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .cell {
+      background: #1e3a8a; border-radius: 50%; cursor: pointer;
+      position: relative; transition: background 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .cell::after {
+      content: ''; display: block; width: 85%; height: 85%; border-radius: 50%;
+      background: #0f172a; transition: background 0.3s, box-shadow 0.3s;
+    }
+    .cell.red::after {
+      background: #ef4444;
+      box-shadow: inset 0 -3px 6px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .cell.yellow::after {
+      background: #facc15;
+      box-shadow: inset 0 -3px 6px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .cell.win::after {
+      animation: pulse 0.6s ease-in-out infinite alternate;
+      box-shadow: 0 0 12px 4px rgba(255,255,255,0.4);
+    }
+    .cell.drop::after {
+      animation: dropIn 0.35s ease-in forwards;
+    }
+    @keyframes dropIn {
+      0% { transform: translateY(calc(var(--drop-rows) * -100% - var(--drop-rows) * 4px)); }
+      70% { transform: translateY(4px); }
+      100% { transform: translateY(0); }
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.1); }
+    }
+    @media (max-width: 480px) {
+      h1 { font-size: 1.2rem; }
+      .controls { gap: 0.3rem; }
+      button { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="placeholder">
-    <h1>Connect Four</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
+  <h1>Connect Four</h1>
+  <div class="controls">
+    <button id="btnComputer" class="active" onclick="setMode('computer')">vs Computer</button>
+    <button id="btnLocal" onclick="setMode('local')">vs Player</button>
+    <button id="btnMulti" onclick="setMode('multi')">Multiplayer</button>
+    <button onclick="newGame()">New Game</button>
   </div>
+  <div class="score">
+    <span class="score-red">Red: <span id="scoreRed">0</span></span>
+    <span class="score-draw">Draw: <span id="scoreDraw">0</span></span>
+    <span class="score-yellow">Yellow: <span id="scoreYellow">0</span></span>
+  </div>
+  <div class="status" id="status">Red's turn</div>
+  <div class="board-wrapper">
+    <div class="preview-row" id="previewRow"></div>
+    <div class="board" id="board"></div>
+  </div>
+
   <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Connect Four", 200, 150);
+    var ROWS = 6, COLS = 7;
+    var board, currentPlayer, gameOver, mode, wins, myColor, peerReady;
+    var scores = { red: 0, yellow: 0, draw: 0 };
+
+    function init() {
+      mode = 'computer';
+      myColor = null;
+      peerReady = false;
+      sizing();
+      newGame();
+      window.addEventListener('resize', sizing);
+    }
+
+    function sizing() {
+      var maxW = Math.min(window.innerWidth - 32, 490);
+      var maxH = window.innerHeight * 0.55;
+      var cellFromW = (maxW - 16 - 24) / COLS;
+      var cellFromH = (maxH - 16 - 20) / ROWS;
+      var cell = Math.min(cellFromW, cellFromH, 64);
+      var bw = cell * COLS + 4 * (COLS - 1) + 16;
+      var bh = cell * ROWS + 4 * (ROWS - 1) + 16;
+      document.documentElement.style.setProperty('--cell', cell + 'px');
+      document.documentElement.style.setProperty('--board-w', bw + 'px');
+      document.documentElement.style.setProperty('--board-h', bh + 'px');
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('btnComputer').className = m === 'computer' ? 'active' : '';
+      document.getElementById('btnLocal').className = m === 'local' ? 'active' : '';
+      document.getElementById('btnMulti').className = m === 'multi' ? 'active' : '';
+      if (m === 'multi') {
+        myColor = 'red';
+        parent.postMessage({ type: 'game-ready', slug: 'connect-four' }, '*');
+      } else {
+        myColor = null;
+        peerReady = false;
+      }
+      newGame();
+    }
+
+    function newGame() {
+      board = [];
+      for (var r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (var c = 0; c < COLS; c++) board[r][c] = null;
+      }
+      currentPlayer = 'red';
+      gameOver = false;
+      render();
+      updateStatus();
+    }
+
+    function render() {
+      var boardEl = document.getElementById('board');
+      boardEl.innerHTML = '';
+      var previewEl = document.getElementById('previewRow');
+      previewEl.innerHTML = '';
+
+      for (var c = 0; c < COLS; c++) {
+        var pd = document.createElement('div');
+        pd.className = 'preview-cell';
+        pd.dataset.col = c;
+        pd.innerHTML = '<div class="preview-disc" id="prev' + c + '"></div>';
+        pd.addEventListener('click', handleClick);
+        pd.addEventListener('mouseenter', handleHover);
+        pd.addEventListener('mouseleave', handleHoverOut);
+        previewEl.appendChild(pd);
+      }
+
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          var cell = document.createElement('div');
+          cell.className = 'cell' + (board[r][c] ? ' ' + board[r][c] : '');
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          cell.addEventListener('click', handleClick);
+          cell.addEventListener('mouseenter', function(e) {
+            handleHover({ target: e.currentTarget });
+          });
+          cell.addEventListener('mouseleave', handleHoverOut);
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    function handleHover(e) {
+      if (gameOver) return;
+      var col = parseInt(e.target.dataset.col !== undefined ? e.target.dataset.col : e.target.closest('[data-col]').dataset.col);
+      clearPreviews();
+      var prev = document.getElementById('prev' + col);
+      if (prev && !isColumnFull(col)) {
+        prev.className = 'preview-disc show-' + currentPlayer;
+      }
+    }
+
+    function handleHoverOut() {
+      clearPreviews();
+    }
+
+    function clearPreviews() {
+      for (var c = 0; c < COLS; c++) {
+        var p = document.getElementById('prev' + c);
+        if (p) p.className = 'preview-disc';
+      }
+    }
+
+    function handleClick(e) {
+      if (gameOver) return;
+      var col = parseInt(e.target.dataset.col !== undefined ? e.target.dataset.col : e.currentTarget.dataset.col);
+      if (isNaN(col)) return;
+
+      if (mode === 'multi' && currentPlayer !== myColor) return;
+      if (mode === 'computer' && currentPlayer === 'yellow') return;
+
+      if (dropDisc(col)) {
+        if (mode === 'multi') {
+          parent.postMessage({ type: 'game-move', slug: 'connect-four', move: { col: col } }, '*');
+        }
+        afterMove();
+      }
+    }
+
+    function isColumnFull(col) {
+      return board[0][col] !== null;
+    }
+
+    function getDropRow(col) {
+      for (var r = ROWS - 1; r >= 0; r--) {
+        if (board[r][col] === null) return r;
+      }
+      return -1;
+    }
+
+    function dropDisc(col) {
+      var row = getDropRow(col);
+      if (row === -1) return false;
+      board[row][col] = currentPlayer;
+      render();
+
+      // Animate drop
+      var idx = row * COLS + col;
+      var cells = document.getElementById('board').children;
+      var cell = cells[idx];
+      cell.style.setProperty('--drop-rows', row + 1);
+      cell.classList.add('drop');
+
+      return true;
+    }
+
+    function afterMove() {
+      var winCells = checkWin();
+      if (winCells) {
+        gameOver = true;
+        highlightWin(winCells);
+        scores[currentPlayer]++;
+        updateScores();
+        save();
+        updateStatus(currentPlayer + ' wins!', currentPlayer);
+        return;
+      }
+      if (isBoardFull()) {
+        gameOver = true;
+        scores.draw++;
+        updateScores();
+        save();
+        updateStatus("It's a draw!", 'draw');
+        return;
+      }
+      currentPlayer = currentPlayer === 'red' ? 'yellow' : 'red';
+      updateStatus();
+
+      if (mode === 'computer' && currentPlayer === 'yellow' && !gameOver) {
+        setTimeout(computerMove, 400);
+      }
+    }
+
+    function checkWin() {
+      var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          if (!board[r][c]) continue;
+          var p = board[r][c];
+          for (var d = 0; d < dirs.length; d++) {
+            var cells = [[r,c]];
+            for (var s = 1; s < 4; s++) {
+              var nr = r + dirs[d][0]*s, nc = c + dirs[d][1]*s;
+              if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS || board[nr][nc] !== p) break;
+              cells.push([nr, nc]);
+            }
+            if (cells.length === 4) return cells;
+          }
+        }
+      }
+      return null;
+    }
+
+    function highlightWin(cells) {
+      var boardEl = document.getElementById('board');
+      for (var i = 0; i < cells.length; i++) {
+        var idx = cells[i][0] * COLS + cells[i][1];
+        boardEl.children[idx].classList.add('win');
+      }
+    }
+
+    function isBoardFull() {
+      for (var c = 0; c < COLS; c++) {
+        if (board[0][c] === null) return false;
+      }
+      return true;
+    }
+
+    function updateStatus(msg, cls) {
+      var el = document.getElementById('status');
+      if (msg) {
+        el.textContent = msg;
+        el.className = 'status ' + (cls || '');
+      } else {
+        var name = currentPlayer === 'red' ? 'Red' : 'Yellow';
+        el.textContent = name + "'s turn";
+        el.className = 'status ' + currentPlayer;
+      }
+    }
+
+    function updateScores() {
+      document.getElementById('scoreRed').textContent = scores.red;
+      document.getElementById('scoreYellow').textContent = scores.yellow;
+      document.getElementById('scoreDraw').textContent = scores.draw;
+    }
+
+    /* --- Computer AI --- */
+    function computerMove() {
+      if (gameOver) return;
+      var col = aiPickColumn();
+      if (col !== -1 && dropDisc(col)) {
+        afterMove();
+      }
+    }
+
+    function aiPickColumn() {
+      // 1. Win if possible
+      for (var c = 0; c < COLS; c++) {
+        if (isColumnFull(c)) continue;
+        var r = getDropRow(c);
+        board[r][c] = 'yellow';
+        if (checkWin()) { board[r][c] = null; return c; }
+        board[r][c] = null;
+      }
+      // 2. Block opponent win
+      for (var c = 0; c < COLS; c++) {
+        if (isColumnFull(c)) continue;
+        var r = getDropRow(c);
+        board[r][c] = 'red';
+        if (checkWin()) { board[r][c] = null; return c; }
+        board[r][c] = null;
+      }
+      // 3. Avoid giving opponent a win above
+      var safe = [];
+      for (var c = 0; c < COLS; c++) {
+        if (isColumnFull(c)) continue;
+        var r = getDropRow(c);
+        board[r][c] = 'yellow';
+        var bad = false;
+        if (r > 0) {
+          board[r-1][c] = 'red';
+          if (checkWin()) bad = true;
+          board[r-1][c] = null;
+        }
+        board[r][c] = null;
+        if (!bad) safe.push(c);
+      }
+      // 4. Prefer center
+      var candidates = safe.length > 0 ? safe : [];
+      if (candidates.length === 0) {
+        for (var c = 0; c < COLS; c++) { if (!isColumnFull(c)) candidates.push(c); }
+      }
+      if (candidates.length === 0) return -1;
+      // Prefer center columns
+      candidates.sort(function(a, b) { return Math.abs(a - 3) - Math.abs(b - 3); });
+      // Pick from top 3 with some randomness
+      var top = candidates.slice(0, Math.min(3, candidates.length));
+      return top[Math.floor(Math.random() * top.length)];
+    }
+
+    /* --- Save / Load --- */
+    function save() {
+      try {
+        parent.postMessage({ type: 'ca-save', slug: 'connect-four', state: { wins: scores } }, '*');
+      } catch(e) {}
+    }
+
+    window.addEventListener('message', function(e) {
+      if (!e.data) return;
+      if (e.data.type === 'ca-load' && e.data.state) {
+        if (e.data.state.wins) {
+          scores = e.data.state.wins;
+          if (!scores.draw) scores.draw = 0;
+          updateScores();
+        }
+      }
+      if (e.data.type === 'peer-data' && e.data.slug === 'connect-four') {
+        handlePeerMove(e.data);
+      }
+      if (e.data.type === 'game-assign') {
+        myColor = e.data.color || 'red';
+        newGame();
+      }
+    });
+
+    function handlePeerMove(data) {
+      if (mode !== 'multi' || gameOver) return;
+      if (data.move && data.move.col !== undefined) {
+        if (dropDisc(data.move.col)) {
+          afterMove();
+        }
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>

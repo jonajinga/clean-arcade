@@ -1,33 +1,388 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Word Scramble</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Word Scramble</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;-webkit-tap-highlight-color:transparent}
+#app{max-width:560px;width:100%;padding:16px;margin:0 auto}
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px}
+.hdr h1{font-size:1.3rem;font-weight:700;color:#6366f1}
+.btn{background:#1e293b;color:#e2e8f0;border:1px solid #334155;padding:8px 16px;border-radius: 0;cursor:pointer;font-size:.85rem;transition:background .15s}
+.btn:hover,.btn:active{background:#334155}
+.btn-sm{padding:6px 12px;font-size:.78rem}
+.stats-bar{display:flex;gap:16px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+.stat{text-align:center}
+.stat-val{font-size:1.4rem;font-weight:700;color:#6366f1}
+.stat-lbl{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+.timer-bar{width:100%;height:6px;background:#1e293b;border-radius: 0;margin-bottom:24px;overflow:hidden}
+.timer-fill{height:100%;background:#6366f1;border-radius: 0;transition:width .3s linear}
+.timer-fill.warn{background:#f59e0b}
+.timer-fill.danger{background:#ef4444}
+.scramble-area{text-align:center;margin-bottom:20px}
+.scramble-label{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.tiles{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-bottom:24px}
+.tile{width:44px;height:50px;background:#1e293b;border:2px solid #334155;border-radius: 0;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:#e2e8f0;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.tile:hover{border-color:#6366f1;background:#0f172a}
+.tile:active{transform:scale(.93)}
+.tile.used{opacity:.25;pointer-events:none;border-color:#1e293b}
+.tile.hint{border-color:#22c55e;color:#22c55e;background:#052e16}
+.answer-area{margin-bottom:20px}
+.answer-label{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center}
+.answer-tiles{display:flex;justify-content:center;gap:6px;min-height:54px;flex-wrap:wrap;margin-bottom:12px}
+.ans-tile{width:44px;height:50px;background:#312e81;border:2px solid #4f46e5;border-radius: 0;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:#e2e8f0;cursor:pointer;transition:all .15s;text-transform:uppercase}
+.ans-tile:hover{border-color:#6366f1}
+.ans-tile:active{transform:scale(.93)}
+.ans-tile.correct{background:#052e16;border-color:#22c55e;color:#22c55e}
+.ans-tile.wrong{background:#450a0a;border-color:#ef4444;color:#ef4444;animation:shake .4s}
+.ans-tile.hint-locked{background:#052e16;border-color:#22c55e;color:#22c55e;pointer-events:none}
+.ans-slot{width:44px;height:50px;border:2px dashed #334155;border-radius:6px}
+.input-row{display:flex;gap:8px;justify-content:center;margin-bottom:16px}
+.text-input{background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:10px 14px;border-radius: 0;font-size:1rem;text-align:center;text-transform:uppercase;letter-spacing:2px;width:100%;max-width:300px;outline:none}
+.text-input:focus{border-color:#6366f1}
+.btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.msg{text-align:center;font-size:1rem;min-height:28px;margin-bottom:8px;font-weight:600}
+.msg-correct{color:#22c55e}
+.msg-wrong{color:#ef4444}
+.msg-timeout{color:#f59e0b}
+.streak-badge{display:inline-flex;align-items:center;gap:4px;background:#1e293b;border:1px solid #334155;border-radius: 0;padding:3px 10px;font-size:.75rem;color:#f59e0b}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+.pop{animation:pop .25s ease-out}
+</style>
 </head>
 <body>
-  <div class="placeholder">
+<div id="app">
+  <div class="hdr">
     <h1>Word Scramble</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
+    <button class="btn" onclick="resetGame()">New Game</button>
   </div>
-  <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Word Scramble", 200, 150);
-  </script>
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-val" id="score">0</div><div class="stat-lbl">Score</div></div>
+    <div class="stat"><div class="stat-val" id="streak">0</div><div class="stat-lbl">Streak</div></div>
+    <div class="stat"><div class="stat-val" id="solved">0</div><div class="stat-lbl">Solved</div></div>
+    <div class="stat"><div class="stat-val" id="best">0</div><div class="stat-lbl">Best</div></div>
+  </div>
+  <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
+  <div class="scramble-area">
+    <div class="scramble-label">Unscramble</div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+  <div class="answer-area">
+    <div class="answer-label">Your Answer</div>
+    <div class="answer-tiles" id="answer"></div>
+  </div>
+  <div class="input-row">
+    <input type="text" class="text-input" id="text-input" placeholder="or type here..." autocomplete="off" autocapitalize="off" spellcheck="false">
+  </div>
+  <div class="btns">
+    <button class="btn btn-sm" onclick="useHint()">Hint</button>
+    <button class="btn btn-sm" onclick="clearAnswer()">Clear</button>
+    <button class="btn btn-sm" onclick="submitAnswer()">Submit</button>
+    <button class="btn btn-sm" onclick="skipWord()">Skip</button>
+  </div>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+(function(){
+var WORDS=["about","above","adapt","after","again","agree","alarm","alert","alive","allow","alone","along","angel","angle","angry","apple","arena","argue","arise","army","avoid","award","bacon","badge","beach","began","begin","below","bench","blade","blame","blank","blast","blaze","blend","blind","block","bloom","blown","board","bonus","booth","bound","brain","brand","brave","bread","break","breed","brick","bride","brief","bring","broad","broke","brown","brush","build","bunch","burst","buyer","cabin","cable","camel","candy","cargo","carry","catch","cause","chain","chair","chalk","charm","chase","cheap","check","chess","chief","child","china","civil","claim","class","clean","clear","clerk","cliff","climb","cling","clock","close","cloud","coach","coast","coral","count","court","cover","crack","craft","crash","crazy","cream","crime","cross","crowd","crown","cruel","crush","curve","cycle","daily","dance","debug","decay","delay","delta","dense","depot","depth","devil","diary","dirty","doubt","draft","drain","drama","drawn","dream","dress","drift","drill","drink","drive","drops","drown","dying","eager","early","earth","eight","elder","elect","elite","empty","enemy","enjoy","enter","equal","equip","error","essay","event","every","exact","exams","exist","extra","fable","faint","fairy","faith","false","fancy","fatal","fault","feast","fence","fever","fiber","field","fifth","fifty","fight","final","first","fixed","flame","flash","fleet","flesh","float","flock","flood","floor","flour","fluid","flute","focus","force","forge","forth","forum","found","frame","frank","fraud","fresh","front","frost","fruit","fully","funny","giant","given","glass","globe","gloom","glory","glove","grace","grade","grain","grand","grant","grape","grasp","grass","grave","great","green","greet","grief","grind","grip","gross","group","grove","grown","guard","guess","guest","guide","guild","guilt","habit","happy","harsh","hasty","haven","heart","heavy","hedge","hello","hence","herbs","honor","horse","hotel","house","human","humor","hurry","ideal","image","imply","inbox","index","indie","infer","inner","input","issue","ivory","jewel","joint","joker","judge","juice","knife","knock","known","label","labor","large","laser","later","laugh","layer","learn","least","leave","legal","lemon","level","light","limit","linen","links","liver","logic","loose","lover","lower","loyal","lucky","lunch","magic","major","maker","manor","maple","march","match","mayor","meant","media","mercy","merge","merit","metal","meter","might","minor","minus","modal","model","money","month","moral","motor","mount","mouse","mouth","movie","music","naval","nerve","never","night","noble","noise","north","noted","novel","nurse","nylon","occur","ocean","offer","often","olive","orbit","order","organ","other","outer","outwit","owner","oxide","paint","panel","panic","paper","party","paste","patch","pause","peace","peach","pearl","penny","perch","phase","phone","photo","piano","piece","pilot","pinch","pitch","pixel","place","plain","plane","plant","plate","plaza","plead","pluck","plumb","point","polar","popup","pound","power","press","price","pride","prime","prince","print","prior","prize","probe","proof","proud","prove","proxy","psalm","pulse","punch","pupil","purse","queen","quest","quick","quiet","quote","radar","radio","raise","rally","ranch","range","rapid","ratio","reach","react","realm","rebel","refer","reign","relax","relay","renal","renew","repay","reply","rider","ridge","rifle","right","rigid","risky","rival","river","robot","rocky","roman","roost","rough","round","route","royal","rugby","ruler","rural","saint","salad","sauce","scale","scene","scope","score","scout","scrap","serif","serve","setup","seven","shade","shaft","shake","shall","shame","shape","share","shark","sharp","shear","sheep","sheer","sheet","shelf","shell","shift","shine","shirt","shock","shore","short","shown","siege","sight","sigma","since","sixth","sixty","sized","skill","skull","slate","sleep","slice","slide","slope","small","smart","smell","smile","smoke","snake","solar","solid","solve","sorry","south","space","spare","spark","speak","speed","spend","spice","spine","split","spoke","spoon","sport","spray","squad","stack","staff","stage","stain","stake","stale","stall","stamp","stand","stark","start","state","stays","steal","steam","steel","steep","steer","stern","stick","stiff","still","stock","stone","stood","store","storm","story","stout","stove","strap","straw","strip","stuck","study","stuff","stump","style","sugar","suite","sunny","super","surge","swamp","swear","sweep","sweet","swept","swift","swing","sword","sworn","swung","table","taste","teach","teeth","tempt","tense","terms","thank","theft","theme","there","thick","thief","thing","think","third","thorn","those","three","threw","throw","thumb","tiger","tight","timer","tired","title","today","token","total","touch","tough","towel","tower","toxic","trace","track","trade","trail","train","trait","trash","treat","trend","trial","tribe","trick","troop","truck","truly","trump","trunk","trust","truth","tumor","tuner","tweak","twice","twist","ultra","uncle","under","union","unite","unity","until","upper","upset","urban","usage","usual","utter","valid","value","vault","venue","verse","video","vigor","vinyl","viral","virus","visit","vital","vivid","vocal","voice","voter","waist","watch","water","weary","weave","weird","whale","wheat","wheel","where","which","while","white","whole","whose","width","witch","woman","women","world","worry","worse","worst","worth","would","wound","wrath","write","wrong","wrote","yacht","yield","young","youth","zebra"];
+
+var word,scrambled,answer,hintRevealed,score,streak,solvedCount,bestScore,timeLeft,tmr,inputLocked;
+var ROUND_TIME=30;
+
+function init(){
+  score=0;streak=0;solvedCount=0;bestScore=0;
+}
+
+function pickWord(){
+  return WORDS[Math.floor(Math.random()*WORDS.length)].toUpperCase();
+}
+
+function scramble(w){
+  var arr=w.split('');
+  for(var i=arr.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=arr[i];arr[i]=arr[j];arr[j]=t;}
+  // Don't return same as original
+  if(arr.join('')===w&&w.length>1)return scramble(w);
+  return arr;
+}
+
+function startRound(){
+  clearInterval(tmr);
+  word=pickWord();
+  scrambled=scramble(word);
+  answer=new Array(word.length).fill(null);
+  hintRevealed=new Array(word.length).fill(false);
+  timeLeft=ROUND_TIME;
+  inputLocked=false;
+  document.getElementById('text-input').value='';
+  document.getElementById('msg').textContent='';
+  document.getElementById('msg').className='msg';
+  tmr=setInterval(tick,1000);
+  render();
+}
+
+function tick(){
+  if(inputLocked)return;
+  timeLeft--;
+  updateTimer();
+  if(timeLeft<=0){
+    clearInterval(tmr);
+    inputLocked=true;
+    showMsg('Time up! The word was '+word,'msg-timeout');
+    streak=0;
+    updateStats();
+    setTimeout(startRound,2000);
+  }
+}
+
+function updateTimer(){
+  var pct=(timeLeft/ROUND_TIME)*100;
+  var el=document.getElementById('timer-fill');
+  el.style.width=pct+'%';
+  el.className='timer-fill'+(pct<=33?' danger':pct<=60?' warn':'');
+}
+
+function updateStats(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('streak').textContent=streak;
+  document.getElementById('solved').textContent=solvedCount;
+  document.getElementById('best').textContent=bestScore;
+}
+
+function showMsg(txt,cls){
+  var el=document.getElementById('msg');
+  el.textContent=txt;
+  el.className='msg '+(cls||'');
+}
+
+function render(){
+  updateTimer();
+  updateStats();
+  // Scrambled tiles
+  var tilesEl=document.getElementById('tiles');
+  var th='';
+  for(var i=0;i<scrambled.length;i++){
+    var used=false;
+    // Check if this tile index is used in answer
+    for(var a=0;a<answer.length;a++){
+      if(answer[a]&&answer[a].srcIdx===i){used=true;break;}
+    }
+    var hintIdx=-1;
+    // Check if this letter is pre-placed as hint
+    for(var h2=0;h2<hintRevealed.length;h2++){
+      if(hintRevealed[h2]&&word[h2]===scrambled[i]&&hintIdx===-1){
+        // more complex hint tracking below
+      }
+    }
+    var cls=used?'tile used':'tile';
+    th+='<div class="'+cls+'" onclick="clickTile('+i+')">'+scrambled[i]+'</div>';
+  }
+  tilesEl.innerHTML=th;
+
+  // Answer slots
+  var ansEl=document.getElementById('answer');
+  var ah='';
+  for(var j=0;j<word.length;j++){
+    if(hintRevealed[j]){
+      ah+='<div class="ans-tile hint-locked">'+word[j]+'</div>';
+    } else if(answer[j]){
+      ah+='<div class="ans-tile" onclick="clickAns('+j+')">'+answer[j].letter+'</div>';
+    } else {
+      ah+='<div class="ans-slot"></div>';
+    }
+  }
+  ansEl.innerHTML=ah;
+}
+
+window.clickTile=function(idx){
+  if(inputLocked)return;
+  // Find first empty non-hint slot
+  for(var i=0;i<answer.length;i++){
+    if(!hintRevealed[i]&&!answer[i]){
+      answer[i]={letter:scrambled[idx],srcIdx:idx};
+      render();
+      // Auto-submit if full
+      if(isAnswerFull())setTimeout(submitAnswer,200);
+      return;
+    }
+  }
+};
+
+window.clickAns=function(idx){
+  if(inputLocked||hintRevealed[idx])return;
+  answer[idx]=null;
+  render();
+};
+
+function isAnswerFull(){
+  for(var i=0;i<answer.length;i++){
+    if(!hintRevealed[i]&&!answer[i])return false;
+  }
+  return true;
+}
+
+function getAnswerStr(){
+  var s='';
+  for(var i=0;i<answer.length;i++){
+    if(hintRevealed[i])s+=word[i];
+    else if(answer[i])s+=answer[i].letter;
+    else s+='_';
+  }
+  return s;
+}
+
+window.submitAnswer=function(){
+  if(inputLocked)return;
+  // Check typed input first
+  var typed=document.getElementById('text-input').value.trim().toUpperCase();
+  var guess=typed.length>0?typed:getAnswerStr();
+  if(guess.length!==word.length||guess.indexOf('_')>=0)return;
+
+  if(guess===word){
+    clearInterval(tmr);inputLocked=true;
+    var timeBonus=Math.max(0,timeLeft)*10;
+    var hintPenalty=0;
+    hintRevealed.forEach(function(h){if(h)hintPenalty+=25;});
+    var pts=100+timeBonus-hintPenalty;
+    if(pts<10)pts=10;
+    score+=pts;
+    streak++;
+    solvedCount++;
+    if(score>bestScore)bestScore=score;
+    showMsg('Correct! +'+pts+' points','msg-correct');
+    // Flash correct
+    if(typed.length>0){
+      // Fill answer from typed for visual
+      for(var i=0;i<word.length;i++){
+        if(!hintRevealed[i])answer[i]={letter:word[i],srcIdx:-1};
+      }
+    }
+    renderCorrect();
+    updateStats();
+    saveState();
+    setTimeout(startRound,1500);
+  } else {
+    showMsg('Not quite! Try again.','msg-wrong');
+    // Shake answer
+    var ansTiles=document.querySelectorAll('.ans-tile:not(.hint-locked)');
+    ansTiles.forEach(function(t){t.classList.add('wrong');setTimeout(function(){t.classList.remove('wrong');},500);});
+    streak=0;
+    updateStats();
+    if(typed.length>0){
+      document.getElementById('text-input').value='';
+      // Clear tile answer too
+      for(var k=0;k<answer.length;k++){if(!hintRevealed[k])answer[k]=null;}
+      render();
+    }
+  }
+};
+
+function renderCorrect(){
+  var ansEl=document.getElementById('answer');
+  var ah='';
+  for(var j=0;j<word.length;j++){
+    ah+='<div class="ans-tile correct pop">'+word[j]+'</div>';
+  }
+  ansEl.innerHTML=ah;
+}
+
+window.useHint=function(){
+  if(inputLocked)return;
+  // Reveal one un-revealed position
+  var unrevealed=[];
+  for(var i=0;i<word.length;i++){
+    if(!hintRevealed[i])unrevealed.push(i);
+  }
+  if(unrevealed.length<=1)return; // don't reveal the last one
+  var idx=unrevealed[Math.floor(Math.random()*unrevealed.length)];
+  hintRevealed[idx]=true;
+  // Clear that answer slot if occupied
+  answer[idx]=null;
+  // Mark the correct source tile as used if possible
+  // Find the letter in scrambled that matches
+  var needed=word[idx];
+  for(var s=0;s<scrambled.length;s++){
+    if(scrambled[s]===needed){
+      var inUse=false;
+      for(var a=0;a<answer.length;a++){if(answer[a]&&answer[a].srcIdx===s)inUse=true;}
+      var isHintSrc=false;
+      // skip if already hint-used — simplified approach
+      if(!inUse){break;}
+    }
+  }
+  render();
+};
+
+window.clearAnswer=function(){
+  if(inputLocked)return;
+  for(var i=0;i<answer.length;i++){
+    if(!hintRevealed[i])answer[i]=null;
+  }
+  document.getElementById('text-input').value='';
+  render();
+};
+
+window.skipWord=function(){
+  if(inputLocked)return;
+  clearInterval(tmr);inputLocked=true;
+  streak=0;
+  showMsg('Skipped! The word was '+word,'msg-timeout');
+  updateStats();
+  setTimeout(startRound,1500);
+};
+
+window.resetGame=function(){
+  clearInterval(tmr);
+  score=0;streak=0;solvedCount=0;
+  startRound();
+};
+
+// Keyboard
+document.getElementById('text-input').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){e.preventDefault();submitAnswer();}
+});
+
+// Also allow typing without focus on input - forward keys
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT')return;
+  if(e.key==='Enter'){submitAnswer();return;}
+  if(e.key==='Backspace'){
+    // Remove last answer tile
+    for(var i=answer.length-1;i>=0;i--){
+      if(!hintRevealed[i]&&answer[i]){answer[i]=null;render();return;}
+    }
+    return;
+  }
+  if(e.key.length===1&&/[a-zA-Z]/.test(e.key)){
+    var letter=e.key.toUpperCase();
+    // Find matching unused tile
+    for(var s=0;s<scrambled.length;s++){
+      if(scrambled[s]===letter){
+        var used=false;
+        for(var a=0;a<answer.length;a++){if(answer[a]&&answer[a].srcIdx===s){used=true;break;}}
+        // Also check hints
+        if(!used){clickTile(s);return;}
+      }
+    }
+  }
+});
+
+function saveState(){
+  try{parent.postMessage({type:'ca-save',slug:'word-scramble',state:{wins:solvedCount,highScore:bestScore}},'*');}catch(e){}
+}
+
+window.addEventListener('message',function(e){
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    bestScore=e.data.state.highScore||0;
+    document.getElementById('best').textContent=bestScore;
+  }
+});
+
+init();
+startRound();
+})();
+</script>
 </body>
 </html>

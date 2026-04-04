@@ -6,28 +6,497 @@
   <title>Checkers</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
+    body {
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      min-height: 100vh; background: #0f172a; color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 1rem; user-select: none;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; text-align: center; }
+    .controls { display: flex; gap: 0.5rem; margin: 0.5rem 0; flex-wrap: wrap; justify-content: center; }
+    button {
+      background: #334155; color: #e2e8f0; border: 1px solid #475569;
+      padding: 0.4rem 1rem; border-radius: 0; cursor: pointer; font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+    button:hover { background: #475569; }
+    button.active { background: #6366f1; border-color: #818cf8; }
+    .score {
+      display: flex; gap: 1.5rem; margin: 0.4rem 0; font-size: 0.9rem; align-items: center;
+    }
+    .score-red { color: #ef4444; font-weight: 700; }
+    .score-black { color: #a0a0a0; font-weight: 700; }
+    .status {
+      font-size: 1rem; min-height: 1.5rem; margin: 0.3rem 0; text-align: center;
+      font-weight: 600;
+    }
+    .status.red { color: #ef4444; }
+    .status.black { color: #a0a0a0; }
+    .board {
+      display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+      width: var(--board-size); height: var(--board-size);
+      border: 3px solid #475569; border-radius: 0;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .sq {
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    .sq.light { background: #d4a574; }
+    .sq.dark { background: #8b5e3c; }
+    .sq.highlight { background: #4ade80aa; cursor: pointer; }
+    .sq.selected { background: #60a5fa88; }
+    .piece {
+      width: 80%; height: 80%; border-radius: 50%; position: relative;
+      cursor: pointer; transition: transform 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .piece:hover { transform: scale(1.08); }
+    .piece.red-piece {
+      background: radial-gradient(circle at 35% 35%, #f87171, #dc2626 60%, #991b1b);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.2);
+    }
+    .piece.black-piece {
+      background: radial-gradient(circle at 35% 35%, #6b7280, #374151 60%, #1f2937);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,255,255,0.15);
+    }
+    .piece.king::after {
+      content: '';
+      width: 50%; height: 50%; border-radius: 50%;
+      border: 3px solid #fbbf24;
+      box-shadow: 0 0 6px rgba(251,191,36,0.6);
+      position: absolute;
+    }
+    .piece.selected-piece {
+      transform: scale(1.1);
+      box-shadow: 0 0 12px 4px rgba(96,165,250,0.6);
+    }
+    .move-dot {
+      width: 30%; height: 30%; border-radius: 50%;
+      background: rgba(74,222,128,0.7);
+      position: absolute;
+    }
+    @media (max-width: 480px) {
+      h1 { font-size: 1.2rem; }
+      .controls { gap: 0.3rem; }
+      button { padding: 0.3rem 0.7rem; font-size: 0.75rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="placeholder">
-    <h1>Checkers</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
+  <h1>Checkers</h1>
+  <div class="controls">
+    <button id="btnComputer" class="active" onclick="setMode('computer')">vs Computer</button>
+    <button id="btnLocal" onclick="setMode('local')">vs Player</button>
+    <button id="btnMulti" onclick="setMode('multi')">Multiplayer</button>
+    <button onclick="newGame()">New Game</button>
   </div>
+  <div class="score">
+    <span class="score-red">Red: <span id="scoreRed">0</span></span>
+    <span class="score-black">Black: <span id="scoreBlack">0</span></span>
+  </div>
+  <div class="status" id="status">Red's turn</div>
+  <div class="board" id="board"></div>
+
   <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Checkers", 200, 150);
+    var SIZE = 8;
+    var board, currentPlayer, gameOver, mode, selected, validMoves, mustJump, multiJumpPiece;
+    var myColor;
+    var scores = { red: 0, black: 0 };
+
+    // board[r][c] = null | { color: 'red'|'black', king: false }
+
+    function init() {
+      mode = 'computer';
+      myColor = null;
+      sizing();
+      newGame();
+      window.addEventListener('resize', sizing);
+    }
+
+    function sizing() {
+      var s = Math.min(window.innerWidth - 32, window.innerHeight * 0.65, 520);
+      document.documentElement.style.setProperty('--board-size', s + 'px');
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('btnComputer').className = m === 'computer' ? 'active' : '';
+      document.getElementById('btnLocal').className = m === 'local' ? 'active' : '';
+      document.getElementById('btnMulti').className = m === 'multi' ? 'active' : '';
+      if (m === 'multi') {
+        myColor = 'red';
+        parent.postMessage({ type: 'game-ready', slug: 'checkers' }, '*');
+      } else {
+        myColor = null;
+      }
+      newGame();
+    }
+
+    function newGame() {
+      board = [];
+      for (var r = 0; r < SIZE; r++) {
+        board[r] = [];
+        for (var c = 0; c < SIZE; c++) {
+          board[r][c] = null;
+          if ((r + c) % 2 === 1) {
+            if (r < 3) board[r][c] = { color: 'black', king: false };
+            else if (r > 4) board[r][c] = { color: 'red', king: false };
+          }
+        }
+      }
+      currentPlayer = 'red';
+      gameOver = false;
+      selected = null;
+      validMoves = [];
+      mustJump = false;
+      multiJumpPiece = null;
+      render();
+      updateStatus();
+    }
+
+    function render() {
+      var el = document.getElementById('board');
+      el.innerHTML = '';
+      var highlightSquares = {};
+      for (var i = 0; i < validMoves.length; i++) {
+        var m = validMoves[i];
+        highlightSquares[m.toR + ',' + m.toC] = true;
+      }
+
+      for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+          var sq = document.createElement('div');
+          var isDark = (r + c) % 2 === 1;
+          sq.className = 'sq ' + (isDark ? 'dark' : 'light');
+          sq.dataset.row = r;
+          sq.dataset.col = c;
+
+          if (selected && selected.r === r && selected.c === c) {
+            sq.classList.add('selected');
+          }
+          if (highlightSquares[r + ',' + c]) {
+            sq.classList.add('highlight');
+            var dot = document.createElement('div');
+            dot.className = 'move-dot';
+            sq.appendChild(dot);
+          }
+
+          var p = board[r][c];
+          if (p) {
+            var piece = document.createElement('div');
+            piece.className = 'piece ' + p.color + '-piece';
+            if (p.king) piece.classList.add('king');
+            if (selected && selected.r === r && selected.c === c) {
+              piece.classList.add('selected-piece');
+            }
+            sq.appendChild(piece);
+          }
+
+          sq.addEventListener('click', handleSquareClick);
+          el.appendChild(sq);
+        }
+      }
+    }
+
+    function handleSquareClick(e) {
+      if (gameOver) return;
+      if (mode === 'multi' && currentPlayer !== myColor) return;
+      if (mode === 'computer' && currentPlayer === 'black') return;
+
+      var sq = e.currentTarget;
+      var r = parseInt(sq.dataset.row);
+      var c = parseInt(sq.dataset.col);
+
+      // Check if clicking a valid move destination
+      for (var i = 0; i < validMoves.length; i++) {
+        var m = validMoves[i];
+        if (m.toR === r && m.toC === c) {
+          executeMove(m);
+          if (mode === 'multi') {
+            parent.postMessage({ type: 'game-move', slug: 'checkers', move: m }, '*');
+          }
+          return;
+        }
+      }
+
+      // If in multi-jump, can't select a different piece
+      if (multiJumpPiece) return;
+
+      // Select a piece
+      var p = board[r][c];
+      if (p && p.color === currentPlayer) {
+        selected = { r: r, c: c };
+        validMoves = getMovesForPiece(r, c);
+
+        // If there are mandatory jumps, only show jump moves
+        var allJumps = getAllJumps(currentPlayer);
+        if (allJumps.length > 0) {
+          // Filter: only this piece's jumps
+          validMoves = validMoves.filter(function(m) { return m.jumped; });
+          if (validMoves.length === 0) {
+            // This piece has no jumps, deselect
+            selected = null;
+          }
+        }
+        render();
+      }
+    }
+
+    function getMovesForPiece(r, c) {
+      var p = board[r][c];
+      if (!p) return [];
+      var moves = [];
+      var dirs = [];
+      if (p.color === 'red' || p.king) dirs.push([-1, -1], [-1, 1]);
+      if (p.color === 'black' || p.king) dirs.push([1, -1], [1, 1]);
+
+      for (var i = 0; i < dirs.length; i++) {
+        var dr = dirs[i][0], dc = dirs[i][1];
+        var nr = r + dr, nc = c + dc;
+        // Simple move
+        if (inBounds(nr, nc) && board[nr][nc] === null) {
+          moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, jumped: null });
+        }
+        // Jump
+        var jr = r + dr*2, jc = c + dc*2;
+        if (inBounds(jr, jc) && board[nr][nc] && board[nr][nc].color !== p.color && board[jr][jc] === null) {
+          moves.push({ fromR: r, fromC: c, toR: jr, toC: jc, jumped: { r: nr, c: nc } });
+        }
+      }
+      return moves;
+    }
+
+    function getAllMoves(color) {
+      var moves = [];
+      for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+          if (board[r][c] && board[r][c].color === color) {
+            moves = moves.concat(getMovesForPiece(r, c));
+          }
+        }
+      }
+      return moves;
+    }
+
+    function getAllJumps(color) {
+      return getAllMoves(color).filter(function(m) { return m.jumped; });
+    }
+
+    function executeMove(m) {
+      var p = board[m.fromR][m.fromC];
+      board[m.toR][m.toC] = p;
+      board[m.fromR][m.fromC] = null;
+
+      if (m.jumped) {
+        board[m.jumped.r][m.jumped.c] = null;
+      }
+
+      // King promotion
+      if (p.color === 'red' && m.toR === 0) p.king = true;
+      if (p.color === 'black' && m.toR === 7) p.king = true;
+
+      // Check for multi-jump
+      if (m.jumped) {
+        var furtherJumps = getMovesForPiece(m.toR, m.toC).filter(function(mv) { return mv.jumped; });
+        if (furtherJumps.length > 0) {
+          multiJumpPiece = { r: m.toR, c: m.toC };
+          selected = multiJumpPiece;
+          validMoves = furtherJumps;
+          render();
+          updateStatus();
+          return;
+        }
+      }
+
+      // End turn
+      multiJumpPiece = null;
+      selected = null;
+      validMoves = [];
+      currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+
+      // Check game end
+      if (checkGameEnd()) {
+        render();
+        return;
+      }
+
+      render();
+      updateStatus();
+
+      // Force jump selection
+      var jumps = getAllJumps(currentPlayer);
+      if (jumps.length > 0) {
+        mustJump = true;
+      } else {
+        mustJump = false;
+      }
+
+      if (mode === 'computer' && currentPlayer === 'black' && !gameOver) {
+        setTimeout(computerMove, 500);
+      }
+    }
+
+    function checkGameEnd() {
+      var moves = getAllMoves(currentPlayer);
+      if (moves.length === 0) {
+        gameOver = true;
+        var winner = currentPlayer === 'red' ? 'black' : 'red';
+        scores[winner]++;
+        updateScores();
+        save();
+        var name = winner === 'red' ? 'Red' : 'Black';
+        updateStatus(name + ' wins!', winner);
+        return true;
+      }
+      // Check if all pieces captured
+      var redCount = 0, blackCount = 0;
+      for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+          if (board[r][c]) {
+            if (board[r][c].color === 'red') redCount++;
+            else blackCount++;
+          }
+        }
+      }
+      if (redCount === 0) {
+        gameOver = true;
+        scores.black++;
+        updateScores();
+        save();
+        updateStatus('Black wins!', 'black');
+        return true;
+      }
+      if (blackCount === 0) {
+        gameOver = true;
+        scores.red++;
+        updateScores();
+        save();
+        updateStatus('Red wins!', 'red');
+        return true;
+      }
+      return false;
+    }
+
+    function inBounds(r, c) {
+      return r >= 0 && r < SIZE && c >= 0 && c < SIZE;
+    }
+
+    function updateStatus(msg, cls) {
+      var el = document.getElementById('status');
+      if (msg) {
+        el.textContent = msg;
+        el.className = 'status ' + (cls || '');
+      } else {
+        var name = currentPlayer === 'red' ? 'Red' : 'Black';
+        var extra = mustJump ? ' (must jump!)' : '';
+        el.textContent = name + "'s turn" + extra;
+        el.className = 'status ' + currentPlayer;
+      }
+    }
+
+    function updateScores() {
+      document.getElementById('scoreRed').textContent = scores.red;
+      document.getElementById('scoreBlack').textContent = scores.black;
+    }
+
+    /* --- Computer AI --- */
+    function computerMove() {
+      if (gameOver || currentPlayer !== 'black') return;
+
+      var jumps = getAllJumps('black');
+      var moves;
+      if (jumps.length > 0) {
+        moves = jumps;
+      } else {
+        moves = getAllMoves('black');
+      }
+      if (moves.length === 0) return;
+
+      // Prioritize: multi-jumps > single jumps > king moves > forward moves
+      // Simple scoring
+      var best = [];
+      var bestScore = -Infinity;
+      for (var i = 0; i < moves.length; i++) {
+        var m = moves[i];
+        var s = 0;
+        if (m.jumped) s += 10;
+        // Prefer center
+        s += (3.5 - Math.abs(m.toC - 3.5)) * 0.5;
+        // Prefer advancing
+        s += m.toR * 0.3;
+        // Prefer becoming king
+        if (!board[m.fromR][m.fromC].king && m.toR === 7) s += 5;
+        // Avoid back row for non-kings (keep them safe)
+        if (m.fromR === 0 && !board[m.fromR][m.fromC].king) s -= 2;
+
+        if (s > bestScore) {
+          bestScore = s;
+          best = [m];
+        } else if (s === bestScore) {
+          best.push(m);
+        }
+      }
+
+      var chosen = best[Math.floor(Math.random() * best.length)];
+      selected = { r: chosen.fromR, c: chosen.fromC };
+      validMoves = [chosen];
+      render();
+
+      setTimeout(function() {
+        executeMove(chosen);
+        // Handle multi-jump for AI
+        if (multiJumpPiece && currentPlayer === 'black') {
+          setTimeout(computerMultiJump, 400);
+        }
+      }, 300);
+    }
+
+    function computerMultiJump() {
+      if (!multiJumpPiece || gameOver || currentPlayer !== 'black') return;
+      if (validMoves.length === 0) return;
+      var chosen = validMoves[Math.floor(Math.random() * validMoves.length)];
+      executeMove(chosen);
+      if (multiJumpPiece && currentPlayer === 'black') {
+        setTimeout(computerMultiJump, 400);
+      }
+    }
+
+    /* --- Save / Load --- */
+    function save() {
+      try {
+        parent.postMessage({ type: 'ca-save', slug: 'checkers', state: { wins: scores } }, '*');
+      } catch(e) {}
+    }
+
+    window.addEventListener('message', function(e) {
+      if (!e.data) return;
+      if (e.data.type === 'ca-load' && e.data.state) {
+        if (e.data.state.wins) {
+          scores = e.data.state.wins;
+          updateScores();
+        }
+      }
+      if (e.data.type === 'peer-data' && e.data.slug === 'checkers') {
+        handlePeerMove(e.data);
+      }
+      if (e.data.type === 'game-assign') {
+        myColor = e.data.color || 'red';
+        newGame();
+      }
+    });
+
+    function handlePeerMove(data) {
+      if (mode !== 'multi' || gameOver) return;
+      if (data.move) {
+        var m = data.move;
+        selected = { r: m.fromR, c: m.fromC };
+        validMoves = [m];
+        executeMove(m);
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>

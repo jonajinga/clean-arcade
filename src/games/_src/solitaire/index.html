@@ -1,33 +1,387 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Solitaire</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Solitaire</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overflow-x:hidden;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+#app{max-width:860px;margin:0 auto;padding:6px 8px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 0;flex-wrap:wrap;gap:6px}
+.hdr h1{font-size:1.15rem;font-weight:700;color:#6366f1}
+.stats{display:flex;gap:14px;font-size:.82rem;color:#94a3b8}
+.btn{background:#1e293b;color:#e2e8f0;border:1px solid #334155;padding:7px 14px;border-radius: 0;cursor:pointer;font-size:.82rem;transition:background .15s}
+.btn:hover,.btn:active{background:#334155}
+.top-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+.board{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.slot{position:relative;aspect-ratio:2.5/3.5;border-radius:5px}
+.slot-outline{border:1.5px dashed #1e293b;border-radius: 0;aspect-ratio:2.5/3.5}
+.foundation-slot{border:1.5px dashed #334155;border-radius: 0;aspect-ratio:2.5/3.5;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:#334155}
+.stock-slot{cursor:pointer;aspect-ratio:2.5/3.5;position:relative}
+.stock-empty{border:1.5px dashed #334155;border-radius: 0;display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#475569;aspect-ratio:2.5/3.5;cursor:pointer}
+.card{position:absolute;width:100%;aspect-ratio:2.5/3.5;border-radius: 0;display:flex;flex-direction:column;justify-content:space-between;padding:2px 4px;cursor:pointer;border:1px solid #94a3b8;z-index:1;transition:box-shadow .1s}
+.card-face{background:#f1f5f9}
+.card-back{background:linear-gradient(135deg,#1e40af 0%,#2563eb 50%,#1e40af 100%);border-color:#3b82f6;cursor:default}
+.card-back::after{content:'';position:absolute;inset:3px;border:1px solid rgba(255,255,255,.15);border-radius: 0;pointer-events:none}
+.card-red{color:#dc2626}
+.card-black{color:#0f172a}
+.card .rank-suit{line-height:1;font-weight:700;font-size:clamp(.5rem,.8vw+.2rem,.85rem)}
+.card .rank-suit.bot{align-self:flex-end;transform:rotate(180deg)}
+.card .big-suit{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:clamp(.9rem,1.8vw+.2rem,1.8rem);opacity:.18;pointer-events:none}
+.card.selected{box-shadow:0 0 0 2.5px #6366f1,0 4px 12px rgba(56,189,248,.3);z-index:50!important}
+.tab-col{position:relative}
+.tab-col .card{left:0;right:0}
+.spacer{aspect-ratio:2.5/3.5}
+.win-overlay{position:fixed;inset:0;background:rgba(15,23,42,.93);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
+.win-overlay h2{font-size:2rem;color:#22c55e}
+.win-overlay p{color:#94a3b8}
+.btn-win{background:#22c55e;color:#0f172a;font-weight:700;border:none;font-size:1rem;padding:10px 24px;border-radius: 0;cursor:pointer}
+.auto-btn{background:#334155;border:1px solid #475569;color:#94a3b8;padding:5px 10px;border-radius: 0;cursor:pointer;font-size:.75rem}
+.auto-btn:hover{background:#475569;color:#e2e8f0}
+@media(max-width:480px){
+  .card .rank-suit{font-size:.48rem}
+  .card{padding:1px 2px;border-radius:3px}
+  .top-row,.board{gap:2px}
+}
+</style>
 </head>
 <body>
-  <div class="placeholder">
+<div id="app">
+  <div class="hdr">
     <h1>Solitaire</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
+    <div class="stats">
+      <span id="moves">Moves: 0</span>
+      <span id="timer">0:00</span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="auto-btn" id="auto-btn" onclick="autoComplete()">Auto</button>
+      <button class="btn" onclick="newGame()">New Game</button>
+    </div>
   </div>
-  <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Solitaire", 200, 150);
-  </script>
+  <div class="top-row" id="top-row"></div>
+  <div class="board" id="board"></div>
+</div>
+<div class="win-overlay" id="win-overlay" style="display:none">
+  <h2>You Win!</h2>
+  <p id="win-msg"></p>
+  <button class="btn-win" onclick="newGame()">Play Again</button>
+</div>
+<script>
+(function(){
+var SUITS=['spades','hearts','diamonds','clubs'];
+var SYM={spades:'\u2660',hearts:'\u2665',diamonds:'\u2666',clubs:'\u2663'};
+var COLOR={spades:'black',hearts:'red',diamonds:'red',clubs:'black'};
+var RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+var RV={};RANKS.forEach(function(r,i){RV[r]=i;});
+
+var stock,waste,fnd,tab,moveCount,secs,tmr,sel,wins,bestMoves,done;
+
+function mkDeck(){
+  var d=[];
+  for(var si=0;si<4;si++)for(var ri=0;ri<13;ri++)d.push({suit:SUITS[si],rank:RANKS[ri],up:false});
+  return d;
+}
+function shuf(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}return a;}
+
+function deal(){
+  var deck=shuf(mkDeck());
+  tab=[[],[],[],[],[],[],[]];
+  for(var c=0;c<7;c++){for(var r=0;r<=c;r++){var cd=deck.pop();cd.up=(r===c);tab[c].push(cd);}}
+  stock=deck;stock.forEach(function(c){c.up=false;});
+  waste=[];fnd=[[],[],[],[]];
+}
+
+function init(){
+  wins=0;bestMoves=Infinity;
+}
+
+window.newGame=function(){
+  clearInterval(tmr);
+  moveCount=0;secs=0;sel=null;done=false;
+  document.getElementById('win-overlay').style.display='none';
+  deal();
+  tmr=setInterval(function(){if(!done){secs++;updStats();}},1000);
+  render();
+};
+
+function updStats(){
+  document.getElementById('moves').textContent='Moves: '+moveCount;
+  var m=Math.floor(secs/60),s=secs%60;
+  document.getElementById('timer').textContent=m+':'+(s<10?'0':'')+s;
+}
+
+function cardEl(cd,cls){
+  if(!cd)return '';
+  cls=cls||'';
+  if(!cd.up)return '<div class="card card-back '+cls+'"></div>';
+  var cc=COLOR[cd.suit]==='red'?'card-red':'card-black';
+  return '<div class="card card-face '+cc+' '+cls+'">'+
+    '<div class="rank-suit">'+cd.rank+SYM[cd.suit]+'</div>'+
+    '<div class="big-suit">'+SYM[cd.suit]+'</div>'+
+    '<div class="rank-suit bot">'+cd.rank+SYM[cd.suit]+'</div></div>';
+}
+
+function isSel(cd){return sel&&sel.card===cd;}
+
+function render(){
+  updStats();
+  var h='';
+  // Stock
+  if(stock.length>0){
+    h+='<div class="stock-slot" onclick="onStock()"><div class="card card-back" style="position:relative"></div></div>';
+  } else {
+    h+='<div class="stock-slot" onclick="onStock()"><div class="stock-empty">&#8634;</div></div>';
+  }
+  // Waste
+  h+='<div class="slot" style="position:relative">';
+  if(waste.length>0){
+    var wc=waste[waste.length-1];
+    var sc=isSel(wc)?'selected':'';
+    var cc=COLOR[wc.suit]==='red'?'card-red':'card-black';
+    h+='<div class="card card-face '+cc+' '+sc+'" style="position:relative" onclick="onWaste()" ondblclick="onWasteDbl()">'+
+      '<div class="rank-suit">'+wc.rank+SYM[wc.suit]+'</div>'+
+      '<div class="big-suit">'+SYM[wc.suit]+'</div>'+
+      '<div class="rank-suit bot">'+wc.rank+SYM[wc.suit]+'</div></div>';
+  }
+  h+='</div>';
+  // Spacer
+  h+='<div class="spacer"></div>';
+  // Foundations
+  for(var f=0;f<4;f++){
+    h+='<div class="slot" style="position:relative;cursor:pointer" onclick="onFnd('+f+')">';
+    if(fnd[f].length>0){
+      var fc=fnd[f][fnd[f].length-1];
+      var cc2=COLOR[fc.suit]==='red'?'card-red':'card-black';
+      h+='<div class="card card-face '+cc2+'" style="position:relative">'+
+        '<div class="rank-suit">'+fc.rank+SYM[fc.suit]+'</div>'+
+        '<div class="big-suit">'+SYM[fc.suit]+'</div>'+
+        '<div class="rank-suit bot">'+fc.rank+SYM[fc.suit]+'</div></div>';
+    } else {
+      h+='<div class="foundation-slot">'+SYM[SUITS[f]]+'</div>';
+    }
+    h+='</div>';
+  }
+  document.getElementById('top-row').innerHTML=h;
+
+  // Tableau
+  var bh='';
+  var off=window.innerWidth<480?13:18;
+  for(var c=0;c<7;c++){
+    bh+='<div class="tab-col" onclick="onTabEmpty('+c+')">';
+    if(tab[c].length===0){
+      bh+='<div class="slot-outline"></div>';
+    } else {
+      for(var r=0;r<tab[c].length;r++){
+        var cd=tab[c][r];
+        var tp=r*off;
+        if(!cd.up){
+          bh+='<div class="card card-back" style="top:'+tp+'px;z-index:'+(r+1)+'"></div>';
+        } else {
+          var sc2=isSel(cd)?'selected':'';
+          var cc3=COLOR[cd.suit]==='red'?'card-red':'card-black';
+          bh+='<div class="card card-face '+cc3+' '+sc2+'" style="top:'+tp+'px;z-index:'+(r+1)+'" '+
+            'onclick="event.stopPropagation();onTab('+c+','+r+')" '+
+            'ondblclick="event.stopPropagation();onTabDbl('+c+','+r+')">'+
+            '<div class="rank-suit">'+cd.rank+SYM[cd.suit]+'</div>'+
+            '<div class="big-suit">'+SYM[cd.suit]+'</div>'+
+            '<div class="rank-suit bot">'+cd.rank+SYM[cd.suit]+'</div></div>';
+        }
+      }
+    }
+    bh+='</div>';
+  }
+  document.getElementById('board').innerHTML=bh;
+
+  // Fix heights
+  var cols=document.getElementById('board').querySelectorAll('.tab-col');
+  cols.forEach(function(col,i){
+    if(tab[i].length>0){
+      var ch=col.offsetWidth*(3.5/2.5);
+      col.style.minHeight=((tab[i].length-1)*off+ch)+'px';
+    }
+  });
+
+  // Auto button visibility
+  document.getElementById('auto-btn').style.display=canAutoComplete()?'inline-block':'none';
+
+  checkWin();
+}
+
+window.onStock=function(){
+  if(done)return;
+  sel=null;
+  if(stock.length===0){
+    if(waste.length===0)return;
+    stock=waste.reverse();
+    stock.forEach(function(c){c.up=false;});
+    waste=[];
+  } else {
+    var cd=stock.pop();cd.up=true;waste.push(cd);
+  }
+  moveCount++;render();
+};
+
+window.onWaste=function(){
+  if(done||waste.length===0)return;
+  var cd=waste[waste.length-1];
+  if(sel&&sel.src==='waste'){sel=null;render();return;}
+  sel={card:cd,src:'waste'};render();
+};
+
+window.onWasteDbl=function(){
+  if(done||waste.length===0)return;
+  var cd=waste[waste.length-1];
+  if(autoToFnd(cd)){waste.pop();moveCount++;sel=null;render();}
+};
+
+window.onFnd=function(f){
+  if(done||!sel)return;
+  // Only single cards to foundation
+  if(sel.src!=='waste'&&sel.src.indexOf('tab-')!==0)return;
+  if(sel.src.indexOf('tab-')===0){
+    var ci=sel.colIdx,ri=sel.rowIdx;
+    if(ri!==tab[ci].length-1)return;// only top card
+  }
+  var cd=sel.card;
+  if(canFnd(cd,f)){
+    removeSel();fnd[f].push(cd);
+    if(sel.colIdx!==undefined)flipTop(sel.colIdx);
+    moveCount++;sel=null;render();
+  }
+};
+
+window.onTabEmpty=function(c){
+  if(done||tab[c].length>0||!sel)return;
+  if(sel.card.rank==='K'){
+    var cards=getSelCards();
+    var sc=sel.colIdx;
+    removeSel();tab[c]=tab[c].concat(cards);
+    if(sc!==undefined)flipTop(sc);
+    moveCount++;sel=null;render();
+  }
+};
+
+window.onTab=function(c,r){
+  if(done)return;
+  var cd=tab[c][r];
+  if(!cd.up)return;
+  if(sel){
+    // Clicking same card deselects
+    if(sel.src==='tab-'+c&&sel.rowIdx===r){sel=null;render();return;}
+    // Try place
+    var top=tab[c][tab[c].length-1];
+    if(canTab(sel.card,top)){
+      var cards=getSelCards();
+      var sc=sel.colIdx;
+      removeSel();tab[c]=tab[c].concat(cards);
+      if(sc!==undefined)flipTop(sc);
+      moveCount++;sel=null;render();return;
+    }
+  }
+  sel={card:cd,src:'tab-'+c,colIdx:c,rowIdx:r};render();
+};
+
+window.onTabDbl=function(c,r){
+  if(done)return;
+  var cd=tab[c][r];
+  if(!cd.up||r!==tab[c].length-1)return;
+  if(autoToFnd(cd)){tab[c].pop();flipTop(c);moveCount++;sel=null;render();}
+};
+
+function getSelCards(){
+  if(!sel)return[];
+  if(sel.src==='waste')return[waste[waste.length-1]];
+  if(sel.src.indexOf('tab-')===0)return tab[sel.colIdx].slice(sel.rowIdx);
+  return[];
+}
+
+function removeSel(){
+  if(!sel)return;
+  if(sel.src==='waste')waste.pop();
+  else if(sel.src.indexOf('tab-')===0)tab[sel.colIdx]=tab[sel.colIdx].slice(0,sel.rowIdx);
+}
+
+function flipTop(c){
+  if(c===undefined)return;
+  if(tab[c].length>0)tab[c][tab[c].length-1].up=true;
+}
+
+function canTab(cd,target){
+  if(!target)return cd.rank==='K';
+  return RV[cd.rank]===RV[target.rank]-1&&COLOR[cd.suit]!==COLOR[target.suit];
+}
+
+function canFnd(cd,f){
+  var p=fnd[f];
+  if(p.length===0)return cd.rank==='A';
+  var t=p[p.length-1];
+  return cd.suit===t.suit&&RV[cd.rank]===RV[t.rank]+1;
+}
+
+function autoToFnd(cd){
+  for(var f=0;f<4;f++){if(canFnd(cd,f)){fnd[f].push(cd);return true;}}
+  return false;
+}
+
+function canAutoComplete(){
+  // All cards face up and stock/waste empty
+  if(stock.length>0||waste.length>0)return false;
+  for(var c=0;c<7;c++){
+    for(var r=0;r<tab[c].length;r++){
+      if(!tab[c][r].up)return false;
+    }
+  }
+  return true;
+}
+
+window.autoComplete=function(){
+  if(done||!canAutoComplete())return;
+  function step(){
+    if(done)return;
+    var moved=false;
+    for(var c=0;c<7;c++){
+      if(tab[c].length>0){
+        var cd=tab[c][tab[c].length-1];
+        for(var f=0;f<4;f++){
+          if(canFnd(cd,f)){
+            tab[c].pop();fnd[f].push(cd);moveCount++;moved=true;break;
+          }
+        }
+        if(moved)break;
+      }
+    }
+    if(moved){render();setTimeout(step,80);}
+  }
+  step();
+};
+
+function checkWin(){
+  var n=0;fnd.forEach(function(f){n+=f.length;});
+  if(n===52&&!done){
+    done=true;clearInterval(tmr);wins++;
+    if(moveCount<bestMoves)bestMoves=moveCount;
+    var m=Math.floor(secs/60),s=secs%60;
+    document.getElementById('win-msg').textContent=moveCount+' moves in '+m+':'+(s<10?'0':'')+s+' \u2022 Wins: '+wins;
+    document.getElementById('win-overlay').style.display='flex';
+    saveState();
+  }
+}
+
+function saveState(){
+  try{parent.postMessage({type:'ca-save',slug:'solitaire',state:{wins:wins,highScore:bestMoves===Infinity?0:bestMoves}},'*');}catch(e){}
+}
+
+window.addEventListener('message',function(e){
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    wins=e.data.state.wins||0;
+    bestMoves=e.data.state.highScore||Infinity;
+  }
+});
+
+init();
+window.newGame();
+})();
+</script>
 </body>
 </html>

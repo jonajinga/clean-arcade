@@ -1,33 +1,497 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tic-Tac-Toe</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic-Tac-Toe</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+h1 {
+  font-size: 1.6rem;
+  color: #f8fafc;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+.mode-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.mode-bar button {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.mode-bar button:hover, .mode-bar button.active {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #60a5fa;
+}
+.mode-bar button.active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+.diff-bar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  justify-content: center;
+}
+.diff-bar button {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+.diff-bar button:hover, .diff-bar button.active {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #60a5fa;
+}
+.diff-bar button.active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+.scoreboard {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+.scoreboard .score {
+  text-align: center;
+}
+.scoreboard .label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.scoreboard .value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.x-color { color: #3b82f6; }
+.o-color { color: #f472b6; }
+.draw-color { color: #94a3b8; }
+.status {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  min-height: 1.6rem;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: min(80vw, 320px);
+  aspect-ratio: 1;
+  margin-bottom: 1rem;
+}
+.cell {
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  aspect-ratio: 1;
+  line-height: 1;
+}
+.cell:hover:not(.taken) {
+  background: #263348;
+  border-color: #475569;
+}
+.cell:active:not(.taken) { transform: scale(0.95); }
+.cell.taken { cursor: default; }
+.cell.win-cell {
+  border-color: #22c55e;
+  background: #14532d;
+  animation: pulse 0.6s ease-in-out 2;
+}
+@keyframes pulse {
+  50% { transform: scale(1.05); }
+}
+.cell .x {
+  color: #3b82f6;
+  text-shadow: 0 0 12px rgba(59,130,246,0.4);
+}
+.cell .o {
+  color: #f472b6;
+  text-shadow: 0 0 12px rgba(244,114,182,0.4);
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.actions button {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1.2rem;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s, transform 0.1s;
+}
+.actions button:hover { background: #2563eb; }
+.actions button:active { transform: scale(0.95); }
+.actions button.secondary {
+  background: #334155;
+  color: #94a3b8;
+}
+.actions button.secondary:hover {
+  background: #475569;
+  color: #f8fafc;
+}
+.online-badge {
+  display: none;
+  background: #22c55e;
+  color: #052e16;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.online-badge.show { display: inline-block; }
+</style>
 </head>
 <body>
-  <div class="placeholder">
-    <h1>Tic-Tac-Toe</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
-  </div>
-  <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Tic-Tac-Toe", 200, 150);
-  </script>
+<h1>Tic-Tac-Toe</h1>
+<div class="online-badge" id="online-badge">Online</div>
+<div class="mode-bar" id="mode-bar">
+  <button onclick="TTT.setMode('ai')" id="btn-ai" class="active">vs Computer</button>
+  <button onclick="TTT.setMode('local')" id="btn-local">2 Players</button>
+</div>
+<div class="diff-bar" id="diff-bar">
+  <button onclick="TTT.setAI('easy')" id="ai-easy">Easy</button>
+  <button onclick="TTT.setAI('hard')" id="ai-hard" class="active">Hard</button>
+</div>
+<div class="scoreboard">
+  <div class="score"><div class="label">X Wins</div><div class="value x-color" id="x-wins">0</div></div>
+  <div class="score"><div class="label">Draws</div><div class="value draw-color" id="draws">0</div></div>
+  <div class="score"><div class="label">O Wins</div><div class="value o-color" id="o-wins">0</div></div>
+</div>
+<div class="status" id="status">X's turn</div>
+<div class="board" id="board" role="grid"></div>
+<div class="actions">
+  <button onclick="TTT.newGame()">New Game</button>
+  <button class="secondary" onclick="TTT.resetScore()">Reset Score</button>
+</div>
+
+<script>
+var TTT = (function() {
+  var board, turn, over, winLine;
+  var mode = 'ai'; // 'ai', 'local', 'online'
+  var aiLevel = 'hard';
+  var onlineMark = null; // my mark in online mode
+  var scores = { X: 0, O: 0, D: 0 };
+  var LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  function init() {
+    renderCells();
+    newGame();
+  }
+
+  function renderCells() {
+    var el = document.getElementById('board');
+    el.innerHTML = '';
+    for (var i = 0; i < 9; i++) {
+      var c = document.createElement('div');
+      c.className = 'cell';
+      c.dataset.idx = i;
+      c.setAttribute('role', 'gridcell');
+      c.setAttribute('tabindex', '0');
+      c.setAttribute('aria-label', 'Cell ' + (i + 1));
+      (function(idx, cel) {
+        cel.addEventListener('click', function() { handleMove(idx); });
+        cel.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMove(idx); }
+        });
+      })(i, c);
+      el.appendChild(c);
+    }
+  }
+
+  function newGame() {
+    board = [null,null,null,null,null,null,null,null,null];
+    turn = 'X'; over = false; winLine = null;
+    updateAllCells();
+    setStatus("X's turn");
+    // In AI mode if AI is X... no, player is always X vs AI
+  }
+
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m;
+    onlineMark = null;
+    document.getElementById('btn-ai').classList.toggle('active', m === 'ai');
+    document.getElementById('btn-local').classList.toggle('active', m === 'local');
+    document.getElementById('diff-bar').style.display = m === 'ai' ? 'flex' : 'none';
+    document.getElementById('online-badge').classList.remove('show');
+    resetScore();
+    newGame();
+  }
+
+  function setAI(level) {
+    aiLevel = level;
+    document.getElementById('ai-easy').classList.toggle('active', level === 'easy');
+    document.getElementById('ai-hard').classList.toggle('active', level === 'hard');
+    newGame();
+  }
+
+  function handleMove(idx) {
+    if (over || board[idx] !== null) return;
+    // Online mode: only allow moves for your mark and your turn
+    if (mode === 'online') {
+      if (turn !== onlineMark) return;
+      placeMove(idx, turn);
+      // send move to parent
+      try {
+        parent.postMessage({ type: 'game-move', payload: { cell: idx, mark: onlineMark } }, '*');
+      } catch(e) {}
+      return;
+    }
+    // AI mode: only allow on player's turn (X)
+    if (mode === 'ai' && turn !== 'X') return;
+    placeMove(idx, turn);
+    // AI response
+    if (mode === 'ai' && !over) {
+      setTimeout(function() { aiMove(); }, 250);
+    }
+  }
+
+  function placeMove(idx, mark) {
+    board[idx] = mark;
+    updateCell(idx);
+    var w = checkWinner();
+    if (w) {
+      over = true;
+      winLine = w.line;
+      highlightWin(w.line);
+      scores[w.mark]++;
+      updateScores();
+      setStatus(w.mark + ' wins!');
+      saveState();
+    } else if (board.indexOf(null) === -1) {
+      over = true;
+      scores.D++;
+      updateScores();
+      setStatus("It's a draw!");
+      saveState();
+    } else {
+      turn = turn === 'X' ? 'O' : 'X';
+      setStatus(turn + "'s turn");
+    }
+  }
+
+  function aiMove() {
+    if (over) return;
+    var idx;
+    if (aiLevel === 'hard') {
+      idx = minimaxBest(board, 'O');
+    } else {
+      // easy: random with some basic logic
+      // 30% chance of optimal move, 70% random
+      if (Math.random() < 0.3) {
+        idx = minimaxBest(board, 'O');
+      } else {
+        var empty = [];
+        for (var i = 0; i < 9; i++) { if (board[i] === null) empty.push(i); }
+        idx = empty[Math.floor(Math.random() * empty.length)];
+      }
+    }
+    placeMove(idx, 'O');
+  }
+
+  function minimaxBest(b, mark) {
+    var bestScore = -Infinity, bestIdx = -1;
+    for (var i = 0; i < 9; i++) {
+      if (b[i] !== null) continue;
+      b[i] = mark;
+      var score = minimax(b, false, mark);
+      b[i] = null;
+      if (score > bestScore) { bestScore = score; bestIdx = i; }
+    }
+    return bestIdx;
+  }
+
+  function minimax(b, isMax, aiMark) {
+    var humanMark = aiMark === 'X' ? 'O' : 'X';
+    var w = checkWinnerBoard(b);
+    if (w === aiMark) return 10;
+    if (w === humanMark) return -10;
+    if (b.indexOf(null) === -1) return 0;
+
+    if (isMax) {
+      var best = -Infinity;
+      for (var i = 0; i < 9; i++) {
+        if (b[i] !== null) continue;
+        b[i] = aiMark;
+        best = Math.max(best, minimax(b, false, aiMark));
+        b[i] = null;
+      }
+      return best;
+    } else {
+      var best = Infinity;
+      for (var i = 0; i < 9; i++) {
+        if (b[i] !== null) continue;
+        b[i] = humanMark;
+        best = Math.min(best, minimax(b, true, aiMark));
+        b[i] = null;
+      }
+      return best;
+    }
+  }
+
+  function checkWinnerBoard(b) {
+    for (var i = 0; i < LINES.length; i++) {
+      var a = LINES[i][0], c = LINES[i][1], d = LINES[i][2];
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+    }
+    return null;
+  }
+
+  function checkWinner() {
+    for (var i = 0; i < LINES.length; i++) {
+      var a = LINES[i][0], c = LINES[i][1], d = LINES[i][2];
+      if (board[a] && board[a] === board[c] && board[a] === board[d]) {
+        return { mark: board[a], line: LINES[i] };
+      }
+    }
+    return null;
+  }
+
+  function updateCell(idx) {
+    var el = document.getElementById('board').children[idx];
+    if (board[idx]) {
+      el.innerHTML = '<span class="' + board[idx].toLowerCase() + '">' + board[idx] + '</span>';
+      el.classList.add('taken');
+      el.setAttribute('aria-label', board[idx]);
+    } else {
+      el.innerHTML = '';
+      el.classList.remove('taken', 'win-cell');
+      el.setAttribute('aria-label', 'Empty cell ' + (idx + 1));
+    }
+  }
+
+  function updateAllCells() {
+    for (var i = 0; i < 9; i++) updateCell(i);
+  }
+
+  function highlightWin(line) {
+    var cells = document.getElementById('board').children;
+    for (var i = 0; i < line.length; i++) {
+      cells[line[i]].classList.add('win-cell');
+    }
+  }
+
+  function setStatus(txt) {
+    document.getElementById('status').textContent = txt;
+  }
+
+  function updateScores() {
+    document.getElementById('x-wins').textContent = scores.X;
+    document.getElementById('o-wins').textContent = scores.O;
+    document.getElementById('draws').textContent = scores.D;
+  }
+
+  function resetScore() {
+    scores = { X: 0, O: 0, D: 0 };
+    updateScores();
+    newGame();
+  }
+
+  function saveState() {
+    try {
+      parent.postMessage({
+        type: 'ca-save',
+        slug: 'tic-tac-toe',
+        state: { wins: scores.X + scores.O }
+      }, '*');
+    } catch(e) {}
+  }
+
+  // Listen for messages from parent
+  window.addEventListener('message', function(e) {
+    if (!e.data) return;
+
+    // Load saved state
+    if (e.data.type === 'ca-load' && e.data.state) {
+      // Restore is minimal since we only save win count
+    }
+
+    // Peer joined: switch to online mode
+    if (e.data.type === 'peer-joined') {
+      mode = 'online';
+      // Second player is O, first is X
+      onlineMark = e.data.mark || 'X';
+      document.getElementById('btn-ai').classList.remove('active');
+      document.getElementById('btn-local').classList.remove('active');
+      document.getElementById('diff-bar').style.display = 'none';
+      document.getElementById('online-badge').classList.add('show');
+      document.getElementById('mode-bar').style.display = 'none';
+      newGame();
+      setStatus("You are " + onlineMark + ". " + (onlineMark === 'X' ? "Your turn!" : "Waiting for X..."));
+    }
+
+    // Peer data: apply opponent move
+    if (e.data.type === 'peer-data' && e.data.data) {
+      var d = e.data.data;
+      if (d.cell !== undefined && d.mark && !over && board[d.cell] === null && turn === d.mark) {
+        placeMove(d.cell, d.mark);
+        if (!over) {
+          setStatus("Your turn (" + onlineMark + ")");
+        }
+      }
+    }
+  });
+
+  init();
+
+  return {
+    setMode: setMode,
+    setAI: setAI,
+    newGame: newGame,
+    resetScore: resetScore
+  };
+})();
+</script>
 </body>
 </html>

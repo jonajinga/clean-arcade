@@ -1,33 +1,498 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Minesweeper</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0f172a; color: #e2e8f0; font-family: system-ui, sans-serif; }
-    .placeholder { text-align: center; }
-    .placeholder h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .placeholder p { color: #94a3b8; }
-    canvas { display: block; margin: 1rem auto; border: 1px solid #334155; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minesweeper</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 1rem 0.5rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.6rem;
+  color: #f8fafc;
+  letter-spacing: 0.05em;
+}
+.controls {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.controls button {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  padding: 0.35rem 0.85rem;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.controls button:hover, .controls button.active {
+  background: #334155;
+  color: #f8fafc;
+  border-color: #60a5fa;
+}
+.controls button.active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+  width: 100%;
+  max-width: 320px;
+}
+.counter, .timer {
+  background: #0a0a18;
+  color: #ef4444;
+  font-family: 'Courier New', monospace;
+  font-size: 1.4rem;
+  font-weight: bold;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0;
+  border: 2px inset #334155;
+  min-width: 3.5rem;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+.smiley {
+  font-size: 1.6rem;
+  background: #1e293b;
+  border: 2px outset #475569;
+  border-radius: 0;
+  cursor: pointer;
+  padding: 0.15rem 0.45rem;
+  line-height: 1;
+  transition: transform 0.1s;
+}
+.smiley:active { transform: scale(0.9); border-style: inset; }
+.board-wrap {
+  overflow-x: auto;
+  max-width: 100vw;
+  padding: 0.25rem;
+}
+.board {
+  display: inline-grid;
+  gap: 1px;
+  background: #0f172a;
+  border: 2px solid #334155;
+  border-radius: 0;
+  padding: 2px;
+}
+.cell {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  transition: background 0.08s;
+  line-height: 1;
+}
+.cell.hidden {
+  background: #334155;
+  box-shadow: inset 1px 1px 0 #475569, inset -1px -1px 0 #1e293b;
+}
+.cell.hidden:hover { background: #3e4c63; }
+.cell.revealed {
+  background: #1a2332;
+  cursor: default;
+}
+.cell.flagged {
+  background: #334155;
+  box-shadow: inset 1px 1px 0 #475569, inset -1px -1px 0 #1e293b;
+}
+.cell.mine { background: #1e293b; }
+.cell.mine-hit { background: #7f1d1d !important; }
+.cell.mine-wrong { background: #4a1d1d !important; }
+.n1 { color: #3b82f6; }
+.n2 { color: #22c55e; }
+.n3 { color: #ef4444; }
+.n4 { color: #7c3aed; }
+.n5 { color: #b45309; }
+.n6 { color: #06b6d4; }
+.n7 { color: #e879f9; }
+.n8 { color: #94a3b8; }
+.message {
+  margin-top: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  min-height: 1.5rem;
+}
+.win { color: #22c55e; }
+.lose { color: #ef4444; }
+.stats {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+.flag-toggle {
+  display: none;
+  margin-bottom: 0.5rem;
+}
+@media (pointer: coarse) {
+  .flag-toggle { display: flex; gap: 0.4rem; }
+}
+.flag-toggle button {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  padding: 0.4rem 1rem;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.flag-toggle button.active {
+  border-color: #f59e0b;
+  background: #422006;
+  color: #fbbf24;
+}
+@media (max-width: 520px) {
+  .cell { width: 28px; height: 28px; font-size: 0.8rem; }
+  h1 { font-size: 1.2rem; }
+}
+@media (max-width: 380px) {
+  .cell { width: 24px; height: 24px; font-size: 0.7rem; }
+}
+</style>
 </head>
 <body>
-  <div class="placeholder">
-    <h1>Minesweeper</h1>
-    <p>Game coming soon</p>
-    <canvas id="game" width="400" height="300"></canvas>
-  </div>
-  <script>
-    var c = document.getElementById("game");
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, 0, 400, 300);
-    ctx.fillStyle = "#6366f1";
-    ctx.font = "20px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText("Minesweeper", 200, 150);
-  </script>
+<h1>Minesweeper</h1>
+<div class="controls">
+  <button onclick="MS.setDiff('easy')" id="btn-easy" class="active">Easy</button>
+  <button onclick="MS.setDiff('medium')" id="btn-medium">Medium</button>
+  <button onclick="MS.setDiff('hard')" id="btn-hard">Hard</button>
+</div>
+<div class="status-bar">
+  <div class="counter" id="mine-count">010</div>
+  <button class="smiley" id="smiley" onclick="MS.newGame()">&#128578;</button>
+  <div class="timer" id="timer">000</div>
+</div>
+<div class="flag-toggle" id="flag-toggle">
+  <button id="mode-dig" class="active" onclick="MS.setMode('dig')">&#9935; Dig</button>
+  <button id="mode-flag" onclick="MS.setMode('flag')">&#128681; Flag</button>
+</div>
+<div class="board-wrap">
+  <div class="board" id="board" role="grid"></div>
+</div>
+<div class="message" id="message"></div>
+<div class="stats" id="stats"></div>
+
+<script>
+var MS = (function() {
+  var DIFFS = {
+    easy:   { cols: 9,  rows: 9,  mines: 10 },
+    medium: { cols: 16, rows: 16, mines: 40 },
+    hard:   { cols: 30, rows: 16, mines: 99 }
+  };
+
+  var diff = 'easy', cols, rows, mineCount;
+  var grid, mines, revealed, flagged;
+  var gameOver, gameWon, firstClick, startTime, timerInt;
+  var wins = 0, flagsPlaced = 0;
+  var touchMode = 'dig'; // for mobile toggle
+  var longPressId = null, longPressFired = false;
+
+  function setDiff(d) {
+    diff = d;
+    document.querySelectorAll('.controls button').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('btn-' + d).classList.add('active');
+    newGame();
+  }
+
+  function setMode(m) {
+    touchMode = m;
+    document.getElementById('mode-dig').classList.toggle('active', m === 'dig');
+    document.getElementById('mode-flag').classList.toggle('active', m === 'flag');
+  }
+
+  function newGame() {
+    var cfg = DIFFS[diff];
+    cols = cfg.cols; rows = cfg.rows; mineCount = cfg.mines;
+    var total = rows * cols;
+    grid = new Array(total).fill(0);
+    mines = new Array(total).fill(false);
+    revealed = new Array(total).fill(false);
+    flagged = new Array(total).fill(false);
+    gameOver = false; gameWon = false; firstClick = true;
+    flagsPlaced = 0;
+    if (timerInt) clearInterval(timerInt);
+    timerInt = null; startTime = null;
+    document.getElementById('timer').textContent = '000';
+    document.getElementById('message').textContent = '';
+    document.getElementById('message').className = 'message';
+    document.getElementById('smiley').innerHTML = '&#128578;';
+    updateMineCounter();
+    renderBoard();
+    updateStats();
+  }
+
+  function placeMines(safeIdx) {
+    var total = rows * cols;
+    var safeR = Math.floor(safeIdx / cols), safeC = safeIdx % cols;
+    var safeSet = {};
+    // mark the 3x3 around first click as safe zone
+    for (var dr = -1; dr <= 1; dr++) {
+      for (var dc = -1; dc <= 1; dc++) {
+        var r = safeR + dr, c = safeC + dc;
+        if (r >= 0 && r < rows && c >= 0 && c < cols) {
+          safeSet[r * cols + c] = true;
+        }
+      }
+    }
+    var safeZoneSize = Object.keys(safeSet).length;
+    var canAvoidSafeZone = mineCount <= total - safeZoneSize;
+
+    var count = 0;
+    while (count < mineCount) {
+      var idx = Math.floor(Math.random() * total);
+      if (mines[idx]) continue;
+      if (canAvoidSafeZone && safeSet[idx]) continue;
+      if (!canAvoidSafeZone && idx === safeIdx) continue;
+      mines[idx] = true;
+      count++;
+    }
+    // compute adjacency numbers
+    for (var i = 0; i < total; i++) {
+      if (mines[i]) { grid[i] = -1; continue; }
+      var r = Math.floor(i / cols), c = i % cols, n = 0;
+      for (var dr = -1; dr <= 1; dr++) {
+        for (var dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          var nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && mines[nr * cols + nc]) n++;
+        }
+      }
+      grid[i] = n;
+    }
+  }
+
+  function renderBoard() {
+    var board = document.getElementById('board');
+    board.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    board.innerHTML = '';
+    var total = rows * cols;
+    for (var i = 0; i < total; i++) {
+      var cell = document.createElement('div');
+      cell.className = 'cell hidden';
+      cell.dataset.idx = i;
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('tabindex', '0');
+      cell.setAttribute('aria-label', 'Row ' + (Math.floor(i / cols) + 1) + ' Column ' + (i % cols + 1));
+      bindCell(cell, i);
+      board.appendChild(cell);
+    }
+  }
+
+  function bindCell(el, idx) {
+    el.addEventListener('click', function() {
+      if (touchMode === 'flag' && isTouchDevice()) {
+        toggleFlag(idx);
+      } else {
+        handleClick(idx);
+      }
+    });
+    el.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      toggleFlag(idx);
+    });
+    // long press for flag on mobile
+    el.addEventListener('touchstart', function(e) {
+      longPressFired = false;
+      longPressId = setTimeout(function() {
+        longPressFired = true;
+        toggleFlag(idx);
+      }, 400);
+    }, { passive: true });
+    el.addEventListener('touchend', function(e) {
+      clearTimeout(longPressId);
+      if (longPressFired) e.preventDefault();
+    });
+    el.addEventListener('touchmove', function() {
+      clearTimeout(longPressId);
+    }, { passive: true });
+    // keyboard
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(idx); }
+      if (e.key === 'f' || e.key === 'F') { toggleFlag(idx); }
+    });
+  }
+
+  function isTouchDevice() {
+    return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  }
+
+  function handleClick(idx) {
+    if (gameOver || flagged[idx] || revealed[idx]) return;
+    if (firstClick) {
+      firstClick = false;
+      placeMines(idx);
+      startTimer();
+    }
+    if (mines[idx]) { gameLose(idx); return; }
+    reveal(idx);
+    checkWin();
+  }
+
+  function reveal(idx) {
+    if (idx < 0 || idx >= rows * cols || revealed[idx] || flagged[idx]) return;
+    revealed[idx] = true;
+    updateCellDOM(idx);
+    if (grid[idx] === 0) {
+      var r = Math.floor(idx / cols), c = idx % cols;
+      for (var dr = -1; dr <= 1; dr++) {
+        for (var dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          var nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+            reveal(nr * cols + nc);
+          }
+        }
+      }
+    }
+  }
+
+  function toggleFlag(idx) {
+    if (gameOver || revealed[idx]) return;
+    flagged[idx] = !flagged[idx];
+    flagsPlaced += flagged[idx] ? 1 : -1;
+    updateCellDOM(idx);
+    updateMineCounter();
+  }
+
+  function updateCellDOM(idx) {
+    var cell = document.getElementById('board').children[idx];
+    if (!cell) return;
+    if (revealed[idx]) {
+      cell.className = 'cell revealed';
+      if (mines[idx]) {
+        cell.classList.add('mine');
+        cell.textContent = '\uD83D\uDCA3';
+        cell.setAttribute('aria-label', 'Mine');
+      } else if (grid[idx] > 0) {
+        cell.classList.add('n' + grid[idx]);
+        cell.textContent = grid[idx];
+        cell.setAttribute('aria-label', grid[idx] + ' adjacent mines');
+      } else {
+        cell.textContent = '';
+        cell.setAttribute('aria-label', 'Empty');
+      }
+    } else if (flagged[idx]) {
+      cell.className = 'cell hidden flagged';
+      cell.textContent = '\uD83D\uDEA9';
+      cell.setAttribute('aria-label', 'Flagged');
+    } else {
+      cell.className = 'cell hidden';
+      cell.textContent = '';
+    }
+  }
+
+  function updateMineCounter() {
+    var rem = mineCount - flagsPlaced;
+    var s = Math.abs(rem).toString();
+    while (s.length < 3) s = '0' + s;
+    if (rem < 0) s = '-' + s.substring(1);
+    document.getElementById('mine-count').textContent = s;
+  }
+
+  function startTimer() {
+    startTime = Date.now();
+    timerInt = setInterval(function() {
+      var sec = Math.min(999, Math.floor((Date.now() - startTime) / 1000));
+      var s = sec.toString();
+      while (s.length < 3) s = '0' + s;
+      document.getElementById('timer').textContent = s;
+    }, 1000);
+  }
+
+  function gameLose(hitIdx) {
+    gameOver = true;
+    clearInterval(timerInt);
+    document.getElementById('smiley').innerHTML = '&#128565;';
+    document.getElementById('message').textContent = 'Game Over!';
+    document.getElementById('message').className = 'message lose';
+    var total = rows * cols;
+    for (var i = 0; i < total; i++) {
+      if (mines[i]) {
+        revealed[i] = true;
+        updateCellDOM(i);
+        if (i === hitIdx) {
+          document.getElementById('board').children[i].classList.add('mine-hit');
+        }
+      }
+      if (flagged[i] && !mines[i]) {
+        var c = document.getElementById('board').children[i];
+        c.className = 'cell revealed mine-wrong';
+        c.textContent = '\u274C';
+      }
+    }
+  }
+
+  function checkWin() {
+    var revCount = 0, total = rows * cols;
+    for (var i = 0; i < total; i++) {
+      if (revealed[i]) revCount++;
+    }
+    if (revCount === total - mineCount) {
+      gameOver = true; gameWon = true;
+      clearInterval(timerInt);
+      document.getElementById('smiley').innerHTML = '&#128526;';
+      document.getElementById('message').textContent = 'You Win!';
+      document.getElementById('message').className = 'message win';
+      wins++;
+      for (var i = 0; i < total; i++) {
+        if (mines[i] && !flagged[i]) {
+          flagged[i] = true; flagsPlaced++;
+          updateCellDOM(i);
+        }
+      }
+      updateMineCounter();
+      updateStats();
+      saveState();
+    }
+  }
+
+  function updateStats() {
+    document.getElementById('stats').textContent = 'Wins: ' + wins;
+  }
+
+  function saveState() {
+    try { parent.postMessage({ type: 'ca-save', slug: 'minesweeper', state: { wins: wins } }, '*'); } catch(e) {}
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      wins = e.data.state.wins || 0;
+      updateStats();
+    }
+  });
+
+  newGame();
+
+  return { setDiff: setDiff, setMode: setMode, newGame: newGame };
+})();
+</script>
 </body>
 </html>
