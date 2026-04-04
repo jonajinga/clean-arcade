@@ -1,16 +1,14 @@
-<div class="multiplayer-panel" id="multiplayer-panel">
-  <h2>Play Together</h2>
-  <p>Connect with a friend using a room code. No account needed — peer-to-peer via WebRTC.</p>
-  <div class="multiplayer-panel__actions">
-    <button class="btn btn--primary" id="mp-create" onclick="createRoom()">Create Room</button>
-    <div class="multiplayer-panel__join">
-      <label class="sr-only" for="mp-code">Room code</label>
-      <input type="text" id="mp-code" class="multiplayer-panel__input" placeholder="Enter room code" maxlength="6" autocomplete="off">
-      <button class="btn btn--outline" id="mp-join" onclick="joinRoom()">Join</button>
-    </div>
+<div class="mp-panel" id="mp-panel">
+  <div class="mp-panel__row">
+    <input type="text" id="mp-name" class="mp-input" placeholder="Your name" maxlength="20" autocomplete="off" value="">
   </div>
-  <div class="multiplayer-panel__status" id="mp-status" hidden>
-    <span class="multiplayer-panel__room-code" id="mp-room-display"></span>
-    <span class="multiplayer-panel__peers" id="mp-peers">0 peers</span>
+  <div class="mp-panel__row">
+    <button class="mp-btn" id="mp-create">Create Room</button>
+    <input type="text" id="mp-code" class="mp-input mp-input--code" placeholder="Code" maxlength="6" autocomplete="off">
+    <button class="mp-btn" id="mp-join">Join</button>
+  </div>
+  <div class="mp-panel__status" id="mp-status" hidden>
+    <span id="mp-room-display"></span>
+    <span id="mp-peers">0 peers</span>
   </div>
 </div>

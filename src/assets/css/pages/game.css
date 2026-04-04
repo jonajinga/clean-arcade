@@ -1,15 +1,7 @@
 /* === Game Page === */
-.game-page { padding-bottom: var(--space-xl); }
+.game-active { background: var(--navy-950); color: var(--slate-300); }
 .game-active main { padding: 0; }
-
-.game-page__related {
-  padding-inline: var(--space-md);
-  margin-top: var(--space-xl);
-}
-.game-page__related h2 {
-  font-size: var(--text-base);
-  margin-bottom: var(--space-sm);
-}
+.game-page { padding: 0; }
 
 /* --- Info overlay --- */
 .game-overlay {
@@ -23,9 +15,7 @@
   padding: var(--space-lg);
 }
 
-.game-overlay.visible {
-  display: flex;
-}
+.game-overlay.visible { display: flex; }
 
 .game-overlay__content {
   max-width: 480px;

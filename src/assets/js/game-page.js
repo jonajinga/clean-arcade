@@ -1,6 +1,7 @@
 /* Game page — fullscreen, info overlay, share */
 (function () {
   var embed = document.getElementById("game-embed");
+  var iframe = document.getElementById("game-frame");
   var overlay = document.getElementById("game-overlay");
   var infoBtn = document.getElementById("info-toggle");
   var closeBtn = document.getElementById("overlay-close");
@@ -10,11 +11,9 @@
   if (!embed) return;
 
   /* --- Info overlay --- */
-  function showInfo() {
+  if (infoBtn) infoBtn.addEventListener("click", function () {
     overlay.classList.toggle("visible");
-  }
-
-  if (infoBtn) infoBtn.addEventListener("click", showInfo);
+  });
   if (closeBtn) closeBtn.addEventListener("click", function () {
     overlay.classList.remove("visible");
   });
@@ -27,51 +26,48 @@
   });
 
   /* --- Fullscreen --- */
-  function enterFullscreen(el) {
+  function rfs(el) {
     if (el.requestFullscreen) return el.requestFullscreen();
     if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
-    if (el.mozRequestFullScreen) return el.mozRequestFullScreen();
-    if (el.msRequestFullscreen) return el.msRequestFullscreen();
+    if (el.webkitEnterFullscreen) return el.webkitEnterFullscreen();
     return null;
   }
 
-  function exitFullscreen() {
+  function exitFs() {
     if (document.exitFullscreen) return document.exitFullscreen();
     if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
-    if (document.mozCancelFullScreen) return document.mozCancelFullScreen();
-    if (document.msExitFullscreen) return document.msExitFullscreen();
     return null;
   }
 
-  function isFullscreen() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  function isFsActive() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
 
   function toggleFullscreen() {
-    if (isFullscreen()) {
-      exitFullscreen();
-    } else {
-      var result = enterFullscreen(embed);
-      /* If the promise rejects, try documentElement */
-      if (result && result.catch) {
-        result.catch(function () {
-          enterFullscreen(document.documentElement);
-        });
-      }
+    if (isFsActive()) { exitFs(); return; }
+
+    /* Mobile: try iframe directly first (better compatibility) */
+    var isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (isMobile && iframe) {
+      var r = rfs(iframe);
+      if (r && r.then) { r.catch(function () { rfs(embed) || rfs(document.documentElement); }); }
+      else if (!r) { rfs(embed) || rfs(document.documentElement); }
+      return;
+    }
+
+    /* Desktop: try embed container, fallback to documentElement */
+    var result = rfs(embed);
+    if (result && result.catch) {
+      result.catch(function () { rfs(document.documentElement); });
     }
   }
 
   if (fsBtn) fsBtn.addEventListener("click", toggleFullscreen);
 
-  /* Keyboard shortcuts */
+  /* Keyboard */
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-    if (e.key === "f" || e.key === "F") {
-      e.preventDefault();
-      toggleFullscreen();
-    }
-    if (e.key === "Escape" && overlay) {
-      overlay.classList.remove("visible");
-    }
+    if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFullscreen(); }
+    if (e.key === "Escape" && overlay) overlay.classList.remove("visible");
   });
 })();
