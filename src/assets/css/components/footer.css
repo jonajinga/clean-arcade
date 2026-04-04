@@ -1,4 +1,6 @@
 /* === Footer === */
+.game-active .site-footer { display: none; }
+
 .site-footer {
   background: var(--navy-950);
   color: var(--slate-400);
