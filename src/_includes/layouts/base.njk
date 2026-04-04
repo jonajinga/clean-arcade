@@ -83,7 +83,7 @@
   <script src="/assets/js/nav.js" defer></script>
   <script src="/assets/js/search.js" defer></script>
 
-  {# Back to top + header minimize on game pages #}
+  {# Back to top + header show/hide on game pages #}
   <script>
     (function(){
       var btn = document.querySelector(".back-to-top");
@@ -94,7 +94,9 @@
         var y = window.scrollY;
         if(btn) btn.classList.toggle("visible", y > 400);
         if(isGame && header){
-          header.classList.toggle("header--mini", y > 80);
+          if(y < lastY) header.classList.add("header--show");
+          else header.classList.remove("header--show");
+          if(y <= 0) header.classList.remove("header--show");
         }
         lastY = y;
       });

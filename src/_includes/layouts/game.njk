@@ -41,16 +41,6 @@ bodyClass: game-active
   {% if game.multiplayer %}
   <div class="container">{% include "partials/multiplayer-ui.njk" %}</div>
   {% endif %}
-
-  <div class="container">
-    <div class="game-page__related">
-      <h2>More {{ game.category | capitalize }} Games</h2>
-      <div class="game-grid game-grid--small">
-        {% set related = games | where("category", game.category) | rejectattr("slug", game.slug) | head(4) %}
-        {% for g in related %}{% include "partials/game-card.njk" %}{% endfor %}
-      </div>
-    </div>
-  </div>
 </section>
 
 <script>
