@@ -3,94 +3,53 @@ layout: layouts/base.njk
 bodyClass: game-active
 ---
 <section class="game-page" data-pagefind-body>
-  <div class="container container--game">
-    {# Compact game header #}
-    <div class="game-page__topbar">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <ol>
-          <li><a href="/">Home</a></li>
-          <li aria-current="page">{{ game.title }}</li>
-        </ol>
-      </nav>
-      <div class="game-page__badges">
-        <span class="badge badge--category" title="{{ game.category | capitalize }}">
-          {%- if game.category == "puzzle" %}&#9881;
-          {%- elif game.category == "arcade" %}&#9889;
-          {%- elif game.category == "card" %}&#9830;
-          {%- elif game.category == "board" %}&#9638;
-          {%- elif game.category == "word" %}&#65;
-          {%- elif game.category == "strategy" %}&#9812;
-          {%- elif game.category == "sports" %}&#9917;
-          {%- elif game.category == "racing" %}&#9872;
-          {%- elif game.category == "action" %}&#9733;
-          {%- elif game.category == "simulation" %}&#9881;
-          {%- else %}&#9654;
-          {%- endif %}
-        </span>
-        <span class="badge badge--difficulty badge--{{ game.difficulty }}" title="{{ game.difficulty | capitalize }} difficulty">
-          {%- if game.difficulty == "easy" %}&#9679;
-          {%- elif game.difficulty == "medium" %}&#9679;&#9679;
-          {%- elif game.difficulty == "hard" %}&#9679;&#9679;&#9679;
-          {%- endif %}
-        </span>
-        {% if game.multiplayer %}
-          <span class="badge badge--multiplayer" title="Multiplayer">&#9775;</span>
-        {% endif %}
-        {% if game.mobileSupport %}
-          <span class="badge badge--mobile" title="Mobile friendly">&#9743;</span>
-        {% else %}
-          <span class="badge badge--desktop" title="Desktop recommended">&#9000;</span>
-        {% endif %}
-      </div>
-    </div>
-
-    {# Game iframe — full width #}
-    <div class="game-embed">
-      <div class="game-embed__wrapper" id="game-wrapper">
-        <iframe
-          id="game-frame"
-          src="{{ game.gamePath }}"
-          title="Play {{ game.title }}"
-          sandbox="allow-scripts allow-same-origin"
-          allowfullscreen
-        ></iframe>
-      </div>
-      <div class="game-embed__toolbar">
-        <div class="game-embed__toolbar-left">
-          <h1 class="game-embed__title">{{ game.title }}</h1>
-        </div>
-        <div class="game-embed__toolbar-right">
-          <button class="icon-btn" id="favorite-btn" onclick="toggleFavorite('{{ game.slug }}')" title="Favorite">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 14s-5.5-3.5-5.5-7A3.5 3.5 0 018 4a3.5 3.5 0 015.5 3c0 3.5-5.5 7-5.5 7z" stroke="currentColor" stroke-width="1.5" fill="none" id="heart-path"/></svg>
-          </button>
-          <button class="icon-btn" onclick="shareGame('{{ game.title }}', '{{ game.slug }}')" title="Share link">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.5"/></svg>
-          </button>
-          <button class="icon-btn" onclick="goFullscreen()" title="Fullscreen (F)">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
+  {# Game iframe — edge to edge #}
+  <div class="game-embed" id="game-embed">
+    <div class="game-embed__bar">
+      <div class="game-embed__bar-left">
+        <a href="/" class="game-embed__back" title="Back to games">&larr;</a>
+        <h1 class="game-embed__title">{{ game.title }}</h1>
+        <div class="game-page__badges">
+          <span class="badge badge--{{ game.difficulty }}" title="{{ game.difficulty | capitalize }}">{{ game.difficulty }}</span>
+          {% if game.multiplayer %}<span class="badge" title="Multiplayer">MP</span>{% endif %}
         </div>
       </div>
+      <div class="game-embed__bar-right">
+        <button class="icon-btn" id="favorite-btn" onclick="toggleFavorite('{{ game.slug }}')" title="Favorite">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 14s-5.5-3.5-5.5-7A3.5 3.5 0 018 4a3.5 3.5 0 015.5 3c0 3.5-5.5 7-5.5 7z" stroke="currentColor" stroke-width="1.5" fill="none" id="heart-path"/></svg>
+        </button>
+        <button class="icon-btn" onclick="shareGame('{{ game.title }}', '{{ game.slug }}')" title="Share">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+        <button class="icon-btn" onclick="goFullscreen()" title="Fullscreen (F)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
     </div>
+    <div class="game-embed__viewport" id="game-viewport">
+      <iframe
+        id="game-frame"
+        src="{{ game.gamePath }}"
+        title="Play {{ game.title }}"
+        sandbox="allow-scripts allow-same-origin allow-popups"
+        allow="fullscreen"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </div>
 
+  <div class="container">
     {# Mobile warning #}
     {% if not game.mobileSupport %}
-      <div class="game-page__mobile-warning" role="alert">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink:0"><path d="M8 1l7 14H1L8 1z" stroke="currentColor" stroke-width="1.5"/><path d="M8 6v4M8 12v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        Desktop or tablet recommended
-      </div>
+      <p class="game-page__notice">Desktop or tablet recommended for this game.</p>
     {% endif %}
 
-    {# Controls + About in compact row #}
+    {# Controls + About #}
     <details class="game-page__details">
-      <summary>Game info</summary>
+      <summary>Game info &amp; controls</summary>
       <div class="game-page__info">
-        <div>
-          <strong>Controls:</strong> {{ game.controls }}
-        </div>
-        <div>
-          <strong>About:</strong> {{ game.description }}
-        </div>
+        <div><strong>Controls:</strong> {{ game.controls }}</div>
+        <div><strong>About:</strong> {{ game.description }}</div>
       </div>
     </details>
 
@@ -116,14 +75,24 @@ bodyClass: game-active
 
 <script>
   var GAME_SLUG = "{{ game.slug }}";
+
   function goFullscreen() {
-    var w = document.getElementById("game-wrapper");
-    if (w.requestFullscreen) w.requestFullscreen();
-    else if (w.webkitRequestFullscreen) w.webkitRequestFullscreen();
+    var el = document.getElementById("game-embed");
+    var rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (rfs) {
+      rfs.call(el);
+    } else {
+      /* Fallback: try the iframe directly */
+      var iframe = document.getElementById("game-frame");
+      var rfs2 = iframe.requestFullscreen || iframe.webkitRequestFullscreen || iframe.msRequestFullscreen;
+      if (rfs2) rfs2.call(iframe);
+    }
   }
+
   document.addEventListener("keydown", function(e) {
-    if (e.key === "f" || e.key === "F") {
-      if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") goFullscreen();
+    if ((e.key === "f" || e.key === "F") && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+      goFullscreen();
     }
   });
 </script>

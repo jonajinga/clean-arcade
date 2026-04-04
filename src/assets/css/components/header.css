@@ -6,7 +6,7 @@
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   height: var(--header-height);
-  transition: height 0.2s, box-shadow 0.2s;
+  transition: height 0.15s;
 }
 
 .site-header__inner {
@@ -23,18 +23,12 @@
   color: var(--heading);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
 .site-header__logo:hover { color: var(--accent); }
 .site-header__logo svg { flex-shrink: 0; }
-
-.site-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
 
 /* Icon buttons — used globally */
 .icon-btn {
@@ -47,12 +41,11 @@
   background: none;
   border: none;
   cursor: pointer;
-  transition: color 0.1s, background 0.1s;
+  transition: color 0.1s;
 }
 
 .icon-btn:hover {
-  color: var(--accent);
-  background: var(--bg-alt);
+  color: var(--text);
 }
 
 /* Theme toggle icon visibility */
@@ -61,9 +54,8 @@
 
 /* Minimized header on game pages */
 .header--mini {
-  height: 40px;
-  box-shadow: var(--shadow);
+  height: 36px;
 }
 
 .header--mini .logo-text { display: none; }
-.header--mini .icon-btn { width: 32px; height: 32px; }
+.header--mini .icon-btn { width: 30px; height: 30px; }
