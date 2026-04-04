@@ -15,6 +15,7 @@
   gap: 8px;
   height: 36px;
   flex-shrink: 0;
+  z-index: 5;
 }
 
 .game-embed__bar-left {
@@ -30,7 +31,6 @@
   padding: 4px;
   line-height: 1;
 }
-
 .game-embed__back:hover { color: var(--white); }
 
 .game-embed__title {
@@ -58,7 +58,6 @@
   width: 32px;
   height: 32px;
 }
-
 .game-embed__bar-right .icon-btn:hover {
   color: var(--white);
 }
@@ -78,52 +77,3 @@
   border: none;
   display: block;
 }
-
-/* Fullscreen via class toggle */
-.game-embed.is-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-}
-
-.game-embed.is-fullscreen .game-embed__bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.game-embed.is-fullscreen .game-embed__bar:hover {
-  opacity: 1;
-}
-
-.game-embed.is-fullscreen .game-embed__viewport {
-  height: 100vh;
-}
-
-/* Native fullscreen */
-.game-embed:fullscreen {
-  width: 100vw;
-  height: 100vh;
-}
-
-.game-embed:fullscreen .game-embed__bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.game-embed:fullscreen .game-embed__bar:hover { opacity: 1; }
-.game-embed:fullscreen .game-embed__viewport { height: 100vh; }
-.game-embed:fullscreen .game-info-popup { inset: 0; }
-
-/* Webkit fullscreen */
-.game-embed:-webkit-full-screen { width: 100vw; height: 100vh; }
-.game-embed:-webkit-full-screen .game-embed__bar { position: absolute; top: 0; left: 0; right: 0; z-index: 10; opacity: 0; transition: opacity 0.2s; }
-.game-embed:-webkit-full-screen .game-embed__bar:hover { opacity: 1; }
-.game-embed:-webkit-full-screen .game-embed__viewport { height: 100vh; }

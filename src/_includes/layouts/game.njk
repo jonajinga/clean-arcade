@@ -4,49 +4,42 @@ bodyClass: game-active
 ---
 <section class="game-page" data-pagefind-body>
   <div class="game-embed" id="game-embed">
-    <div class="game-embed__bar">
+    <div class="game-embed__bar" id="game-bar">
       <div class="game-embed__bar-left">
-        <a href="/" class="game-embed__back" title="Back to games">&larr;</a>
+        <a href="/" class="game-embed__back" title="Back">&larr;</a>
         <h1 class="game-embed__title">{{ game.title }}</h1>
         <span class="game-embed__meta">{{ game.difficulty }}{% if game.multiplayer %} / MP{% endif %}</span>
       </div>
       <div class="game-embed__bar-right">
-        <button class="icon-btn" id="info-btn" onclick="document.getElementById('game-info-popup').toggleAttribute('hidden')" title="Game info &amp; controls">
+        <button class="icon-btn" id="info-toggle" title="Info &amp; controls" onclick="toggleInfo()">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v5M8 4.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
-        <button class="icon-btn" onclick="shareGame('{{ game.title }}', '{{ game.slug }}')" title="Share">
+        <button class="icon-btn" title="Share" onclick="shareGame('{{ game.title }}','{{ game.slug }}')">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
         </button>
-        <button class="icon-btn" onclick="goFullscreen()" title="Fullscreen (F)" id="fs-btn">
+        <button class="icon-btn" id="fs-btn" title="Fullscreen (F)" onclick="toggleFS()">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
     </div>
-    {# Info popup #}
-    <div class="game-info-popup" id="game-info-popup" hidden>
-      <div class="game-info-popup__inner">
+
+    {# Info overlay — hidden by default via class, not attribute #}
+    <div class="game-overlay" id="game-overlay">
+      <div class="game-overlay__content">
         <p><strong>Controls:</strong> {{ game.controls }}</p>
         <p><strong>About:</strong> {{ game.description }}</p>
-        {% if not game.mobileSupport %}<p class="text-muted">Desktop or tablet recommended.</p>{% endif %}
-        <button class="game-info-popup__close" onclick="document.getElementById('game-info-popup').hidden=true">Close</button>
+        {% if not game.mobileSupport %}<p style="color:var(--slate-600)">Desktop or tablet recommended.</p>{% endif %}
+        <button class="game-overlay__close" onclick="toggleInfo()">Close</button>
       </div>
     </div>
-    <div class="game-embed__viewport" id="game-viewport">
-      <iframe
-        id="game-frame"
-        src="{{ game.gamePath }}"
-        title="Play {{ game.title }}"
-        sandbox="allow-scripts allow-same-origin allow-popups"
-        allow="fullscreen"
-        allowfullscreen
-      ></iframe>
+
+    <div class="game-embed__viewport">
+      <iframe id="game-frame" src="{{ game.gamePath }}" title="Play {{ game.title }}" allow="fullscreen" allowfullscreen></iframe>
     </div>
   </div>
 
   {% if game.multiplayer %}
-  <div class="container">
-    {% include "partials/multiplayer-ui.njk" %}
-  </div>
+  <div class="container">{% include "partials/multiplayer-ui.njk" %}</div>
   {% endif %}
 
   <div class="container">
@@ -54,54 +47,50 @@ bodyClass: game-active
       <h2>More {{ game.category | capitalize }} Games</h2>
       <div class="game-grid game-grid--small">
         {% set related = games | where("category", game.category) | rejectattr("slug", game.slug) | head(4) %}
-        {% for g in related %}
-          {% include "partials/game-card.njk" %}
-        {% endfor %}
+        {% for g in related %}{% include "partials/game-card.njk" %}{% endfor %}
       </div>
     </div>
   </div>
 </section>
 
 <script>
-  var GAME_SLUG = "{{ game.slug }}";
+var GAME_SLUG = "{{ game.slug }}";
 
-  function goFullscreen() {
-    var embed = document.getElementById("game-embed");
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-      return;
-    }
-    if (embed.requestFullscreen) { embed.requestFullscreen(); }
-    else if (embed.webkitRequestFullscreen) { embed.webkitRequestFullscreen(); }
-    else if (embed.msRequestFullscreen) { embed.msRequestFullscreen(); }
-    else {
-      var f = document.getElementById("game-frame");
-      if (f.requestFullscreen) f.requestFullscreen();
-      else if (f.webkitRequestFullscreen) f.webkitRequestFullscreen();
-    }
+/* --- Info overlay --- */
+function toggleInfo() {
+  document.getElementById("game-overlay").classList.toggle("visible");
+}
+
+/* --- Fullscreen --- */
+function toggleFS() {
+  var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return;
   }
+  /* Try game-embed first, then documentElement as fallback */
+  var targets = [
+    document.getElementById("game-embed"),
+    document.documentElement
+  ];
+  for (var i = 0; i < targets.length; i++) {
+    var t = targets[i];
+    try {
+      if (t.requestFullscreen) { t.requestFullscreen().catch(function(){}); return; }
+      if (t.webkitRequestFullscreen) { t.webkitRequestFullscreen(); return; }
+    } catch(e) { /* try next */ }
+  }
+}
 
-  document.addEventListener("fullscreenchange", function() {
-    document.getElementById("game-embed").classList.toggle("is-fullscreen", !!document.fullscreenElement);
-  });
-  document.addEventListener("webkitfullscreenchange", function() {
-    document.getElementById("game-embed").classList.toggle("is-fullscreen", !!document.webkitFullscreenElement);
-  });
-
-  document.addEventListener("keydown", function(e) {
-    if ((e.key === "f" || e.key === "F") && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
-      e.preventDefault();
-      goFullscreen();
-    }
-    if (e.key === "Escape") {
-      document.getElementById("game-info-popup").hidden = true;
-    }
-  });
+/* Keyboard: F to toggle fullscreen, Esc closes info */
+document.addEventListener("keydown", function(e) {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleFS(); }
+  if (e.key === "Escape") document.getElementById("game-overlay").classList.remove("visible");
+});
 </script>
 <script src="/assets/js/game-loader.js" defer></script>
 <script src="/assets/js/save-system.js" defer></script>
 <script src="/assets/js/my-games.js" defer></script>
 <script src="/assets/js/share.js" defer></script>
-{% if game.multiplayer %}
-<script type="module" src="/assets/js/multiplayer.js"></script>
-{% endif %}
+{% if game.multiplayer %}<script type="module" src="/assets/js/multiplayer.js"></script>{% endif %}
