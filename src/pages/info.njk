@@ -1,22 +1,16 @@
 ---
-layout: layouts/page.njk
+layout: layouts/base.njk
 title: "Info"
 description: "About Clean Arcade — free browser games, no ads, no tracking."
 permalink: /info/
 ---
-<div class="content-page info-page">
-
-  <section class="info-section">
-    <h2>About</h2>
-    <p>Clean Arcade is a collection of free browser games. No ads, no tracking, no accounts. Every game runs directly in your browser — nothing to download or sign up for. Game progress and favorites are saved locally and never leave your device. Most games work on mobile. Available in 100+ languages.</p>
-    <p>Feedback, game suggestions, or questions: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></p>
-  </section>
-
-  <section class="info-section">
-    <h2>Privacy</h2>
-    <p>We don't collect your data. All game saves, favorites, and preferences are stored in your browser's localStorage. Nothing is sent to any server.</p>
-    <p>Third-party services: <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Pages</a> (hosting), <a href="https://bunny.net/privacy" target="_blank" rel="noopener">Bunny Fonts</a> (web fonts), <a href="https://gtranslate.io/privacy-policy" target="_blank" rel="noopener">GTranslate</a> (translation). No other third-party scripts.</p>
-    <p>To clear all locally stored data: Developer Tools &rarr; Application &rarr; Local Storage &rarr; delete entries for this domain.</p>
-  </section>
-
-</div>
+<section class="section">
+  <div class="container">
+    <div class="content-page">
+      <p>Clean Arcade is a collection of free browser games. No ads, no tracking, no accounts. Every game runs directly in your browser — nothing to download or sign up for. Game progress and favorites are saved locally and never leave your device. Most games work on mobile. Available in 100+ languages.</p>
+      <p>We don't collect your data. All saves, favorites, and preferences stay in your browser's localStorage. Nothing is sent to any server. Third-party services: <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Pages</a> (hosting), <a href="https://bunny.net/privacy" target="_blank" rel="noopener">Bunny Fonts</a> (web fonts), <a href="https://gtranslate.io/privacy-policy" target="_blank" rel="noopener">GTranslate</a> (translation).</p>
+      <p>To clear locally stored data: Developer Tools &rarr; Application &rarr; Local Storage &rarr; delete entries for this domain.</p>
+      <p>Feedback or questions: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></p>
+    </div>
+  </div>
+</section>

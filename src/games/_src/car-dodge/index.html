@@ -56,8 +56,17 @@ function init(){
 }
 
 function spawnEnemy(){
-  const lane=Math.floor(Math.random()*3);
-  enemies.push({lane,x:LANE_W*lane+LANE_W/2-CAR_W/2,y:-CAR_H,w:CAR_W,h:CAR_H,color:COLORS[Math.floor(Math.random()*COLORS.length)]});
+  /* Find which lanes are blocked near the top of the screen */
+  var blocked=[];
+  for(var i=0;i<enemies.length;i++){
+    if(enemies[i].y<CAR_H*2){blocked.push(enemies[i].lane);}
+  }
+  /* Pick available lanes — always keep at least one lane open */
+  var available=[];
+  for(var l=0;l<3;l++){if(blocked.indexOf(l)===-1)available.push(l);}
+  if(available.length<=1)return; /* don't spawn if only 1 lane open */
+  var lane=available[Math.floor(Math.random()*available.length)];
+  enemies.push({lane:lane,x:LANE_W*lane+LANE_W/2-CAR_W/2,y:-CAR_H,w:CAR_W,h:CAR_H,color:COLORS[Math.floor(Math.random()*COLORS.length)]});
 }
 
 function drawRoad(){
