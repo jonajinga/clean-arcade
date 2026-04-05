@@ -1,19 +1,15 @@
 ---
 layout: layouts/page.njk
 title: "Info"
-description: "About Clean Arcade — features, privacy, changelog, and contact."
+description: "About Clean Arcade — free browser games, no ads, no tracking."
 permalink: /info/
 ---
 <div class="content-page info-page">
 
   <section class="info-section">
     <h2>About</h2>
-    <p>Clean Arcade is a collection of free browser games. No ads, no tracking, no accounts. Every game runs directly in your browser — nothing to download or sign up for.</p>
-  </section>
-
-  <section class="info-section">
-    <h2>Features</h2>
-    <p>No ads, no tracking pixels, no analytics. Game progress and favorites are saved locally in your browser and never leave your device. Most games work on mobile. Available in 100+ languages.</p>
+    <p>Clean Arcade is a collection of free browser games. No ads, no tracking, no accounts. Every game runs directly in your browser — nothing to download or sign up for. Game progress and favorites are saved locally and never leave your device. Most games work on mobile. Available in 100+ languages.</p>
+    <p>Feedback, game suggestions, or questions: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></p>
   </section>
 
   <section class="info-section">
@@ -21,31 +17,6 @@ permalink: /info/
     <p>We don't collect your data. All game saves, favorites, and preferences are stored in your browser's localStorage. Nothing is sent to any server.</p>
     <p>Third-party services: <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare Pages</a> (hosting), <a href="https://bunny.net/privacy" target="_blank" rel="noopener">Bunny Fonts</a> (web fonts), <a href="https://gtranslate.io/privacy-policy" target="_blank" rel="noopener">GTranslate</a> (translation). No other third-party scripts.</p>
     <p>To clear all locally stored data: Developer Tools &rarr; Application &rarr; Local Storage &rarr; delete entries for this domain.</p>
-  </section>
-
-  <section class="info-section">
-    <h2>Changelog</h2>
-    <div class="changelog-list">
-      {% for entry in changelog %}
-        <div class="changelog-entry">
-          <div class="changelog-entry__header">
-            <span class="changelog-entry__version">v{{ entry.version }}</span>
-            <span class="changelog-entry__date">{{ entry.date }}</span>
-          </div>
-          <h3>{{ entry.title }}</h3>
-          <ul>
-            {% for change in entry.changes %}
-              <li>{{ change }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="info-section">
-    <h2>Contact</h2>
-    <p>Feedback, game suggestions, or questions: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></p>
   </section>
 
 </div>

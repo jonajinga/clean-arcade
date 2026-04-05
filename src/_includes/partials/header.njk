@@ -56,11 +56,11 @@
 
     {# Global buttons — always visible #}
     <div class="site-header__global">
-      <div class="game-filter__dropdown-wrap">
-        <button class="site-header__filter-btn" id="translate-btn" aria-label="Translate" title="Translate" onclick="toggleDropdown('gt-dropdown')">
+      <div class="game-filter__dropdown-wrap" id="gt-wrap">
+        <button class="site-header__filter-btn" id="translate-btn" aria-label="Translate" title="Translate" onclick="var d=document.getElementById('gt-dropdown');d.classList.toggle('open')">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/><ellipse cx="8" cy="8" rx="3" ry="7" stroke="currentColor" stroke-width="1.3"/><path d="M1 8h14" stroke="currentColor" stroke-width="1.3"/></svg>
         </button>
-        <div class="game-filter__dropdown" id="gt-dropdown" role="menu" style="right:0;left:auto;">
+        <div class="game-filter__dropdown" id="gt-dropdown" style="right:0;left:auto;">
           <div class="gtranslate_wrapper"></div>
         </div>
       </div>
