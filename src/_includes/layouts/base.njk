@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ meta.language }}" data-mode="light">
+<html lang="{{ meta.language }}" data-mode="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,13 +36,6 @@
   {# CSS #}
   <link rel="stylesheet" href="/assets/css/global.css?v={{ "" | buildHash }}">
 
-  {# Dark mode — inline to prevent flash #}
-  <script>
-    (function(){
-      var m = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
-      document.documentElement.setAttribute("data-mode", m);
-    })();
-  </script>
 
 
   {# JSON-LD #}
@@ -77,7 +70,6 @@
   <script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
 
   {# Site JS — Pagefind loaded dynamically by search.js #}
-  <script src="/assets/js/theme-toggle.js" defer></script>
   <script src="/assets/js/nav.js" defer></script>
   <script src="/assets/js/search.js" defer></script>
 

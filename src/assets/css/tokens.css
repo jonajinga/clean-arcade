@@ -33,18 +33,18 @@
   --cat-action: #ec407a;
   --cat-simulation: #ab47bc;
 
-  /* Semantic */
-  --bg: var(--white);
-  --bg-alt: var(--slate-50);
-  --bg-card: var(--white);
-  --text: var(--navy-900);
-  --text-muted: var(--slate-600);
-  --heading: var(--navy-950);
-  --link: var(--accent);
-  --link-hover: var(--accent-hover);
-  --border: var(--slate-200);
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.06), 0 12px 24px rgba(0, 0, 0, 0.08);
+  /* Semantic — dark only */
+  --bg: var(--navy-950);
+  --bg-alt: var(--navy-900);
+  --bg-card: var(--navy-900);
+  --text: var(--slate-300);
+  --text-muted: var(--slate-400);
+  --heading: var(--slate-100);
+  --link: var(--accent-light);
+  --link-hover: var(--white);
+  --border: var(--navy-700);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.3), 0 12px 24px rgba(0, 0, 0, 0.25);
 
   /* Typography */
   --font-body: "Inter", system-ui, -apple-system, sans-serif;
@@ -76,20 +76,6 @@
   --header-height: 48px;
 }
 
-/* === Dark Mode === */
-[data-mode="dark"] {
-  --bg: var(--navy-950);
-  --bg-alt: var(--navy-900);
-  --bg-card: var(--navy-900);
-  --text: var(--slate-300);
-  --text-muted: var(--slate-400);
-  --heading: var(--slate-100);
-  --link: var(--accent-light);
-  --link-hover: var(--white);
-  --border: var(--navy-700);
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.3), 0 12px 24px rgba(0, 0, 0, 0.25);
-}
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {

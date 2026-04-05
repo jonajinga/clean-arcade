@@ -120,9 +120,6 @@
   color: var(--text);
 }
 
-/* Theme toggle icon visibility */
-[data-mode="light"] .theme-icon__moon { display: none; }
-[data-mode="dark"] .theme-icon__sun { display: none; }
 
 /* Game pages: header always visible, dark background */
 .game-active .site-header {
