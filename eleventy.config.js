@@ -42,6 +42,9 @@ export default function (eleventyConfig) {
 
   eleventyConfig.addFilter("year", () => new Date().getFullYear());
 
+  const buildHash = Date.now().toString(36);
+  eleventyConfig.addFilter("buildHash", () => buildHash);
+
   eleventyConfig.addFilter("striptags", (str) => {
     if (!str) return "";
     return str.replace(/<[^>]+>/g, "");
