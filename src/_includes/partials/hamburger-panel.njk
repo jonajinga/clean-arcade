@@ -8,27 +8,6 @@
       </button>
     </div>
 
-    {# Actions — search, theme, translate #}
-    <div class="hamburger-panel__actions">
-      <button class="hamburger-panel__action-btn" onclick="closeHamburger();openSearch()" title="Search">
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
-      <button class="hamburger-panel__action-btn" onclick="toggleTheme()" title="Toggle theme">
-        <svg class="theme-icon__sun" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <svg class="theme-icon__moon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M17 11a7 7 0 11-8-8 5.5 5.5 0 008 8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="hamburger-panel__action-btn" id="translate-btn" title="Translate" onclick="document.getElementById('gt-select').classList.toggle('visible')">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/><ellipse cx="8" cy="8" rx="3" ry="7" stroke="currentColor" stroke-width="1.3"/><path d="M1 8h14" stroke="currentColor" stroke-width="1.3"/></svg>
-      </button>
-    </div>
-
-    {# GTranslate dropdown #}
-    <div class="gt-select-wrap" id="gt-select">
-      <div class="gtranslate_wrapper"></div>
-    </div>
-
-    <hr class="hamburger-panel__divider">
-
     {# Main navigation — text links #}
     <nav aria-label="Navigation">
       <ul class="hamburger-panel__nav">
@@ -44,58 +23,60 @@
 
     <hr class="hamburger-panel__divider">
 
-    {# Secondary links — icon + label #}
+    {# Secondary pages — icon-only grid, 3 per row #}
     <nav aria-label="More">
-      <ul class="hamburger-panel__icon-nav">
-        <li>
-          <a href="/about/" onclick="closeHamburger()" title="About">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <span>About</span>
-          </a>
-        </li>
-        <li>
-          <a href="/blog/" onclick="closeHamburger()" title="Blog">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h8M8 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <span>Blog</span>
-          </a>
-        </li>
-        <li>
-          <a href="/changelog/" onclick="closeHamburger()" title="Changelog">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Changelog</span>
-          </a>
-        </li>
-        <li>
-          <a href="/privacy-policy/" onclick="closeHamburger()" title="Privacy Policy">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 4v6c0 5.25-3.5 9.75-8 11-4.5-1.25-8-5.75-8-11V6l8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
-            <span>Privacy</span>
-          </a>
-        </li>
-        <li>
-          <a href="/style-guide/" onclick="closeHamburger()" title="Style Guide">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a5 5 0 015 5v1h1a2 2 0 012 2v1a2 2 0 01-2 2h-1v4a5 5 0 01-10 0v-4H6a2 2 0 01-2-2v-1a2 2 0 012-2h1V7a5 5 0 015-5z" stroke="currentColor" stroke-width="1.5"/></svg>
-            <span>Style Guide</span>
-          </a>
-        </li>
-        <li>
-          <a href="/sitemap.xml" onclick="closeHamburger()" title="Sitemap">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" stroke="currentColor" stroke-width="1.5"/></svg>
-            <span>Sitemap</span>
-          </a>
-        </li>
-        <li>
-          <a href="/feed.xml" onclick="closeHamburger()" title="RSS Feed">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="18" r="2" fill="currentColor"/><path d="M4 4a16 16 0 0116 16M4 11a9 9 0 019 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <span>RSS</span>
-          </a>
-        </li>
-      </ul>
+      <div class="hamburger-panel__btn-grid">
+        <a href="/about/" onclick="closeHamburger()" aria-label="About" title="About" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </a>
+        <a href="/blog/" onclick="closeHamburger()" aria-label="Blog" title="Blog" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h8M8 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </a>
+        <a href="/changelog/" onclick="closeHamburger()" aria-label="Changelog" title="Changelog" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/privacy-policy/" onclick="closeHamburger()" aria-label="Privacy Policy" title="Privacy" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 4v6c0 5.25-3.5 9.75-8 11-4.5-1.25-8-5.75-8-11V6l8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/style-guide/" onclick="closeHamburger()" aria-label="Style Guide" title="Style Guide" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" stroke="currentColor" stroke-width="1.5"/></svg>
+        </a>
+        <a href="/feed.xml" onclick="closeHamburger()" aria-label="RSS Feed" title="RSS" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="18" r="2" fill="currentColor"/><path d="M4 4a16 16 0 0116 16M4 11a9 9 0 019 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </a>
+        <a href="/sitemap.xml" onclick="closeHamburger()" aria-label="Sitemap" title="Sitemap" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2v8M12 14v8M2 12h8M14 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
+        </a>
+        <a href="mailto:{{ meta.email }}" aria-label="Email" title="{{ meta.email }}" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M22 4L12 13 2 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener" aria-label="Pikes Peak Web Designs" title="Pikes Peak Web Designs" class="hamburger-panel__grid-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M17 7H7M17 7v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
     </nav>
 
-    <div class="hamburger-panel__footer">
-      <a href="mailto:{{ meta.email }}">{{ meta.email }}</a>
-      <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a>
-      <span class="hamburger-panel__copyright">&copy; {{ "" | year }} {{ meta.title }}</span>
+    <hr class="hamburger-panel__divider">
+
+    {# Utility actions — search, theme, translate #}
+    <div class="hamburger-panel__btn-grid">
+      <button class="hamburger-panel__grid-btn" onclick="closeHamburger();openSearch()" aria-label="Search" title="Search">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button class="hamburger-panel__grid-btn" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle theme">
+        <svg class="theme-icon__sun" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <svg class="theme-icon__moon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M17 11a7 7 0 11-8-8 5.5 5.5 0 008 8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="hamburger-panel__grid-btn" id="translate-btn" aria-label="Translate" title="Translate" onclick="document.getElementById('gt-select').classList.toggle('visible')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/><ellipse cx="8" cy="8" rx="3" ry="7" stroke="currentColor" stroke-width="1.3"/><path d="M1 8h14" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
     </div>
+
+    {# GTranslate dropdown #}
+    <div class="gt-select-wrap" id="gt-select">
+      <div class="gtranslate_wrapper"></div>
+    </div>
+
+    <div class="hamburger-panel__copyright">&copy; {{ "" | year }} {{ meta.title }}</div>
   </div>
 </div>

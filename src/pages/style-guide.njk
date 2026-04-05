@@ -10,6 +10,7 @@ eleventyExcludeFromCollections: true
 
   <div class="style-section">
     <h2>Colors</h2>
+
     <h3>Core palette</h3>
     <div class="color-swatches">
       <div class="color-swatch">
@@ -63,13 +64,13 @@ eleventyExcludeFromCollections: true
   <div class="style-section">
     <h2>Typography</h2>
     <div class="type-sample">
-      <h1 style="margin-bottom: var(--space-sm);">Heading 1 — Space Grotesk</h1>
-      <h2 style="border: none; margin-top: 0; padding-bottom: 0; margin-bottom: var(--space-sm);">Heading 2 — Space Grotesk</h2>
-      <h3 style="margin-top: 0; margin-bottom: var(--space-sm);">Heading 3 — Space Grotesk</h3>
+      <h1 style="margin-bottom: var(--space-md);">Heading 1 — Space Grotesk</h1>
+      <h2 style="border: none; margin-top: 0; padding-bottom: 0; margin-bottom: var(--space-md);">Heading 2 — Space Grotesk</h2>
+      <h3 style="margin-top: 0; margin-bottom: var(--space-md);">Heading 3 — Space Grotesk</h3>
       <p>Body text — Inter. Clean Arcade is built on a simple idea: games should be fun, not frustrating.</p>
       <p class="text-muted">Muted text for secondary information and descriptions.</p>
     </div>
-    <p>Display font: <strong>Space Grotesk</strong> (headings, version badges, nav labels)<br>
+    <p>Display font: <strong>Space Grotesk</strong> (headings, nav labels)<br>
     Body font: <strong>Inter</strong> (everything else)<br>
     Served via <a href="https://fonts.bunny.net" target="_blank" rel="noopener">Bunny Fonts</a> (GDPR-compliant).</p>
   </div>
@@ -85,38 +86,26 @@ eleventyExcludeFromCollections: true
   </div>
 
   <div class="style-section">
-    <h2>Badges</h2>
-    <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
-      <span class="badge badge--category">Category</span>
-      <span class="badge badge--easy">Easy</span>
-      <span class="badge badge--medium">Medium</span>
-      <span class="badge badge--hard">Hard</span>
-      <span class="badge badge--mobile">Mobile OK</span>
-      <span class="badge badge--desktop">Desktop only</span>
-    </div>
-  </div>
-
-  <div class="style-section">
     <h2>Components</h2>
 
     <h3>Game filter bar</h3>
-    <p>Category dropdown, A-Z letter filter, and search input. All filtering is client-side JavaScript.</p>
+    <p>Category dropdown, A-Z letter dropdown, and search input. All filtering is client-side JavaScript.</p>
 
     <h3>Game cards</h3>
     <p>Auto-fill grid (min 160px mobile, 180px desktop). Each card shows game title on a colored placeholder background using the category color variable.</p>
 
     <h3>Game embed</h3>
-    <p>Full-width on mobile, max 960px centered on desktop. Control bar with back, info, and share buttons. Info overlay for game controls and description.</p>
+    <p>Full-width on mobile, max 960px centered on desktop. Control bar with back, info, and share buttons.</p>
 
     <h3>Hamburger menu</h3>
-    <p>Slide-in panel from right. Contains search, theme toggle, translate, main navigation, resources section (About, Blog, Changelog, Sitemap, Style Guide), legal links, and footer credit.</p>
+    <p>Slide-in panel from right. Main text links at top (Games, My Games, Features), icon-only buttons for secondary pages, action buttons for search/theme/translate, footer with contact and credit.</p>
 
     <h3>Dark mode</h3>
     <p>System preference detection with manual toggle. Inline script in <code>&lt;head&gt;</code> prevents flash. Theme stored in <code>localStorage["theme"]</code>.</p>
   </div>
 
   <div class="style-section">
-    <h2>Spacing scale</h2>
+    <h2>Spacing</h2>
     <p>Based on a consistent scale from <code>--space-xs</code> (0.25rem) to <code>--space-3xl</code> (4rem). Section padding uses <code>clamp(3rem, 2rem + 4vw, 6rem)</code> for fluid scaling.</p>
   </div>
 </div>
