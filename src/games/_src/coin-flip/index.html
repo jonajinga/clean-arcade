@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coin Flip</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#game{max-width:400px;width:100%;text-align:center}
+#coin-container{perspective:400px;margin:2rem 0;height:180px;display:flex;align-items:center;justify-content:center}
+#coin{width:160px;height:160px;border-radius:50%;position:relative;transform-style:preserve-3d;transition:transform 1s ease-out}
+#coin .side{position:absolute;inset:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;backface-visibility:hidden}
+#coin .heads{background:linear-gradient(135deg,#facc15,#eab308);color:#78350f}
+#coin .tails{background:linear-gradient(135deg,#94a3b8,#64748b);color:#1e293b;transform:rotateY(180deg)}
+#coin.flipping{transition:transform 1s cubic-bezier(.17,.67,.21,1.2)}
+#coin.heads-up{transform:rotateY(0deg)}
+#coin.tails-up{transform:rotateY(180deg)}
+#coin.spin-heads{transform:rotateY(1800deg)}
+#coin.spin-tails{transform:rotateY(1980deg)}
+#result{font-size:1.8rem;font-weight:700;min-height:2.5rem;margin:.5rem 0}
+#call-btns{display:flex;gap:1rem;justify-content:center;margin:1rem 0}
+#call-btns button{padding:14px 36px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;font-weight:700;transition:transform .15s}
+#call-btns button:hover{transform:scale(1.05)}
+#btn-heads{background:linear-gradient(135deg,#facc15,#eab308);color:#78350f}
+#btn-tails{background:linear-gradient(135deg,#94a3b8,#64748b);color:#1e293b}
+#stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;margin:1.5rem 0;text-align:center}
+.stat{background:#1e293b;padding:.75rem;border-radius:6px}
+.stat-val{font-size:1.4rem;font-weight:700;color:#facc15}
+.stat-label{font-size:.75rem;color:#94a3b8;margin-top:.25rem}
+#history{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:.5rem 0}
+.hist-item{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700}
+.hist-h{background:#facc15;color:#78350f}
+.hist-t{background:#94a3b8;color:#1e293b}
+#streak-display{font-size:1rem;color:#22c55e;min-height:1.5rem;margin:.25rem 0}
+</style>
+</head>
+<body>
+<h1>Coin Flip</h1>
+<div id="game">
+<div id="coin-container">
+<div id="coin" class="heads-up">
+<div class="side heads">H</div>
+<div class="side tails">T</div>
+</div>
+</div>
+<div id="result">&nbsp;</div>
+<div id="streak-display"></div>
+<p style="color:#94a3b8;margin-bottom:.5rem">Call it!</p>
+<div id="call-btns">
+<button id="btn-heads" onclick="flip('heads')">Heads</button>
+<button id="btn-tails" onclick="flip('tails')">Tails</button>
+</div>
+<div id="stats">
+<div class="stat"><div class="stat-val" id="total-flips">0</div><div class="stat-label">Total Flips</div></div>
+<div class="stat"><div class="stat-val" id="heads-count">0</div><div class="stat-label">Heads</div></div>
+<div class="stat"><div class="stat-val" id="tails-count">0</div><div class="stat-label">Tails</div></div>
+<div class="stat"><div class="stat-val" id="correct-count">0</div><div class="stat-label">Correct</div></div>
+<div class="stat"><div class="stat-val" id="accuracy">0%</div><div class="stat-label">Accuracy</div></div>
+<div class="stat"><div class="stat-val" id="best-streak">0</div><div class="stat-label">Best Streak</div></div>
+</div>
+<div id="history"></div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Coin Flip</h2>
+<p>Call heads or tails before the flip! Track your accuracy, streaks, and statistics. Can you beat the odds?</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<script>
+const SLUG='coin-flip';
+let totalFlips=0,headsCount=0,tailsCount=0,correct=0,streak=0,bestStreak=0,flipping=false,history=[];
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  totalFlips=0;headsCount=0;tailsCount=0;correct=0;streak=0;bestStreak=0;history=[];flipping=false;
+  document.getElementById('result').innerHTML='&nbsp;';
+  document.getElementById('streak-display').textContent='';
+  document.getElementById('history').innerHTML='';
+  updateStats();
+}
+
+function flip(call){
+  if(flipping)return;
+  flipping=true;
+  let result=Math.random()<0.5?'heads':'tails';
+  let coin=document.getElementById('coin');
+  coin.className='flipping';
+  // add spin class
+  coin.classList.add(result==='heads'?'spin-heads':'spin-tails');
+
+  setTimeout(()=>{
+    coin.className=result==='heads'?'heads-up':'tails-up';
+    totalFlips++;
+    if(result==='heads')headsCount++;else tailsCount++;
+
+    let won=call===result;
+    if(won){correct++;streak++;}
+    else streak=0;
+    if(streak>bestStreak)bestStreak=streak;
+
+    history.push(result);
+
+    let resEl=document.getElementById('result');
+    if(won){
+      resEl.textContent='Correct! '+result.toUpperCase()+'!';
+      resEl.style.color='#22c55e';
+    }else{
+      resEl.textContent='Wrong! It was '+result.toUpperCase();
+      resEl.style.color='#ef4444';
+    }
+
+    document.getElementById('streak-display').textContent=streak>1?'Streak: '+streak+'!':'';
+
+    updateStats();
+    renderHistory();
+    flipping=false;
+
+    try{parent.postMessage({type:'ca-save',slug:SLUG,state:{bestStreak,totalFlips}},'*')}catch(e){}
+  },1000);
+}
+
+function updateStats(){
+  document.getElementById('total-flips').textContent=totalFlips;
+  document.getElementById('heads-count').textContent=headsCount;
+  document.getElementById('tails-count').textContent=tailsCount;
+  document.getElementById('correct-count').textContent=correct;
+  document.getElementById('accuracy').textContent=totalFlips>0?Math.round(correct/totalFlips*100)+'%':'0%';
+  document.getElementById('best-streak').textContent=bestStreak;
+}
+
+function renderHistory(){
+  let el=document.getElementById('history');
+  el.innerHTML='';
+  let recent=history.slice(-30);
+  for(let h of recent){
+    let d=document.createElement('div');
+    d.className='hist-item '+(h==='heads'?'hist-h':'hist-t');
+    d.textContent=h==='heads'?'H':'T';
+    el.appendChild(d);
+  }
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.bestStreak)bestStreak=e.data.state.bestStreak;
+  }
+});
+</script>
+</body>
+</html>

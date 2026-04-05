@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spades</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem;padding:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1rem;color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:700px;width:100%;padding:.5rem}
+.scores{display:flex;justify-content:space-around;margin:.5rem 0;font-size:.9rem}
+.scores div{background:#1e293b;padding:.3rem .8rem;border-radius:.25rem;text-align:center}
+.scores b{color:#facc15}
+.zone{margin:.5rem 0}
+.zone-label{font-size:.8rem;color:#94a3b8;margin-bottom:.2rem}
+.card-row{display:flex;flex-wrap:wrap;gap:.3rem;min-height:70px;justify-content:center}
+.card{width:48px;height:70px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;cursor:pointer;user-select:none;border:2px solid transparent;transition:border-color .15s,transform .15s,opacity .15s;font-size:.85rem;line-height:1}
+.card.red{background:#fff;color:#ef4444}
+.card.black{background:#fff;color:#1e293b}
+.card.back{background:linear-gradient(135deg,#6366f1,#3b82f6);color:transparent;cursor:default}
+.card.selected{border-color:#facc15;transform:translateY(-4px)}
+.card.disabled{opacity:.35;pointer-events:none}
+.card .suit{font-size:1rem}
+.trick-area{display:flex;gap:1rem;justify-content:center;align-items:center;min-height:90px;background:#1e293b;border-radius:.5rem;padding:.5rem;margin:.5rem 0}
+.trick-area .slot{text-align:center;font-size:.75rem;color:#94a3b8}
+.bid-area{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:center;margin:.5rem 0}
+.bid-btn{background:#1e293b;color:#e2e8f0;border:2px solid #334155;padding:.4rem .8rem;border-radius:.25rem;cursor:pointer;font-family:inherit;font-size:.9rem}
+.bid-btn:hover{border-color:#6366f1}
+.msg{text-align:center;font-size:.9rem;color:#facc15;margin:.3rem 0;min-height:1.2rem}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Spades</h2>
+<p>2-player Spades vs CPU. Bid how many tricks you'll win each round. Spades are always trump. Score = tricks won if you meet your bid, -bid if you don't. First to 100 wins!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2 id="endTitle"></h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Spades</h1>
+<div class="scores">
+<div>You: <b id="pScore">0</b> (Bid: <span id="pBid">-</span>, Won: <span id="pWon">0</span>)</div>
+<div>CPU: <b id="cScore">0</b> (Bid: <span id="cBid">-</span>, Won: <span id="cWon">0</span>)</div>
+</div>
+<div class="msg" id="msg"></div>
+<div class="zone">
+<div class="zone-label">CPU Hand</div>
+<div class="card-row" id="cpuHand"></div>
+</div>
+<div class="trick-area" id="trickArea">
+<div class="slot" id="slotCPU">CPU<br>-</div>
+<div class="slot" id="slotPlayer">You<br>-</div>
+</div>
+<div class="zone">
+<div class="zone-label">Your Hand</div>
+<div class="card-row" id="playerHand"></div>
+</div>
+<div class="bid-area hidden" id="bidArea"></div>
+</div>
+<script>
+const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const SUITS=['♣','♦','♥','♠'];
+const SUIT_ORDER={'♣':0,'♦':1,'♥':2,'♠':3};
+let deck,pHand,cHand,pScore,cScore,pBid,cBid,pWon,cWon,leadSuit,trickCards,phase,highScore=0;
+function val(c){return RANKS.indexOf(c.rank);}
+function isRed(s){return s==='♥'||s==='♦';}
+function makeDeck(){let d=[];RANKS.forEach(r=>SUITS.forEach(s=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]];}return d;}
+function sortHand(h){h.sort((a,b)=>SUIT_ORDER[a.suit]-SUIT_ORDER[b.suit]||val(a)-val(b));}
+function cardHTML(c,faceDown,extra=''){
+  if(faceDown)return`<div class="card back"></div>`;
+  let col=isRed(c.suit)?'red':'black';
+  return`<div class="card ${col} ${extra}" data-rank="${c.rank}" data-suit="${c.suit}"><span>${c.rank}</span><span class="suit">${c.suit}</span></div>`;
+}
+function msg(t){document.getElementById('msg').textContent=t;}
+function render(){
+  document.getElementById('cpuHand').innerHTML=cHand.map(()=>cardHTML(null,true)).join('');
+  let legalP=getLegal(pHand);
+  document.getElementById('playerHand').innerHTML=pHand.map(c=>{
+    let ok=phase==='play-player'&&legalP.includes(c)?'':'disabled';
+    return cardHTML(c,false,ok);
+  }).join('');
+  document.querySelectorAll('#playerHand .card:not(.disabled)').forEach(el=>{
+    el.onclick=()=>playerPlay(el.dataset.rank,el.dataset.suit);
+  });
+  document.getElementById('pScore').textContent=pScore;
+  document.getElementById('cScore').textContent=cScore;
+  document.getElementById('pBid').textContent=pBid===null?'-':pBid;
+  document.getElementById('cBid').textContent=cBid===null?'-':cBid;
+  document.getElementById('pWon').textContent=pWon;
+  document.getElementById('cWon').textContent=cWon;
+}
+function getLegal(hand){
+  if(!leadSuit)return hand;
+  let follow=hand.filter(c=>c.suit===leadSuit);
+  return follow.length?follow:hand;
+}
+function trickWinner(){
+  let c0=trickCards[0],c1=trickCards[1];
+  let s0=c0.suit==='♠',s1=c1.suit==='♠';
+  if(s0&&!s1)return 0;
+  if(s1&&!s0)return 1;
+  if(c1.suit===c0.suit)return val(c1)>val(c0)?1:0;
+  return 0; // lead wins if second didn't follow suit and no trump
+}
+function showTrick(cpuCard,playerCard){
+  let sl0=document.getElementById('slotCPU');
+  let sl1=document.getElementById('slotPlayer');
+  sl0.innerHTML='CPU<br>'+(cpuCard?cardHTML(cpuCard,false):'—');
+  sl1.innerHTML='You<br>'+(playerCard?cardHTML(playerCard,false):'—');
+}
+function startRound(){
+  deck=makeDeck();pHand=deck.splice(0,13);cHand=deck.splice(0,13);
+  sortHand(pHand);sortHand(cHand);pBid=null;cBid=null;pWon=0;cWon=0;
+  trickCards=[];leadSuit=null;phase='bid';
+  showTrick(null,null);
+  // CPU bids
+  let spades=cHand.filter(c=>c.suit==='♠').length;
+  let aces=cHand.filter(c=>c.rank==='A').length;
+  cBid=Math.max(1,Math.min(6,Math.round(spades*0.6+aces*0.8)));
+  msg('Place your bid (1-13):');
+  let ba=document.getElementById('bidArea');
+  ba.classList.remove('hidden');
+  ba.innerHTML='';
+  for(let i=1;i<=13;i++){
+    let b=document.createElement('button');
+    b.className='bid-btn';b.textContent=i;
+    b.onclick=()=>{pBid=i;ba.classList.add('hidden');startTricks();};
+    ba.appendChild(b);
+  }
+  render();
+}
+function startTricks(){
+  phase='play-player';trickCards=[];leadSuit=null;
+  msg('Your lead — play a card.');
+  showTrick(null,null);
+  render();
+}
+function playerPlay(rank,suit){
+  if(phase!=='play-player')return;
+  let idx=pHand.findIndex(c=>c.rank===rank&&c.suit===suit);
+  if(idx===-1)return;
+  let card=pHand.splice(idx,1)[0];
+  if(!leadSuit){leadSuit=card.suit;trickCards=[card];phase='play-cpu';showTrick(null,card);render();setTimeout(cpuPlay,500);}
+  else{trickCards.push(card);showTrick(trickCards[0],card);phase='resolve';setTimeout(resolveTrick,700);}
+}
+function cpuPlay(){
+  let legal=getLegal(cHand);
+  // Simple AI: if following, play lowest winner or lowest card; if leading, play highest non-spade
+  let pick;
+  if(trickCards.length===0){
+    let nonSpade=legal.filter(c=>c.suit!=='♠');
+    pick=nonSpade.length?nonSpade[nonSpade.length-1]:legal[legal.length-1];
+    leadSuit=pick.suit;
+  } else {
+    let winners=legal.filter(c=>{
+      let test=[trickCards[0],c];
+      let ti=[...trickCards];ti.push(c);
+      // simulate
+      let s0=trickCards[0].suit==='♠',s1=c.suit==='♠';
+      if(s1&&!s0)return true;
+      if(c.suit===trickCards[0].suit&&val(c)>val(trickCards[0]))return true;
+      return false;
+    });
+    pick=winners.length?winners[0]:legal[0];
+  }
+  cHand.splice(cHand.indexOf(pick),1);
+  trickCards.unshift(pick);
+  showTrick(pick,trickCards[1]);
+  if(trickCards.length===2){phase='resolve';setTimeout(resolveTrick,700);}
+  else{phase='play-player';msg('Your turn.');render();}
+}
+function resolveTrick(){
+  let w=trickWinner();
+  if(w===0){cWon++;msg('CPU wins the trick.');}
+  else{pWon++;msg('You win the trick!');}
+  trickCards=[];leadSuit=null;
+  render();
+  if(pHand.length===0){setTimeout(scoreRound,600);return;}
+  setTimeout(()=>{
+    showTrick(null,null);
+    if(w===0){phase='play-cpu';msg('CPU leads.');render();setTimeout(cpuPlay,500);}
+    else{phase='play-player';msg('Your lead.');render();}
+  },600);
+}
+function scoreRound(){
+  let pPts=pWon>=pBid?pWon*10:-pBid*10;
+  let cPts=cWon>=cBid?cWon*10:-cBid*10;
+  pScore+=pPts;cScore+=cPts;
+  msg(`Round over! You: ${pPts>0?'+':''}${pPts}, CPU: ${cPts>0?'+':''}${cPts}`);
+  render();
+  if(pScore>=100||cScore>=100){
+    let win=pScore>=100&&pScore>=cScore;
+    document.getElementById('endTitle').textContent=win?'You Win!':'CPU Wins';
+    document.getElementById('endMsg').textContent=`Final: You ${pScore} — CPU ${cScore}. High score: ${highScore}`;
+    if(pScore>highScore)highScore=pScore;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    saveState();
+  } else {
+    setTimeout(startRound,1500);
+  }
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'spades',state:{highScore}},'*');}catch(e){}}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  pScore=0;cScore=0;
+  startRound();
+}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+</script>
+</body>
+</html>

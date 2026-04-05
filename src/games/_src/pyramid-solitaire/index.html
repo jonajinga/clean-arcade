@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pyramid Solitaire</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+h1{font-size:1.5rem;margin:0.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600;transition:background .2s}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem}
+#hud span{color:#facc15}
+#game-area{position:relative;width:100%;max-width:700px;margin:0 auto}
+#pyramid{display:flex;flex-direction:column;align-items:center;gap:2px;margin-bottom:10px}
+.prow{display:flex;gap:2px;justify-content:center}
+.card{width:52px;height:72px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;cursor:pointer;user-select:none;transition:transform .15s,box-shadow .15s;border:2px solid transparent;flex-shrink:0}
+.card.face{background:#1e293b;border-color:#334155}
+.card.face.red{color:#ef4444}
+.card.face.black{color:#e2e8f0}
+.card.selected{border-color:#facc15;box-shadow:0 0 8px #facc15}
+.card.back{background:linear-gradient(135deg,#6366f1,#3b82f6);cursor:default}
+.card.empty{visibility:hidden}
+.card.removed{visibility:hidden;pointer-events:none}
+#deck-area{display:flex;gap:1rem;justify-content:center;align-items:center;margin-top:10px}
+#deck-pile .card{cursor:pointer}
+#waste-pile .card{cursor:pointer}
+.label{font-size:.75rem;text-align:center;color:#94a3b8;margin-bottom:2px}
+@media(max-width:500px){
+.card{width:38px;height:54px;font-size:.7rem}
+}
+</style>
+</head>
+<body>
+<h1>Pyramid Solitaire</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>Moves: <span id="moves">0</span></div></div>
+<div id="game-area">
+<div id="pyramid"></div>
+<div id="deck-area">
+<div id="deck-pile"><div class="label">Deck</div></div>
+<div id="waste-pile"><div class="label">Waste</div></div>
+</div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Pyramid Solitaire</h2>
+<p>Remove pairs of exposed cards that sum to 13. Kings (13) are removed alone. Aces=1, Jacks=11, Queens=12. Draw from the deck when stuck. Clear the pyramid to win!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2 id="end-title">Game Over</h2>
+<p class="score" id="end-score"></p>
+<p id="end-msg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='pyramid-solitaire';
+const SUITS=['♠','♥','♦','♣'];
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const VALUES={A:1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,J:11,Q:12,K:13};
+let pyramid,deck,waste,selected,score,moves,highScore=0,gameOver;
+function isRed(s){return s==='♥'||s==='♦'}
+function makeDeck(){let d=[];for(let s of SUITS)for(let r of RANKS)d.push({rank:r,suit:s,val:VALUES[r]});return d}
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  let d=shuffle(makeDeck());
+  pyramid=[];
+  for(let r=0;r<7;r++){
+    pyramid[r]=[];
+    for(let c=0;c<=r;c++){
+      let card=d.pop();
+      card.row=r;card.col=c;card.removed=false;
+      pyramid[r][c]=card;
+    }
+  }
+  deck=d;waste=[];selected=null;score=0;moves=0;gameOver=false;
+  render();
+}
+function isExposed(r,c){
+  if(r===6)return true;
+  let nr=r+1;
+  let left=pyramid[nr][c];
+  let right=pyramid[nr][c+1];
+  return(left&&left.removed)&&(right&&right.removed);
+}
+function cardHTML(card,cls='',extra=''){
+  if(!card)return'';
+  let color=isRed(card.suit)?'red':'black';
+  return`<div class="card face ${color} ${cls}" ${extra}>${card.rank}${card.suit}</div>`;
+}
+function render(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('moves').textContent=moves;
+  let pyEl=document.getElementById('pyramid');
+  pyEl.innerHTML='';
+  for(let r=0;r<7;r++){
+    let row=document.createElement('div');
+    row.className='prow';
+    for(let c=0;c<=r;c++){
+      let card=pyramid[r][c];
+      let div=document.createElement('div');
+      if(card.removed){
+        div.className='card empty removed';
+      }else if(!isExposed(r,c)){
+        div.className='card back';
+        div.textContent='🂠';
+      }else{
+        let color=isRed(card.suit)?'red':'black';
+        div.className='card face '+color;
+        if(selected&&selected.row===r&&selected.col===c)div.classList.add('selected');
+        div.textContent=card.rank+card.suit;
+        div.onclick=()=>selectPyramid(r,c);
+      }
+      row.appendChild(div);
+    }
+    pyEl.appendChild(row);
+  }
+  let deckEl=document.getElementById('deck-pile');
+  deckEl.innerHTML='<div class="label">Deck ('+deck.length+')</div>';
+  if(deck.length>0){
+    let d=document.createElement('div');
+    d.className='card back';d.textContent='🂠';
+    d.onclick=drawCard;
+    deckEl.appendChild(d);
+  }
+  let wasteEl=document.getElementById('waste-pile');
+  wasteEl.innerHTML='<div class="label">Waste</div>';
+  if(waste.length>0){
+    let top=waste[waste.length-1];
+    let color=isRed(top.suit)?'red':'black';
+    let d=document.createElement('div');
+    d.className='card face '+color;
+    if(selected&&selected.src==='waste')d.classList.add('selected');
+    d.textContent=top.rank+top.suit;
+    d.onclick=selectWaste;
+    wasteEl.appendChild(d);
+  }
+}
+function selectPyramid(r,c){
+  if(gameOver)return;
+  let card=pyramid[r][c];
+  if(card.val===13){removePyramid(r,c);score+=13;moves++;checkWin();render();return}
+  if(!selected){selected={...card,src:'pyramid'};render();return}
+  if(selected.src==='pyramid'&&selected.row===r&&selected.col===c){selected=null;render();return}
+  if(selected.val+card.val===13){
+    if(selected.src==='pyramid')removePyramid(selected.row,selected.col);
+    else waste.pop();
+    removePyramid(r,c);
+    score+=13;moves++;selected=null;checkWin();render();
+  }else{
+    selected={...card,src:'pyramid'};render();
+  }
+}
+function selectWaste(){
+  if(gameOver)return;
+  let card=waste[waste.length-1];
+  if(card.val===13){waste.pop();score+=13;moves++;render();return}
+  if(selected&&selected.src==='waste'){selected=null;render();return}
+  if(selected){
+    if(selected.val+card.val===13){
+      if(selected.src==='pyramid')removePyramid(selected.row,selected.col);
+      waste.pop();
+      score+=13;moves++;selected=null;checkWin();render();
+    }else{selected={...card,src:'waste'};render();}
+  }else{selected={...card,src:'waste'};render();}
+}
+function removePyramid(r,c){pyramid[r][c].removed=true}
+function drawCard(){
+  if(gameOver||deck.length===0)return;
+  waste.push(deck.pop());selected=null;moves++;render();
+}
+function checkWin(){
+  let allRemoved=pyramid.every(row=>row.every(c=>c.removed));
+  if(allRemoved){
+    gameOver=true;
+    if(score>highScore)highScore=score;
+    saveState();
+    document.getElementById('end-title').textContent='You Win!';
+    document.getElementById('end-score').textContent='Score: '+score;
+    document.getElementById('end-msg').textContent='Cleared the pyramid in '+moves+' moves!';
+    document.getElementById('end-overlay').classList.remove('hidden');
+  }
+}
+function saveState(){
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore)highScore=e.data.state.highScore;
+  }
+});
+</script>
+</body>
+</html>

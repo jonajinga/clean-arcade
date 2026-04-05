@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rhythm Tap</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.5rem;margin:.5rem 0}
+canvas{display:block;border-radius:8px;cursor:pointer;touch-action:none;max-width:100%}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:1.5rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#feedback{font-size:1.5rem;font-weight:700;min-height:2rem;text-align:center;margin:.25rem 0;transition:opacity .3s}
+</style>
+</head>
+<body>
+<h1>Rhythm Tap</h1>
+<div id="hud">
+<div>Score: <span id="score">0</span></div>
+<div>Beat: <span id="beat">0</span>/20</div>
+<div>Combo: <span id="combo">0</span></div>
+</div>
+<div id="feedback">&nbsp;</div>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="start-overlay" class="overlay">
+<h2>Rhythm Tap</h2>
+<p>Circles expand from the center. Tap/click when they hit the outer ring! Timing matters: Perfect, Good, or Miss. 20 beats with increasing tempo.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2>Song Complete!</h2>
+<p class="score" id="end-score"></p>
+<p id="end-stats"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='rhythm-tap';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=400,H=400,CX=200,CY=200,TARGET_R=150;
+let rings,score,combo,maxCombo,beatIndex,totalBeats,perfect,good,miss,highScore=0,gameOver,nextBeatTime,tempo,animFrame,tapped;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  rings=[];score=0;combo=0;maxCombo=0;beatIndex=0;totalBeats=20;
+  perfect=0;good=0;miss=0;gameOver=false;tapped=false;
+  tempo=1200;
+  nextBeatTime=performance.now()+800;
+  updateHUD();
+  document.getElementById('feedback').innerHTML='&nbsp;';
+  cancelAnimationFrame(animFrame);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('beat').textContent=beatIndex+'/'+totalBeats;
+  document.getElementById('combo').textContent=combo;
+}
+
+function spawnBeat(){
+  if(beatIndex>=totalBeats)return;
+  rings.push({r:0,maxR:TARGET_R,speed:TARGET_R/(tempo*0.6/16.67),active:true,hit:false});
+  beatIndex++;
+  tempo=Math.max(500,1200-beatIndex*35);
+  nextBeatTime=performance.now()+tempo;
+}
+
+function handleTap(){
+  if(gameOver)return;
+  let bestRing=null,bestDist=Infinity;
+  for(let ring of rings){
+    if(!ring.active||ring.hit)continue;
+    let dist=Math.abs(ring.r-TARGET_R);
+    if(dist<bestDist){bestDist=dist;bestRing=ring;}
+  }
+  if(!bestRing)return;
+  bestRing.hit=true;bestRing.active=false;
+  let fb=document.getElementById('feedback');
+  if(bestDist<10){
+    score+=100*(1+combo*0.1);combo++;perfect++;
+    fb.textContent='PERFECT!';fb.style.color='#22c55e';
+  }else if(bestDist<25){
+    score+=50*(1+combo*0.05);combo++;good++;
+    fb.textContent='GOOD';fb.style.color='#facc15';
+  }else{
+    combo=0;miss++;
+    fb.textContent='MISS';fb.style.color='#ef4444';
+  }
+  if(combo>maxCombo)maxCombo=combo;
+  score=Math.round(score);
+  updateHUD();
+  setTimeout(()=>{if(fb.textContent)fb.innerHTML='&nbsp;';},400);
+}
+
+function update(){
+  let now=performance.now();
+  if(now>=nextBeatTime&&beatIndex<totalBeats)spawnBeat();
+  for(let ring of rings){
+    if(!ring.active)continue;
+    ring.r+=ring.speed;
+    if(ring.r>TARGET_R+30){
+      ring.active=false;
+      if(!ring.hit){miss++;combo=0;
+        let fb=document.getElementById('feedback');
+        fb.textContent='MISS';fb.style.color='#ef4444';
+        updateHUD();
+        setTimeout(()=>{fb.innerHTML='&nbsp;';},400);
+      }
+    }
+  }
+  rings=rings.filter(r=>r.active||r.r<TARGET_R+60);
+  if(beatIndex>=totalBeats&&rings.every(r=>!r.active))endGame();
+}
+
+function render(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // target ring
+  ctx.beginPath();ctx.arc(CX,CY,TARGET_R,0,Math.PI*2);
+  ctx.strokeStyle='rgba(99,102,241,0.4)';ctx.lineWidth=4;ctx.stroke();
+  // inner ring guides
+  ctx.beginPath();ctx.arc(CX,CY,TARGET_R-25,0,Math.PI*2);
+  ctx.strokeStyle='rgba(99,102,241,0.15)';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(CX,CY,TARGET_R+25,0,Math.PI*2);
+  ctx.strokeStyle='rgba(99,102,241,0.15)';ctx.stroke();
+  // expanding rings
+  for(let ring of rings){
+    if(!ring.active&&ring.hit)continue;
+    let dist=Math.abs(ring.r-TARGET_R);
+    let alpha=ring.active?Math.max(0.2,1-ring.r/TARGET_R/1.5):0.3;
+    let color=ring.hit?(dist<10?'#22c55e':'#facc15'):'#6366f1';
+    ctx.beginPath();ctx.arc(CX,CY,Math.max(1,ring.r),0,Math.PI*2);
+    ctx.strokeStyle=color;ctx.globalAlpha=alpha;ctx.lineWidth=ring.active?6:3;ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  // center dot
+  ctx.beginPath();ctx.arc(CX,CY,8,0,Math.PI*2);
+  ctx.fillStyle='#6366f1';ctx.fill();
+}
+
+function loop(){
+  if(gameOver)return;
+  update();render();
+  animFrame=requestAnimationFrame(loop);
+}
+
+function endGame(){
+  gameOver=true;
+  if(score>highScore)highScore=score;
+  let acc=totalBeats>0?Math.round((perfect+good)/totalBeats*100):0;
+  document.getElementById('end-score').textContent='Score: '+score+' | High: '+highScore;
+  document.getElementById('end-stats').textContent='Perfect: '+perfect+' | Good: '+good+' | Miss: '+miss+' | Max Combo: '+maxCombo+' | Accuracy: '+acc+'%';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+canvas.addEventListener('click',handleTap);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleTap();},{passive:false});
+document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();handleTap();}});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;}
+  }
+});
+</script>
+</body>
+</html>

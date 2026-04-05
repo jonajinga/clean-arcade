@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bubble Shooter</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.5rem;margin:.5rem 0}
+canvas{display:block;border:1px solid #334155;border-radius:4px;touch-action:none;max-width:100%}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem}
+#hud span{color:#facc15}
+#pause-btn{padding:8px 24px;font-size:1.3rem;border:none;border-radius:6px;cursor:pointer;background:#334155;color:#e2e8f0;margin:.5rem 0}
+</style>
+</head>
+<body>
+<h1>Bubble Shooter</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>High: <span id="high">0</span></div></div>
+<canvas id="c"></canvas>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+<div id="start-overlay" class="overlay">
+<h2>Bubble Shooter</h2>
+<p>Aim and shoot bubbles to match 3 or more of the same color. Clear all bubbles to win! Click/tap to aim and shoot.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2 id="end-title">Game Over</h2>
+<p class="score" id="end-score"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='bubble-shooter';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316'];
+const R=16;
+let W,H,COLS,ROWS,grid,shooter,ball,aimAngle,score,highScore=0,paused=false,gameOver,animFrame,shooting;
+
+function resize(){
+  W=Math.min(420,window.innerWidth-20);
+  COLS=Math.floor(W/(R*2));
+  W=COLS*R*2;
+  ROWS=12;
+  H=ROWS*R*2+120;
+  canvas.width=W;canvas.height=H;
+}
+resize();
+window.addEventListener('resize',()=>{resize();if(!gameOver)render()});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  paused=false;gameOver=false;score=0;shooting=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  grid=[];
+  for(let r=0;r<5;r++){
+    grid[r]=[];
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++){
+      grid[r][c]={color:COLORS[Math.floor(Math.random()*4)],alive:true};
+    }
+  }
+  for(let r=5;r<ROWS;r++){
+    grid[r]=[];
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++)grid[r][c]={color:null,alive:false};
+  }
+  aimAngle=-Math.PI/2;
+  nextBall();
+  cancelAnimationFrame(animFrame);
+  loop();
+}
+
+function nextBall(){
+  let colors=new Set();
+  for(let r=0;r<ROWS;r++)for(let c=0;c<(r%2===0?COLS:COLS-1);c++){
+    if(grid[r]&&grid[r][c]&&grid[r][c].alive)colors.add(grid[r][c].color);
+  }
+  let arr=[...colors];
+  if(arr.length===0)arr=COLORS.slice(0,4);
+  shooter={x:W/2,y:H-30,color:arr[Math.floor(Math.random()*arr.length)]};
+  ball=null;shooting=false;
+}
+
+function getPos(r,c){
+  let x=c*R*2+R;
+  if(r%2!==0)x+=R;
+  let y=r*R*1.73+R;
+  return{x,y};
+}
+
+function snap(bx,by){
+  let best=null,bestD=Infinity;
+  for(let r=0;r<ROWS;r++){
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++){
+      if(grid[r]&&grid[r][c]&&grid[r][c].alive)continue;
+      let p=getPos(r,c);
+      let d=Math.hypot(p.x-bx,p.y-by);
+      if(d<bestD){bestD=d;best={r,c};}
+    }
+  }
+  return best;
+}
+
+function getNeighbors(r,c){
+  let n=[];
+  let even=r%2===0;
+  let dirs=even?[[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]]:[[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]];
+  for(let[dr,dc]of dirs){
+    let nr=r+dr,nc=c+dc;
+    let cols=nr%2===0?COLS:COLS-1;
+    if(nr>=0&&nr<ROWS&&nc>=0&&nc<cols)n.push({r:nr,c:nc});
+  }
+  return n;
+}
+
+function findCluster(r,c,color){
+  let visited=new Set();
+  let stack=[{r,c}];
+  let cluster=[];
+  while(stack.length){
+    let{r:cr,c:cc}=stack.pop();
+    let key=cr+','+cc;
+    if(visited.has(key))continue;
+    visited.add(key);
+    if(!grid[cr]||!grid[cr][cc]||!grid[cr][cc].alive||grid[cr][cc].color!==color)continue;
+    cluster.push({r:cr,c:cc});
+    for(let n of getNeighbors(cr,cc))stack.push(n);
+  }
+  return cluster;
+}
+
+function removeFloating(){
+  let attached=new Set();
+  let stack=[];
+  let cols0=COLS;
+  for(let c=0;c<cols0;c++){
+    if(grid[0]&&grid[0][c]&&grid[0][c].alive){
+      stack.push({r:0,c});attached.add('0,'+c);
+    }
+  }
+  while(stack.length){
+    let{r,c}=stack.pop();
+    for(let n of getNeighbors(r,c)){
+      let key=n.r+','+n.c;
+      if(!attached.has(key)&&grid[n.r]&&grid[n.r][n.c]&&grid[n.r][n.c].alive){
+        attached.add(key);stack.push(n);
+      }
+    }
+  }
+  let removed=0;
+  for(let r=0;r<ROWS;r++){
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++){
+      if(grid[r]&&grid[r][c]&&grid[r][c].alive&&!attached.has(r+','+c)){
+        grid[r][c].alive=false;grid[r][c].color=null;removed++;
+      }
+    }
+  }
+  return removed;
+}
+
+function shoot(){
+  if(shooting||gameOver||paused)return;
+  shooting=true;
+  ball={x:shooter.x,y:shooter.y,color:shooter.color,vx:Math.cos(aimAngle)*8,vy:Math.sin(aimAngle)*8};
+}
+
+function update(){
+  if(!ball||paused)return;
+  ball.x+=ball.vx;ball.y+=ball.vy;
+  if(ball.x<R){ball.x=R;ball.vx*=-1}
+  if(ball.x>W-R){ball.x=W-R;ball.vx*=-1}
+  if(ball.y<R){
+    placeBall();return;
+  }
+  for(let r=0;r<ROWS;r++){
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++){
+      if(!grid[r]||!grid[r][c]||!grid[r][c].alive)continue;
+      let p=getPos(r,c);
+      if(Math.hypot(p.x-ball.x,p.y-ball.y)<R*1.9){
+        placeBall();return;
+      }
+    }
+  }
+  if(ball.y>H){shooting=false;nextBall();}
+}
+
+function placeBall(){
+  let s=snap(ball.x,ball.y);
+  if(!s){shooting=false;nextBall();return;}
+  if(!grid[s.r])grid[s.r]=[];
+  let cols=s.r%2===0?COLS:COLS-1;
+  if(s.c>=cols){shooting=false;nextBall();return;}
+  if(!grid[s.r][s.c])grid[s.r][s.c]={color:null,alive:false};
+  grid[s.r][s.c].color=ball.color;
+  grid[s.r][s.c].alive=true;
+  let cluster=findCluster(s.r,s.c,ball.color);
+  if(cluster.length>=3){
+    for(let{r,c}of cluster){grid[r][c].alive=false;grid[r][c].color=null;}
+    score+=cluster.length*10;
+    let fl=removeFloating();
+    score+=fl*15;
+  }
+  document.getElementById('score').textContent=score;
+  shooting=false;
+  let anyAlive=false;
+  for(let r=0;r<ROWS;r++){
+    let cols2=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols2;c++){
+      if(grid[r]&&grid[r][c]&&grid[r][c].alive)anyAlive=true;
+    }
+  }
+  if(!anyAlive){endGame(true);return}
+  let lastRow=ROWS-1;
+  let cols3=lastRow%2===0?COLS:COLS-1;
+  for(let c=0;c<cols3;c++){
+    if(grid[lastRow]&&grid[lastRow][c]&&grid[lastRow][c].alive){endGame(false);return}
+  }
+  nextBall();
+}
+
+function endGame(win){
+  gameOver=true;
+  if(score>highScore)highScore=score;
+  document.getElementById('high').textContent=highScore;
+  document.getElementById('end-title').textContent=win?'You Win!':'Game Over';
+  document.getElementById('end-score').textContent='Score: '+score;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  for(let r=0;r<ROWS;r++){
+    let cols=r%2===0?COLS:COLS-1;
+    for(let c=0;c<cols;c++){
+      if(!grid[r]||!grid[r][c]||!grid[r][c].alive)continue;
+      let p=getPos(r,c);
+      ctx.beginPath();ctx.arc(p.x,p.y,R-1,0,Math.PI*2);
+      ctx.fillStyle=grid[r][c].color;ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.stroke();
+    }
+  }
+  if(ball){
+    ctx.beginPath();ctx.arc(ball.x,ball.y,R-1,0,Math.PI*2);
+    ctx.fillStyle=ball.color;ctx.fill();
+  }
+  if(!shooting&&shooter){
+    ctx.beginPath();ctx.arc(shooter.x,shooter.y,R-1,0,Math.PI*2);
+    ctx.fillStyle=shooter.color;ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.stroke();
+    ctx.beginPath();ctx.moveTo(shooter.x,shooter.y);
+    ctx.lineTo(shooter.x+Math.cos(aimAngle)*60,shooter.y+Math.sin(aimAngle)*60);
+    ctx.strokeStyle='#e2e8f0';ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+  }
+}
+
+function loop(){
+  if(gameOver)return;
+  update();render();
+  animFrame=requestAnimationFrame(loop);
+}
+
+function togglePause(){
+  if(gameOver)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused){loop();}
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+canvas.addEventListener('mousemove',e=>{
+  let rect=canvas.getBoundingClientRect();
+  let sx=W/rect.width;
+  let mx=(e.clientX-rect.left)*sx;
+  let my=(e.clientY-rect.top)*(H/rect.height);
+  aimAngle=Math.atan2(my-shooter.y,mx-shooter.x);
+  if(aimAngle>-0.1)aimAngle=-0.1;
+  if(aimAngle<-Math.PI+0.1)aimAngle=-Math.PI+0.1;
+});
+canvas.addEventListener('click',()=>shoot());
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  let t=e.touches[0];
+  let rect=canvas.getBoundingClientRect();
+  let sx=W/rect.width;
+  let mx=(t.clientX-rect.left)*sx;
+  let my=(t.clientY-rect.top)*(H/rect.height);
+  aimAngle=Math.atan2(my-shooter.y,mx-shooter.x);
+  if(aimAngle>-0.1)aimAngle=-0.1;
+  if(aimAngle<-Math.PI+0.1)aimAngle=-Math.PI+0.1;
+  shoot();
+},{passive:false});
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

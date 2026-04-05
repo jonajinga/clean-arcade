@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stack Tower 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem}
+#hud span{color:#facc15}
+#scene{width:320px;height:480px;perspective:600px;position:relative;margin:0 auto}
+#tower{position:absolute;bottom:0;left:0;right:0;transform-style:preserve-3d;transform:rotateX(30deg) rotateY(-25deg);transition:transform 0.3s}
+.block{position:absolute;bottom:0;left:50%;transform-style:preserve-3d;transition:left 0.05s linear}
+.block .face{position:absolute;backface-visibility:hidden}
+.block .top{transform:rotateX(90deg);transform-origin:bottom}
+.block .front{transform-origin:bottom}
+.block .right-face{transform:rotateY(90deg);transform-origin:left}
+#pause-btn{padding:8px 24px;font-size:1.3rem;border:none;border-radius:6px;cursor:pointer;background:#334155;color:#e2e8f0;margin:.5rem 0}
+#tap-hint{text-align:center;color:#94a3b8;font-size:.9rem;margin:.25rem 0}
+</style>
+</head>
+<body>
+<h1>Stack Tower 3D</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>Best: <span id="high">0</span></div></div>
+<canvas id="c" width="320" height="480" style="border:1px solid #334155;border-radius:4px;max-width:100%;cursor:pointer;touch-action:none"></canvas>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+<p id="tap-hint">Tap or click to place block</p>
+<div id="start-overlay" class="overlay">
+<h2>Stack Tower 3D</h2>
+<p>Blocks slide back and forth. Tap to place each block. Misaligned parts get cut off. Stack as high as you can! Perfect placements keep full width.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2>Game Over!</h2>
+<p class="score" id="end-score"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='stack-tower-3d';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=320,H=480;
+const COLORS=['#6366f1','#3b82f6','#22c55e','#facc15','#ef4444','#f97316','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
+let stack,current,score,highScore=0,paused,gameOver,animFrame,speed,dir,camOffset;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  stack=[{x:W/2-60,w:120,y:0}];
+  score=0;paused=false;gameOver=false;speed=2;dir=1;camOffset=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  spawnBlock();
+  updateHUD();
+  cancelAnimationFrame(animFrame);
+  loop();
+}
+
+function spawnBlock(){
+  let prev=stack[stack.length-1];
+  let axis=stack.length%2===0?'x':'x'; // always horizontal for simplicity
+  current={x:-20,w:prev.w,y:stack.length,moving:true,color:COLORS[stack.length%COLORS.length]};
+  dir=1;
+  speed=2+stack.length*0.15;
+}
+
+function placeBlock(){
+  if(!current||!current.moving||gameOver||paused)return;
+  current.moving=false;
+  let prev=stack[stack.length-1];
+  let overlapStart=Math.max(current.x,prev.x);
+  let overlapEnd=Math.min(current.x+current.w,prev.x+prev.w);
+  let overlapW=overlapEnd-overlapStart;
+  if(overlapW<=0){endGame();return}
+  current.x=overlapStart;
+  current.w=overlapW;
+  stack.push({x:current.x,w:current.w,y:current.y});
+  score++;
+  // Perfect bonus
+  if(Math.abs(current.w-prev.w)<2&&Math.abs(current.x-prev.x)<2){
+    current.w=prev.w;current.x=prev.x;
+    stack[stack.length-1].w=prev.w;
+    stack[stack.length-1].x=prev.x;
+  }
+  updateHUD();
+  if(current.w<5){endGame();return}
+  spawnBlock();
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('high').textContent=highScore;
+}
+
+function update(){
+  if(paused||gameOver||!current||!current.moving)return;
+  current.x+=speed*dir;
+  if(current.x+current.w>W+20)dir=-1;
+  if(current.x<-20)dir=1;
+}
+
+function render(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  let blockH=20;
+  let viewBottom=Math.max(0,(stack.length-15)*blockH);
+  // draw stacked blocks
+  for(let i=0;i<stack.length;i++){
+    let b=stack[i];
+    let screenY=H-((i+1)*blockH-viewBottom);
+    if(screenY>H+blockH||screenY<-blockH)continue;
+    let color=COLORS[i%COLORS.length];
+    // 3D effect - top face
+    ctx.fillStyle=color;
+    ctx.fillRect(b.x,screenY,b.w,blockH);
+    // darker side
+    ctx.fillStyle=shadeColor(color,-30);
+    ctx.fillRect(b.x,screenY,b.w,blockH);
+    // lighter top
+    ctx.fillStyle=shadeColor(color,30);
+    ctx.fillRect(b.x,screenY,b.w,blockH*0.4);
+    // left edge
+    ctx.fillStyle=shadeColor(color,-50);
+    ctx.fillRect(b.x,screenY,3,blockH);
+    // border
+    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.strokeRect(b.x,screenY,b.w,blockH);
+    // 3D offset lines (isometric illusion)
+    if(i>0){
+      let prev=stack[i-1];
+      ctx.fillStyle=shadeColor(color,-20);
+      // right side 3D
+      ctx.beginPath();
+      ctx.moveTo(b.x+b.w,screenY);
+      ctx.lineTo(b.x+b.w+6,screenY-4);
+      ctx.lineTo(b.x+b.w+6,screenY+blockH-4);
+      ctx.lineTo(b.x+b.w,screenY+blockH);
+      ctx.fill();
+      // top 3D
+      ctx.fillStyle=shadeColor(color,40);
+      ctx.beginPath();
+      ctx.moveTo(b.x,screenY);
+      ctx.lineTo(b.x+6,screenY-4);
+      ctx.lineTo(b.x+b.w+6,screenY-4);
+      ctx.lineTo(b.x+b.w,screenY);
+      ctx.fill();
+    }
+  }
+  // draw current moving block
+  if(current&&current.moving){
+    let screenY=H-((current.y+1)*blockH-viewBottom);
+    ctx.fillStyle=current.color;
+    ctx.fillRect(current.x,screenY,current.w,blockH);
+    ctx.fillStyle=shadeColor(current.color,30);
+    ctx.fillRect(current.x,screenY,current.w,blockH*0.4);
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.strokeRect(current.x,screenY,current.w,blockH);
+    // 3D sides
+    ctx.fillStyle=shadeColor(current.color,-20);
+    ctx.beginPath();
+    ctx.moveTo(current.x+current.w,screenY);
+    ctx.lineTo(current.x+current.w+6,screenY-4);
+    ctx.lineTo(current.x+current.w+6,screenY+blockH-4);
+    ctx.lineTo(current.x+current.w,screenY+blockH);
+    ctx.fill();
+    ctx.fillStyle=shadeColor(current.color,40);
+    ctx.beginPath();
+    ctx.moveTo(current.x,screenY);
+    ctx.lineTo(current.x+6,screenY-4);
+    ctx.lineTo(current.x+current.w+6,screenY-4);
+    ctx.lineTo(current.x+current.w,screenY);
+    ctx.fill();
+  }
+  if(paused){
+    ctx.fillStyle='rgba(15,23,42,0.7)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';ctx.font='bold 32px system-ui';ctx.textAlign='center';
+    ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start';
+  }
+}
+
+function shadeColor(color,percent){
+  let num=parseInt(color.replace('#',''),16);
+  let r=Math.min(255,Math.max(0,(num>>16)+percent));
+  let g=Math.min(255,Math.max(0,((num>>8)&0xFF)+percent));
+  let b=Math.min(255,Math.max(0,(num&0xFF)+percent));
+  return'#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+
+function loop(){
+  if(gameOver)return;
+  if(!paused)update();
+  render();
+  animFrame=requestAnimationFrame(loop);
+}
+
+function endGame(){
+  gameOver=true;
+  if(score>highScore)highScore=score;
+  updateHUD();
+  document.getElementById('end-score').textContent='Height: '+score+' | Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+function togglePause(){
+  if(gameOver)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+canvas.addEventListener('click',placeBlock);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();placeBlock();},{passive:false});
+document.addEventListener('keydown',e=>{
+  if(e.key===' '){e.preventDefault();placeBlock();}
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

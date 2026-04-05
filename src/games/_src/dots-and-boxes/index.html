@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dots and Boxes</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:500px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.scores{display:flex;gap:1.5rem;margin:.5rem 0;font-size:.95rem}
+.scores div{background:#1e293b;padding:.3rem 1rem;border-radius:.25rem}
+.scores b{font-size:1.1rem}
+.msg{text-align:center;color:#facc15;font-size:.9rem;min-height:1.2rem;margin:.3rem 0}
+canvas{display:block;max-width:100%;cursor:pointer;touch-action:none}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Dots and Boxes</h2>
+<p>Take turns drawing lines between dots. Complete a box to score a point and get an extra turn. Play vs AI on a 5x5 grid!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2 id="endTitle"></h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Dots and Boxes</h1>
+<div class="scores">
+<div style="border-left:4px solid #3b82f6;padding-left:.75rem">You: <b id="pScore">0</b></div>
+<div style="border-left:4px solid #ef4444;padding-left:.75rem">CPU: <b id="cScore">0</b></div>
+</div>
+<div class="msg" id="msg">Your turn</div>
+<canvas id="canvas"></canvas>
+</div>
+<script>
+const N=5; // 5x5 grid of boxes = 6x6 dots
+const DOTS=N+1;
+let hLines,vLines,boxes,pScore,cScore,turn,gameActive,highScore=0;
+let cellSize,pad,canvasW,canvasH;
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+
+function calcSize(){
+  cellSize=Math.min(60,Math.floor((window.innerWidth-60)/DOTS));
+  pad=20;
+  canvasW=DOTS*cellSize+pad*2;
+  canvasH=DOTS*cellSize+pad*2;
+  canvas.width=canvasW;canvas.height=canvasH;
+  canvas.style.width=canvasW+'px';canvas.style.height=canvasH+'px';
+}
+function init(){
+  hLines=[];vLines=[];boxes=[];
+  for(let r=0;r<DOTS;r++){hLines[r]=[];for(let c=0;c<N;c++)hLines[r][c]=0;}
+  for(let r=0;r<N;r++){vLines[r]=[];for(let c=0;c<DOTS;c++)vLines[r][c]=0;}
+  for(let r=0;r<N;r++){boxes[r]=[];for(let c=0;c<N;c++)boxes[r][c]=0;}
+  pScore=0;cScore=0;turn='player';gameActive=true;
+}
+function dotX(c){return pad+c*cellSize;}
+function dotY(r){return pad+r*cellSize;}
+function draw(){
+  calcSize();
+  ctx.clearRect(0,0,canvasW,canvasH);
+  // boxes
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    if(boxes[r][c]){
+      ctx.fillStyle=boxes[r][c]===1?'rgba(59,130,246,0.2)':'rgba(239,68,68,0.2)';
+      ctx.fillRect(dotX(c),dotY(r),cellSize,cellSize);
+      ctx.fillStyle=boxes[r][c]===1?'#3b82f6':'#ef4444';
+      ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(boxes[r][c]===1?'P':'C',dotX(c)+cellSize/2,dotY(r)+cellSize/2);
+    }
+  }
+  // horizontal lines
+  for(let r=0;r<DOTS;r++)for(let c=0;c<N;c++){
+    ctx.strokeStyle=hLines[r][c]?(hLines[r][c]===1?'#3b82f6':'#ef4444'):'#334155';
+    ctx.lineWidth=hLines[r][c]?4:2;
+    ctx.beginPath();ctx.moveTo(dotX(c),dotY(r));ctx.lineTo(dotX(c+1),dotY(r));ctx.stroke();
+  }
+  // vertical lines
+  for(let r=0;r<N;r++)for(let c=0;c<DOTS;c++){
+    ctx.strokeStyle=vLines[r][c]?(vLines[r][c]===1?'#3b82f6':'#ef4444'):'#334155';
+    ctx.lineWidth=vLines[r][c]?4:2;
+    ctx.beginPath();ctx.moveTo(dotX(c),dotY(r));ctx.lineTo(dotX(c),dotY(r+1));ctx.stroke();
+  }
+  // dots
+  for(let r=0;r<DOTS;r++)for(let c=0;c<DOTS;c++){
+    ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(dotX(c),dotY(r),4,0,Math.PI*2);ctx.fill();
+  }
+  document.getElementById('pScore').textContent=pScore;
+  document.getElementById('cScore').textContent=cScore;
+}
+function getAvailableLines(){
+  let lines=[];
+  for(let r=0;r<DOTS;r++)for(let c=0;c<N;c++)if(!hLines[r][c])lines.push({type:'h',r,c});
+  for(let r=0;r<N;r++)for(let c=0;c<DOTS;c++)if(!vLines[r][c])lines.push({type:'v',r,c});
+  return lines;
+}
+function countSides(r,c){
+  let s=0;
+  if(hLines[r][c])s++;if(hLines[r+1][c])s++;
+  if(vLines[r][c])s++;if(vLines[r][c+1])s++;
+  return s;
+}
+function placeLine(type,r,c,who){
+  let val=who==='player'?1:2;
+  if(type==='h')hLines[r][c]=val;else vLines[r][c]=val;
+  let completed=false;
+  // check boxes
+  if(type==='h'){
+    // box above (r-1,c)
+    if(r>0&&countSides(r-1,c)===4){boxes[r-1][c]=val;if(who==='player')pScore++;else cScore++;completed=true;}
+    // box below (r,c)
+    if(r<N&&countSides(r,c)===4){boxes[r][c]=val;if(who==='player')pScore++;else cScore++;completed=true;}
+  } else {
+    // box left (r,c-1)
+    if(c>0&&countSides(r,c-1)===4){boxes[r][c-1]=val;if(who==='player')pScore++;else cScore++;completed=true;}
+    // box right (r,c)
+    if(c<N&&countSides(r,c)===4){boxes[r][c]=val;if(who==='player')pScore++;else cScore++;completed=true;}
+  }
+  return completed;
+}
+function checkEnd(){
+  if(pScore+cScore===N*N){
+    gameActive=false;
+    let title=pScore>cScore?'You Win!':pScore<cScore?'CPU Wins':'Tie!';
+    if(pScore>highScore)highScore=pScore;
+    document.getElementById('endTitle').textContent=title;
+    document.getElementById('endMsg').textContent=`You: ${pScore} — CPU: ${cScore} | Best: ${highScore}`;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    saveState();
+    return true;
+  }
+  return false;
+}
+canvas.addEventListener('click',e=>{
+  if(!gameActive||turn!=='player')return;
+  let rect=canvas.getBoundingClientRect();
+  let sx=canvasW/rect.width,sy=canvasH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let bestDist=Infinity,bestLine=null;
+  // find closest line
+  for(let r=0;r<DOTS;r++)for(let c=0;c<N;c++){
+    if(hLines[r][c])continue;
+    let cx=(dotX(c)+dotX(c+1))/2,cy=dotY(r);
+    let d=Math.hypot(mx-cx,my-cy);
+    if(d<bestDist&&d<cellSize*0.6){bestDist=d;bestLine={type:'h',r,c};}
+  }
+  for(let r=0;r<N;r++)for(let c=0;c<DOTS;c++){
+    if(vLines[r][c])continue;
+    let cx=dotX(c),cy=(dotY(r)+dotY(r+1))/2;
+    let d=Math.hypot(mx-cx,my-cy);
+    if(d<bestDist&&d<cellSize*0.6){bestDist=d;bestLine={type:'v',r,c};}
+  }
+  if(!bestLine)return;
+  let completed=placeLine(bestLine.type,bestLine.r,bestLine.c,'player');
+  draw();
+  if(checkEnd())return;
+  if(!completed){turn='cpu';document.getElementById('msg').textContent='CPU thinking...';setTimeout(aiTurn,400);}
+  else{document.getElementById('msg').textContent='You completed a box! Go again.';}
+});
+function aiTurn(){
+  if(!gameActive)return;
+  let lines=getAvailableLines();if(!lines.length)return;
+  // Strategy: 1) complete a box if possible, 2) avoid giving 3-side boxes, 3) random safe
+  let pick=null;
+  // try completing
+  for(let l of lines){
+    if(l.type==='h'){
+      if(l.r>0&&countSides(l.r-1,l.c)===3){pick=l;break;}
+      if(l.r<N&&countSides(l.r,l.c)===3){pick=l;break;}
+    } else {
+      if(l.c>0&&countSides(l.r,l.c-1)===3){pick=l;break;}
+      if(l.c<N&&countSides(l.r,l.c)===3){pick=l;break;}
+    }
+  }
+  if(!pick){
+    // avoid creating 3-side boxes
+    let safe=lines.filter(l=>{
+      let bad=false;
+      if(l.type==='h'){
+        if(l.r>0&&countSides(l.r-1,l.c)===2)bad=true;
+        if(l.r<N&&countSides(l.r,l.c)===2)bad=true;
+      } else {
+        if(l.c>0&&countSides(l.r,l.c-1)===2)bad=true;
+        if(l.c<N&&countSides(l.r,l.c)===2)bad=true;
+      }
+      return!bad;
+    });
+    pick=safe.length?safe[Math.random()*safe.length|0]:lines[Math.random()*lines.length|0];
+  }
+  let completed=placeLine(pick.type,pick.r,pick.c,'cpu');
+  draw();
+  if(checkEnd())return;
+  if(completed){document.getElementById('msg').textContent='CPU completed a box!';setTimeout(aiTurn,400);}
+  else{turn='player';document.getElementById('msg').textContent='Your turn';}
+}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  init();draw();
+  document.getElementById('msg').textContent='Your turn — click between two dots.';
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'dots-and-boxes',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+window.addEventListener('resize',draw);
+</script>
+</body>
+</html>

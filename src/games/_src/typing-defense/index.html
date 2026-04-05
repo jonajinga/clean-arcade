@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Typing Defense</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{display:flex;flex-direction:column;align-items:center;width:100%;max-width:600px;padding:.5rem}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.3rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.2rem .6rem;border-radius:.25rem}
+canvas{background:#1e293b;border-radius:.5rem;display:block;max-width:100%;touch-action:none}
+.input-row{margin-top:.5rem;display:flex;gap:.5rem;width:100%;max-width:400px}
+.input-row input{flex:1;background:#1e293b;color:#e2e8f0;border:2px solid #334155;padding:.5rem;font-size:1rem;border-radius:.25rem;font-family:inherit;outline:none}
+.input-row input:focus{border-color:#6366f1}
+.pause-row{margin-top:.5rem}
+.pause-btn{background:#334155;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.2rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.lives{color:#ef4444;font-size:1.2rem;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Typing Defense</h2>
+<p>Words fall from the top. Type them to destroy them before they reach the bottom! Speed increases over time.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2>Game Over</h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Typing Defense</h1>
+<div class="hud">
+<span>Score: <b id="score">0</b></span>
+<span>Level: <b id="level">1</b></span>
+<span class="lives" id="lives">♥♥♥</span>
+<span>Best: <b id="high">0</b></span>
+</div>
+<canvas id="canvas" width="600" height="400"></canvas>
+<div class="input-row"><input type="text" id="typingInput" placeholder="Type words here..." autocomplete="off" autocapitalize="off"></div>
+<div class="pause-row"><button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button></div>
+</div>
+<script>
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const W=600,H=400;
+const WORDS=['code','fire','jump','rain','star','moon','wind','rock','blue','dark','fast','glow','hawk','iron','jade',
+'keen','lamp','maze','nest','open','pure','quiz','rise','snow','tree','unit','vibe','wave','apex','byte',
+'calm','dawn','echo','flux','grid','haze','idea','java','kite','loop','myth','node','oath','pixel','quest',
+'ruby','sage','type','urge','void','warp','xenon','yarn','zone','alpha','brave','chase','delta','ember',
+'frost','ghost','honor','index','joker','knack','laser','magic','noble','orbit','prism','query','realm',
+'sword','torch','ultra','valor','world'];
+let fallingWords,score,lives,level,highScore=0,gameActive=false,paused=false,lastTime,spawnTimer,raf,typed;
+function resize(){let w=Math.min(600,window.innerWidth-16);canvas.style.width=w+'px';canvas.style.height=(w*H/W)+'px';}
+window.addEventListener('resize',resize);
+function spawnWord(){
+  let w=WORDS[Math.random()*WORDS.length|0];
+  let speed=0.4+level*0.12+Math.random()*0.3;
+  fallingWords.push({text:w,x:Math.random()*(W-80)+40,y:-15,speed,matched:0});
+}
+function update(dt){
+  spawnTimer-=dt;
+  if(spawnTimer<=0){spawnWord();spawnTimer=Math.max(30,120-level*8)+Math.random()*60;}
+  for(let i=fallingWords.length-1;i>=0;i--){
+    let w=fallingWords[i];w.y+=w.speed*dt;
+    if(w.y>H){
+      fallingWords.splice(i,1);
+      lives--;
+      if(lives<=0){endGame();return;}
+    }
+  }
+  level=1+Math.floor(score/50);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // danger zone
+  ctx.fillStyle='rgba(239,68,68,0.1)';ctx.fillRect(0,H-30,W,30);
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=1;ctx.setLineDash([5,5]);
+  ctx.beginPath();ctx.moveTo(0,H-30);ctx.lineTo(W,H-30);ctx.stroke();ctx.setLineDash([]);
+  // words
+  ctx.font='bold 18px system-ui';ctx.textAlign='center';
+  fallingWords.forEach(w=>{
+    let matched=w.text.substring(0,w.matched);
+    let rest=w.text.substring(w.matched);
+    let totalW=ctx.measureText(w.text).width;
+    let mW=ctx.measureText(matched).width;
+    // bg
+    ctx.fillStyle='rgba(15,23,42,0.7)';
+    ctx.fillRect(w.x-totalW/2-4,w.y-12,totalW+8,22);
+    // matched part
+    ctx.fillStyle='#22c55e';ctx.textAlign='left';
+    ctx.fillText(matched,w.x-totalW/2,w.y+4);
+    ctx.fillStyle='#e2e8f0';
+    ctx.fillText(rest,w.x-totalW/2+mW,w.y+4);
+    ctx.textAlign='center';
+  });
+  document.getElementById('score').textContent=score;
+  document.getElementById('level').textContent=level;
+  document.getElementById('lives').textContent='♥'.repeat(Math.max(0,lives));
+  document.getElementById('high').textContent=highScore;
+}
+function loop(ts){
+  if(!gameActive)return;
+  if(!lastTime)lastTime=ts;
+  let dt=Math.min((ts-lastTime)/16,3);lastTime=ts;
+  if(!paused){update(dt);draw();}
+  raf=requestAnimationFrame(loop);
+}
+function checkInput(){
+  let val=document.getElementById('typingInput').value.toLowerCase().trim();
+  if(!val)return;
+  // find best matching word
+  for(let w of fallingWords){
+    if(w.text.startsWith(val)){
+      w.matched=val.length;
+      if(val===w.text){
+        score+=w.text.length*5;
+        fallingWords.splice(fallingWords.indexOf(w),1);
+        document.getElementById('typingInput').value='';
+      }
+      return;
+    }
+  }
+  // partial match reset
+  fallingWords.forEach(w=>{if(!w.text.startsWith(val))w.matched=0;});
+}
+function endGame(){
+  gameActive=false;
+  if(score>highScore)highScore=score;
+  document.getElementById('endMsg').textContent=`Score: ${score} | Level: ${level} | Best: ${highScore}`;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+function togglePause(){
+  if(!gameActive)return;paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused)saveState();
+}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  fallingWords=[];score=0;lives=3;level=1;paused=false;spawnTimer=30;lastTime=0;gameActive=true;typed='';
+  document.getElementById('typingInput').value='';
+  document.getElementById('typingInput').focus();
+  document.getElementById('pauseBtn').textContent='⏸';
+  raf=requestAnimationFrame(loop);
+}
+document.getElementById('typingInput').addEventListener('input',checkInput);
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'&&document.activeElement!==document.getElementById('typingInput'))togglePause();
+  if(gameActive&&!paused&&document.activeElement!==document.getElementById('typingInput')){
+    document.getElementById('typingInput').focus();
+  }
+});
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'typing-defense',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+resize();
+</script>
+</body>
+</html>

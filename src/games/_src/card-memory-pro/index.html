@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card Memory Pro</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:520px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.25rem .6rem;border-radius:.25rem}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:.4rem;width:100%;max-width:480px}
+.card{aspect-ratio:2/3;background:linear-gradient(135deg,#6366f1,#3b82f6);border-radius:.35rem;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:700;user-select:none;transition:transform .3s;position:relative}
+.card.flipped,.card.matched{background:#fff}
+.card.flipped .face,.card.matched .face{display:flex}
+.card .face{display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%}
+.card .face.red{color:#ef4444}
+.card .face.black{color:#1e293b}
+.card .rank{font-size:clamp(.9rem,3vw,1.3rem);line-height:1}
+.card .suit{font-size:clamp(1rem,3.5vw,1.6rem)}
+.card.matched{opacity:.5;pointer-events:none}
+.card .back-design{font-size:1.5rem;color:rgba(255,255,255,.3)}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Card Memory Pro</h2>
+<p>6x6 grid with 18 pairs of playing cards. Match all pairs! Track your moves, time, and best score.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2>You Win!</h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Card Memory Pro</h1>
+<div class="hud">
+<span>Moves: <b id="moves">0</b></span>
+<span>Pairs: <b id="pairs">0</b>/18</span>
+<span>Time: <b id="timer">0</b>s</span>
+<span>Best: <b id="best">-</b></span>
+</div>
+<div class="grid" id="grid"></div>
+</div>
+<script>
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SUITS=['♠','♥','♦','♣'];
+let cards,flipped,matchedCount,moves,startTime,timerInt,bestMoves=null,gameActive=false;
+function isRed(s){return s==='♥'||s==='♦';}
+function makeDeck(){
+  // need 18 unique cards, then duplicate for pairs = 36
+  let all=[];RANKS.forEach(r=>SUITS.forEach(s=>all.push({rank:r,suit:s})));
+  // shuffle and pick 18
+  for(let i=all.length-1;i>0;i--){let j=Math.random()*i+1|0;[all[i],all[j]]=[all[j],all[i]];}
+  let picked=all.slice(0,18);
+  let pairs=[...picked,...picked.map(c=>({...c}))];
+  // shuffle pairs
+  for(let i=pairs.length-1;i>0;i--){let j=Math.random()*i+1|0;[pairs[i],pairs[j]]=[pairs[j],pairs[i]];}
+  return pairs.map((c,i)=>({...c,id:i,flipped:false,matched:false}));
+}
+function render(){
+  let g=document.getElementById('grid');g.innerHTML='';
+  cards.forEach((c,i)=>{
+    let div=document.createElement('div');
+    div.className='card'+(c.flipped?' flipped':'')+(c.matched?' matched':'');
+    let col=isRed(c.suit)?'red':'black';
+    div.innerHTML=`<span class="back-design">♠</span><div class="face ${col}"><span class="rank">${c.rank}</span><span class="suit">${c.suit}</span></div>`;
+    if(!c.matched&&!c.flipped)div.onclick=()=>flipCard(i);
+    g.appendChild(div);
+  });
+  document.getElementById('moves').textContent=moves;
+  document.getElementById('pairs').textContent=matchedCount;
+  document.getElementById('best').textContent=bestMoves!==null?bestMoves:'-';
+}
+function flipCard(i){
+  if(!gameActive||cards[i].flipped||cards[i].matched||flipped.length>=2)return;
+  cards[i].flipped=true;flipped.push(i);
+  render();
+  if(flipped.length===2){
+    moves++;
+    let a=cards[flipped[0]],b=cards[flipped[1]];
+    if(a.rank===b.rank&&a.suit===b.suit){
+      a.matched=true;b.matched=true;matchedCount++;
+      flipped=[];
+      render();
+      if(matchedCount===18)endGame();
+    } else {
+      setTimeout(()=>{a.flipped=false;b.flipped=false;flipped=[];render();},800);
+    }
+  }
+}
+function endGame(){
+  clearInterval(timerInt);gameActive=false;
+  let elapsed=((Date.now()-startTime)/1000).toFixed(1);
+  if(bestMoves===null||moves<bestMoves)bestMoves=moves;
+  document.getElementById('endMsg').textContent=`Moves: ${moves} | Time: ${elapsed}s | Best: ${bestMoves} moves`;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  cards=makeDeck();flipped=[];matchedCount=0;moves=0;gameActive=true;
+  startTime=Date.now();
+  clearInterval(timerInt);
+  timerInt=setInterval(()=>{document.getElementById('timer').textContent=((Date.now()-startTime)/1000|0);},250);
+  render();
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'card-memory-pro',state:{bestMoves}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){bestMoves=e.data.state.bestMoves||null;}});
+</script>
+</body>
+</html>

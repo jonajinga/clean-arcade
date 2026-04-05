@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anagram Solver</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:420px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:1.5rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#game{max-width:500px;width:100%}
+#letters{display:flex;gap:8px;justify-content:center;margin:1rem 0;flex-wrap:wrap}
+.letter-tile{width:48px;height:56px;background:#6366f1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:#fff;text-transform:uppercase}
+#timer-bar{height:8px;background:#334155;border-radius:4px;margin:.5rem 0;overflow:hidden}
+#timer-fill{height:100%;background:#22c55e;transition:width 0.5s linear;width:100%}
+#input-row{display:flex;gap:8px;margin:.5rem 0}
+#word-input{flex:1;padding:10px;font-size:1.1rem;border:2px solid #334155;border-radius:6px;background:#1e293b;color:#e2e8f0;outline:none;text-transform:lowercase}
+#word-input:focus{border-color:#6366f1}
+#submit-btn{padding:10px 20px;font-size:1rem;border:none;border-radius:6px;background:#22c55e;color:#0f172a;font-weight:600;cursor:pointer}
+#message{text-align:center;margin:.25rem 0;min-height:1.3rem;font-size:.9rem}
+.msg-ok{color:#22c55e}.msg-err{color:#ef4444}
+#found-words{display:flex;flex-wrap:wrap;gap:6px;margin:.5rem 0;justify-content:center}
+.found{padding:3px 10px;background:#1e293b;border-radius:4px;font-size:.85rem;color:#94a3b8}
+#stats{text-align:center;font-size:.9rem;color:#94a3b8;margin:.5rem 0}
+</style>
+</head>
+<body>
+<h1>Anagram Solver</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>Words: <span id="wcount">0</span></div><div>Time: <span id="time">90</span>s</div><div>High: <span id="high">0</span></div></div>
+<div id="game">
+<div id="letters"></div>
+<div id="timer-bar"><div id="timer-fill"></div></div>
+<div id="input-row">
+<input type="text" id="word-input" placeholder="Type a word..." autocomplete="off" autocapitalize="off">
+<button id="submit-btn" onclick="submitWord()">Go</button>
+</div>
+<div id="message"></div>
+<div id="found-words"></div>
+<div id="stats"></div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Anagram Solver</h2>
+<p>Given 7 letters, find as many valid words as possible in 90 seconds. Words must be 3+ letters and use only the given letters. Score more for longer words!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2>Time's Up!</h2>
+<p class="score" id="end-score"></p>
+<p id="end-possible"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='anagram-solver';
+const DICT=["ace","act","add","age","ago","aid","aim","air","all","and","ant","any","ape","arc","are","ark","arm","art","ask","ate","awe","axe","bad","bag","ban","bar","bat","bay","bed","bee","bet","bid","big","bin","bit","bog","bow","box","boy","bud","bug","bun","bus","but","buy","cab","can","cap","car","cat","cop","cow","cry","cub","cup","cut","dad","dam","day","den","dew","did","die","dig","dim","dip","doc","doe","dog","dot","dry","dub","dud","due","dug","dun","duo","dye","ear","eat","eel","egg","ego","elm","emu","end","era","eve","ewe","eye","fad","fan","far","fat","fax","fed","fee","few","fig","fin","fir","fit","fix","fly","foe","fog","for","fox","fry","fun","fur","gag","gap","gas","gave","gay","gel","gem","get","gig","gin","god","got","gum","gun","gut","guy","gym","had","ham","has","hat","hay","hem","hen","her","hew","hid","him","hip","his","hit","hog","hop","hot","how","hub","hue","hug","hum","hut","ice","icy","ill","imp","ink","inn","ion","ire","irk","ivy","jab","jag","jam","jar","jaw","jay","jet","jig","job","jog","jot","joy","jug","jut","keg","ken","key","kid","kin","kit","lab","lad","lag","lap","law","lay","lea","led","leg","let","lid","lie","lip","lit","log","lot","low","lug","mad","man","map","mar","mat","maw","may","men","met","mid","mix","mob","mod","mom","mop","mow","mud","mug","mum","nab","nag","nap","nay","net","new","nil","nip","nit","nod","nor","not","now","nun","nut","oak","oar","oat","odd","ode","off","oft","oil","old","one","opt","orb","ore","our","out","owe","owl","own","pad","pal","pan","pap","par","pat","paw","pay","pea","peg","pen","pep","per","pet","pew","pie","pig","pin","pit","ply","pod","pop","pot","pow","pro","pry","pub","pug","pun","pup","pus","put","rag","ram","ran","rap","rat","raw","ray","red","ref","rev","rib","rid","rig","rim","rip","rob","rod","roe","rot","row","rub","rug","rum","run","rut","rye","sac","sad","sag","sap","sat","saw","say","sea","set","sew","she","shy","sin","sip","sir","sis","sit","six","ski","sky","sly","sob","sod","son","sop","sot","sow","soy","spa","spy","sty","sub","sue","sum","sun","sup","tab","tad","tag","tan","tap","tar","tat","tax","tea","ten","the","thy","tic","tie","tin","tip","toe","ton","too","top","tot","tow","toy","try","tub","tug","two","urn","use","van","vat","vet","vex","via","vie","vim","vow","wad","wag","war","was","wax","way","web","wed","wet","who","why","wig","win","wit","woe","wok","won","woo","wow","yak","yam","yap","yaw","yea","yes","yet","yew","you","zap","zeal","zero","zinc","zone","zoom","able","also","area","army","aunt","away","baby","back","bade","bald","bale","ball","band","bane","bang","bank","bare","bark","barn","base","bath","bead","beak","beam","bean","bear","beat","been","beer","bell","belt","bend","bent","best","bike","bill","bind","bird","bite","blow","blue","blur","boat","body","bold","bolt","bomb","bond","bone","book","boom","boot","bore","born","boss","both","bowl","bulk","bull","bump","burn","bush","busy","cage","cake","call","calm","came","camp","cane","cape","card","care","cart","case","cash","cast","cave","cell","chat","chef","chin","chip","chop","city","clad","clam","clan","clap","claw","clay","clip","club","clue","coal","coat","code","coil","coin","cold","colt","come","cone","cook","cool","cope","copy","cord","core","cork","corn","cost","cozy","crew","crop","crow","cube","cult","curb","cure","curl","cute","dale","dame","damn","damp","dare","dark","dart","dash","data","date","dawn","dead","deaf","deal","dear","debt","deck","deed","deem","deep","deer","demo","deny","desk","dial","dice","diet","dirt","disc","dish","disk","dock","does","dome","done","doom","door","dose","dove","down","doze","drag","draw","drew","drip","drop","drum","dual","dub","duck","dude","duel","duke","dull","dumb","dump","dune","dung","dusk","dust","duty","each","earl","earn","ease","east","easy","edge","edit","else","emit","envy","epic","euro","even","ever","evil","exam","exit","eyed","face","fact","fade","fail","fair","fake","fall","fame","fang","fare","farm","fast","fate","fawn","fear","feat","feed","feel","feet","fell","felt","fern","fest","file","fill","film","find","fine","fire","firm","fish","fist","five","flag","flap","flat","flaw","flea","fled","flew","flip","flog","flow","foam","fold","folk","fond","font","food","fool","foot","ford","fore","fork","form","fort","foul","four","free","frog","from","fuel","full","fund","fury","fuse","fuss","gain","gait","gale","gall","game","gang","gape","garb","gate","gave","gaze","gear","gene","gift","girl","give","glad","glee","glen","glow","glue","glum","goat","goes","gold","golf","gone","good","gore","grab","grim","grin","grip","grit","grow","gulf","gust","guts","hack","hail","hair","hale","half","hall","halt","hand","hang","hare","harm","harp","hash","haste","hate","haul","have","haze","hazy","head","heal","heap","hear","heat","heed","heel","held","hell","helm","help","herd","here","hero","hide","high","hike","hill","hilt","hind","hint","hire","hold","hole","holy","home","hone","hood","hook","hope","horn","hose","host","hour","howl","huge","hull","hump","hung","hunt","hurl","hurt","hush","hymn","icon","idea","idle","inch","info","into","iron","isle","item","jack","jade","jail","jaws","jazz","jerk","jest","jilt","jobs","join","joke","jolt","jump","June","July","junk","jury","just","keen","keep","kept","kick","kill","kind","king","kiss","kite","knee","knew","knit","knob","knot","know","lace","lack","laid","lake","lamb","lame","lamp","land","lane","lark","lash","lass","last","late","lawn","lead","leaf","leak","lean","leap","left","lend","lens","less","liar","lice","lick","life","lift","like","limb","lime","limp","line","link","lion","list","live","load","loaf","loan","lock","loft","lone","long","look","loop","lord","lore","lose","loss","lost","loud","love","luck","lull","lump","lung","lure","lurk","lush","lust","made","mail","main","make","male","mall","malt","mane","many","mare","mark","mart","mash","mask","mass","mast","mate","maze","mead","meal","mean","meat","meet","meld","melt","memo","mend","menu","mere","mesh","mess","mild","mile","milk","mill","mime","mind","mine","mint","mire","miss","mist","moan","moat","mock","mode","mold","mole","monk","mood","moon","moor","more","moss","most","moth","move","much","muck","mule","muse","mush","must","mute","myth","nail","name","nape","navy","near","neat","neck","need","nest","next","nice","nine","node","none","noon","norm","nose","note","noun","nude","oath","obey","odds","odor","once","only","onto","ooze","open","oral","oven","over","pace","pack","pact","page","paid","pail","pain","pair","pale","palm","pane","pare","park","part","pass","past","path","pave","pawn","peak","peal","pear","peat","peel","peer","pelt","pend","perk","pest","pick","pier","pike","pile","pine","pink","pipe","pity","plan","play","plea","plod","plot","plow","ploy","plug","plum","plus","pock","poem","poet","poke","pole","poll","polo","pomp","pond","pony","pool","poor","pope","pore","pork","port","pose","post","pour","pray","prey","prod","prop","pros","pull","pulp","pump","punk","pure","push","quit","race","rack","raft","rage","raid","rail","rain","rake","ramp","rang","rank","rant","rare","rash","rate","rave","rays","read","real","ream","reap","rear","reed","reef","reel","rein","rely","rend","rent","rest","rice","rich","ride","rife","rift","rile","rime","rind","ring","riot","rise","risk","road","roam","roar","robe","rock","rode","role","roll","roof","room","root","rope","rose","rote","rout","rove","rude","ruin","rule","rump","rung","runt","ruse","rush","rust","ruth","sack","safe","sage","said","sail","sake","sale","salt","same","sand","sane","sang","sank","sash","save","scan","scar","seal","seam","seat","sect","seed","seek","seem","seen","self","sell","send","sent","sept","shed","shin","ship","shoe","shoo","shop","shot","show","shut","sick","side","sift","sigh","sign","silk","sill","silt","sing","sink","sire","site","size","skim","skin","skip","slab","slag","slam","slap","slat","slaw","sled","slew","slid","slim","slip","slit","slob","slop","slot","slow","slug","slum","slur","smog","snap","snip","snob","snug","soak","soap","soar","sock","soda","sofa","soft","soil","sold","sole","some","song","soon","sore","sort","soul","sour","span","spar","spec","sped","spin","spit","spot","spur","stab","stag","star","stay","stem","step","stew","stir","stop","stub","stud","stun","such","suck","suit","sulk","sure","surf","swan","swap","swim","swum","tabs","tack","tact","tail","take","tale","talk","tall","tame","tang","tank","tape","taps","task","team","tear","tell","temp","tend","tent","term","test","text","than","that","them","then","they","thin","this","thud","thus","tick","tide","tidy","tile","till","tilt","time","tine","tiny","tire","toad","toil","told","toll","tomb","tone","took","tool","tops","tore","torn","toss","tour","town","trap","tray","tree","trek","trim","trio","trip","trod","trot","true","tuck","tuft","tuna","tune","turf","turn","tusk","tutor","twin","type","ugly","undo","unit","unto","upon","urge","used","user","vain","vale","vane","vary","vase","vast","veil","vein","vent","verb","very","vest","veto","vice","view","vine","visa","void","volt","vote","wade","wage","wail","wait","wake","walk","wall","wand","want","ward","warm","warn","warp","wart","wary","wash","wasp","wave","wavy","waxy","weak","wean","wear","weed","week","weld","well","welt","went","were","west","what","when","wide","wife","wild","will","wilt","wily","wind","wine","wing","wink","wipe","wire","wise","wish","wisp","with","woke","wolf","womb","wood","wool","word","wore","work","worm","worn","wove","wrap","wren","yank","yard","yarn","year","yell","yoga","yoke","your","zeal","zest","zinc","zone"];
+
+let letters,found,possible,score,highScore=0,timer,timerInterval;
+
+function canMake(word,avail){
+  let a=[...avail];
+  for(let ch of word){
+    let i=a.indexOf(ch);
+    if(i===-1)return false;
+    a.splice(i,1);
+  }
+  return true;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  clearInterval(timerInterval);
+  // pick 7 letters with at least 2 vowels
+  const vowels='aeiou',consonants='bcdfghjklmnpqrstvwxyz';
+  let lts=[];
+  for(let i=0;i<2;i++)lts.push(vowels[Math.floor(Math.random()*vowels.length)]);
+  for(let i=0;i<5;i++)lts.push(consonants[Math.floor(Math.random()*consonants.length)]);
+  // shuffle
+  for(let i=lts.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[lts[i],lts[j]]=[lts[j],lts[i]];}
+  letters=lts;
+  found=new Set();
+  possible=DICT.filter(w=>w.length>=3&&canMake(w,letters));
+  score=0;timer=90;
+  renderLetters();
+  document.getElementById('found-words').innerHTML='';
+  document.getElementById('message').textContent='';
+  document.getElementById('stats').textContent=possible.length+' possible words';
+  document.getElementById('word-input').value='';
+  document.getElementById('word-input').focus();
+  updateHUD();
+  timerInterval=setInterval(()=>{
+    timer--;
+    document.getElementById('time').textContent=timer;
+    let pct=timer/90*100;
+    document.getElementById('timer-fill').style.width=pct+'%';
+    document.getElementById('timer-fill').style.background=timer<15?'#ef4444':timer<30?'#facc15':'#22c55e';
+    if(timer<=0){clearInterval(timerInterval);endGame();}
+  },1000);
+}
+
+function renderLetters(){
+  let el=document.getElementById('letters');
+  el.innerHTML='';
+  for(let l of letters){
+    let d=document.createElement('div');
+    d.className='letter-tile';d.textContent=l;
+    el.appendChild(d);
+  }
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('wcount').textContent=found.size;
+  document.getElementById('high').textContent=highScore;
+}
+
+function submitWord(){
+  let input=document.getElementById('word-input');
+  let word=input.value.trim().toLowerCase();
+  input.value='';input.focus();
+  if(!word)return;
+  let msg=document.getElementById('message');
+  if(word.length<3){msg.textContent='Too short (min 3 letters)';msg.className='msg-err';return}
+  if(found.has(word)){msg.textContent='Already found!';msg.className='msg-err';return}
+  if(!canMake(word,letters)){msg.textContent='Can\'t make that from the letters!';msg.className='msg-err';return}
+  if(!DICT.includes(word)){msg.textContent='Not in dictionary!';msg.className='msg-err';return}
+  found.add(word);
+  let pts=word.length<=3?1:word.length<=4?3:word.length<=5?5:word.length<=6?8:12;
+  score+=pts;
+  msg.textContent='+'+pts+' points!';msg.className='msg-ok';
+  let fw=document.getElementById('found-words');
+  let span=document.createElement('span');span.className='found';span.textContent=word;
+  fw.appendChild(span);
+  updateHUD();
+  if(found.size===possible.length){clearInterval(timerInterval);endGame();}
+}
+
+function endGame(){
+  if(score>highScore)highScore=score;
+  updateHUD();
+  document.getElementById('end-score').textContent='Score: '+score+' | Found '+found.size+' of '+possible.length+' words';
+  let missed=possible.filter(w=>!found.has(w)).slice(0,15);
+  document.getElementById('end-possible').textContent=missed.length>0?'Some you missed: '+missed.join(', '):'You found them all!';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+document.getElementById('word-input').addEventListener('keydown',e=>{if(e.key==='Enter')submitWord()});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

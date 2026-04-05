@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Emoji Quiz</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:420px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:1.5rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#game{max-width:450px;width:100%;text-align:center}
+#emoji-display{font-size:4rem;margin:1.5rem 0;min-height:5rem;display:flex;align-items:center;justify-content:center;gap:.5rem;line-height:1}
+#hint{color:#94a3b8;font-size:.9rem;margin:.5rem 0;min-height:1.2rem}
+#input-row{display:flex;gap:8px;margin:.75rem 0;justify-content:center}
+#answer-input{flex:1;max-width:280px;padding:12px;font-size:1.1rem;border:2px solid #334155;border-radius:6px;background:#1e293b;color:#e2e8f0;outline:none}
+#answer-input:focus{border-color:#6366f1}
+#submit-btn{padding:12px 20px;font-size:1rem;border:none;border-radius:6px;background:#22c55e;color:#0f172a;font-weight:600;cursor:pointer}
+#skip-btn{padding:8px 18px;font-size:.9rem;border:2px solid #475569;border-radius:6px;background:transparent;color:#94a3b8;cursor:pointer}
+#feedback{font-size:1.2rem;font-weight:700;min-height:2rem;margin:.5rem 0}
+.fb-ok{color:#22c55e}.fb-err{color:#ef4444}.fb-skip{color:#facc15}
+#progress{display:flex;gap:4px;justify-content:center;margin:.75rem 0;flex-wrap:wrap}
+.prog-dot{width:18px;height:18px;border-radius:50%;background:#334155;border:2px solid #475569}
+.prog-ok{background:#22c55e;border-color:#22c55e}
+.prog-wrong{background:#ef4444;border-color:#ef4444}
+.prog-skip{background:#facc15;border-color:#facc15}
+.prog-current{border-color:#6366f1;box-shadow:0 0 6px #6366f1}
+</style>
+</head>
+<body>
+<h1>Emoji Quiz</h1>
+<div id="hud">
+<div>Score: <span id="score">0</span></div>
+<div>Question: <span id="qnum">1</span>/20</div>
+<div>High: <span id="high">0</span></div>
+</div>
+<div id="game">
+<div id="emoji-display"></div>
+<div id="hint"></div>
+<div id="input-row">
+<input type="text" id="answer-input" placeholder="Type your answer..." autocomplete="off" autocapitalize="off">
+<button id="submit-btn" onclick="submitAnswer()">Go</button>
+</div>
+<button id="skip-btn" onclick="skipQuestion()">Skip</button>
+<div id="feedback">&nbsp;</div>
+<div id="progress"></div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Emoji Quiz</h2>
+<p>Guess the word or phrase represented by the emoji! 20 questions per round. Type your answer or skip if stuck. Hints available!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2>Quiz Complete!</h2>
+<p class="score" id="end-score"></p>
+<p id="end-detail"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='emoji-quiz';
+const BANK=[
+["🌍🔥","global warming"],["🏠💼","homework"],["⏰💣","time bomb"],["🌧️🌈","rainbow"],["🔑🎹","keyboard"],["🐴👟","horseshoe"],["📖🐛","bookworm"],["🌻🌞","sunflower"],["🍎🥧","apple pie"],["🏖️⛱️","beach"],["🎭😢","drama"],["⚽🏟️","football"],["🧊🏔️","iceberg"],["🐝🍯","honey"],["🌙🐺","werewolf"],["🎸⭐","rockstar"],["🏠🔥","firehouse"],["🌊🏄","surfing"],["❄️👨","snowman"],["🎂🕯️","birthday"],["🐉🔥","dragon"],["👁️📞","eyephone"],["🌽🐕","corndog"],["🧠💪","brainpower"],["🛏️🐞","bedbug"],["🐸👑","frog prince"],["🎯🖊️","bullseye"],["🍌💔","banana split"],["🏋️🏠","powerhouse"],["⭐🐟","starfish"],["🐈🐟","catfish"],["🔥🚒","fire truck"],["🌮🔔","taco bell"],["🐶📅","dog day"],["🍕🎉","pizza party"],["🎪🐘","circus"],["🦷🧚","tooth fairy"],["🌊🐎","seahorse"],["📧💌","email"],["🏀⭐","all star"],["🍦🥤","milkshake"],["🎩🐇","magic trick"],["🌴🏝️","island"],["🐍🎲","snakes"],["🧲🐟","magnet"],["🎸🦅","eagle"],["👻🏠","haunted house"],["🔫💧","water gun"],["🍿🎬","movies"],["🦁👑","lion king"]
+];
+
+let questions,current,score,highScore=0,results,totalQ=20;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  questions=shuffle([...BANK]).slice(0,totalQ);
+  current=0;score=0;results=[];
+  updateHUD();
+  showQuestion();
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('qnum').textContent=(current+1);
+  document.getElementById('high').textContent=highScore;
+}
+
+function showQuestion(){
+  if(current>=questions.length){endGame();return}
+  let[emoji,answer]=questions[current];
+  document.getElementById('emoji-display').textContent=emoji;
+  document.getElementById('answer-input').value='';
+  document.getElementById('answer-input').focus();
+  document.getElementById('feedback').innerHTML='&nbsp;';
+  // hint: show letter count and first letter
+  let hint=answer.length+' letters, starts with "'+answer[0].toUpperCase()+'"';
+  document.getElementById('hint').textContent=hint;
+  renderProgress();
+  updateHUD();
+}
+
+function normalize(s){return s.trim().toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ')}
+
+function submitAnswer(){
+  let input=document.getElementById('answer-input');
+  let val=normalize(input.value);
+  let correct=normalize(questions[current][1]);
+  let fb=document.getElementById('feedback');
+
+  if(!val){return}
+
+  // Accept close matches
+  if(val===correct||val===correct.replace(/ /g,'')||correct.includes(val)&&val.length>=correct.length-2){
+    score+=10;
+    fb.textContent='Correct! "'+questions[current][1]+'"';
+    fb.className='fb-ok';
+    results.push('ok');
+  }else{
+    fb.textContent='Wrong! It was "'+questions[current][1]+'"';
+    fb.className='fb-err';
+    results.push('wrong');
+  }
+  input.value='';
+  updateHUD();
+  renderProgress();
+  setTimeout(()=>{current++;showQuestion();},1500);
+}
+
+function skipQuestion(){
+  let fb=document.getElementById('feedback');
+  fb.textContent='Answer: "'+questions[current][1]+'"';
+  fb.className='fb-skip';
+  results.push('skip');
+  renderProgress();
+  setTimeout(()=>{current++;showQuestion();},1500);
+}
+
+function renderProgress(){
+  let el=document.getElementById('progress');
+  el.innerHTML='';
+  for(let i=0;i<totalQ;i++){
+    let d=document.createElement('div');
+    d.className='prog-dot';
+    if(i<results.length){
+      if(results[i]==='ok')d.classList.add('prog-ok');
+      else if(results[i]==='wrong')d.classList.add('prog-wrong');
+      else d.classList.add('prog-skip');
+    }
+    if(i===current&&i>=results.length)d.classList.add('prog-current');
+    el.appendChild(d);
+  }
+}
+
+function endGame(){
+  if(score>highScore)highScore=score;
+  let correctCount=results.filter(r=>r==='ok').length;
+  let skipped=results.filter(r=>r==='skip').length;
+  document.getElementById('end-score').textContent='Score: '+score+' | High: '+highScore;
+  document.getElementById('end-detail').textContent=correctCount+' correct, '+(totalQ-correctCount-skipped)+' wrong, '+skipped+' skipped';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+document.getElementById('answer-input').addEventListener('keydown',e=>{if(e.key==='Enter')submitAnswer()});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

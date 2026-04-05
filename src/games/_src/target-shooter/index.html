@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Target Shooter</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:600px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.25rem .6rem;border-radius:.25rem}
+canvas{display:block;max-width:100%;cursor:crosshair;touch-action:none;border-radius:.5rem}
+.wind{text-align:center;font-size:.9rem;margin:.4rem 0;color:#94a3b8}
+.wind b{color:#3b82f6}
+.shots-row{display:flex;gap:.25rem;justify-content:center;margin:.3rem 0}
+.shot-dot{width:12px;height:12px;border-radius:50%;background:#334155}
+.shot-dot.used{background:#ef4444}
+.shot-dot.current{background:#facc15}
+.msg{text-align:center;color:#facc15;font-size:.9rem;min-height:1.2rem;margin:.2rem 0}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Target Shooter</h2>
+<p>Archery target practice! Click/tap to aim, drag to set power, release to shoot. Wind affects your shot. 10 arrows per round. Bullseye = 10 points!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2>Round Complete</h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Target Shooter</h1>
+<div class="hud">
+<span>Score: <b id="score">0</b></span>
+<span>Arrow: <b id="arrow">1</b>/10</span>
+<span>Best: <b id="high">0</b></span>
+</div>
+<div class="wind" id="wind">Wind: <b>0</b> mph</div>
+<canvas id="canvas" width="500" height="500"></canvas>
+<div class="shots-row" id="shotsRow"></div>
+<div class="msg" id="msg">Click on the target to shoot!</div>
+</div>
+<script>
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const W=500,H=500,CX=W/2,CY=H/2,MAX_R=200;
+let score,arrowNum,highScore=0,wind,shots,aiming,aimStart,gameActive=false,animating=false;
+const RINGS=[
+  {r:20,pts:10,color:'#facc15',label:'X'},
+  {r:50,pts:9,color:'#ef4444'},
+  {r:80,pts:8,color:'#ef4444'},
+  {r:110,pts:7,color:'#3b82f6'},
+  {r:140,pts:6,color:'#3b82f6'},
+  {r:160,pts:5,color:'#1e293b'},
+  {r:180,pts:4,color:'#1e293b'},
+  {r:200,pts:3,color:'#e2e8f0'},
+];
+function resize(){let w=Math.min(500,window.innerWidth-16);canvas.style.width=w+'px';canvas.style.height=w+'px';}
+window.addEventListener('resize',resize);
+function newWind(){wind=(Math.random()-0.5)*30;document.getElementById('wind').innerHTML=`Wind: <b>${wind>0?'→':'←'} ${Math.abs(wind).toFixed(1)}</b> mph`;}
+function drawTarget(){
+  ctx.clearRect(0,0,W,H);
+  // background
+  ctx.fillStyle='#22c55e';ctx.fillRect(0,H-40,W,40);
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H-40);
+  // target rings
+  for(let i=RINGS.length-1;i>=0;i--){
+    let ring=RINGS[i];
+    ctx.beginPath();ctx.arc(CX,CY-20,ring.r,0,Math.PI*2);
+    ctx.fillStyle=ring.color;ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=1;ctx.stroke();
+  }
+  // ring labels
+  ctx.fillStyle='rgba(255,255,255,0.4)';ctx.font='10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+  RINGS.forEach(ring=>{
+    if(ring.pts<=8)ctx.fillText(ring.pts,CX+ring.r-10,CY-20);
+  });
+  // bullseye dot
+  ctx.beginPath();ctx.arc(CX,CY-20,5,0,Math.PI*2);ctx.fillStyle='#facc15';ctx.fill();
+  // previous shots
+  shots.forEach(s=>{
+    ctx.beginPath();ctx.arc(s.x,s.y,4,0,Math.PI*2);
+    ctx.fillStyle='rgba(99,102,241,0.8)';ctx.fill();
+    ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;ctx.stroke();
+  });
+}
+function calcScore(x,y){
+  let d=Math.hypot(x-CX,y-(CY-20));
+  for(let ring of RINGS){
+    if(d<=ring.r)return ring.pts;
+  }
+  return 0;
+}
+function shoot(clickX,clickY){
+  if(animating||!gameActive||arrowNum>10)return;
+  // apply wind
+  let windOffset=wind*1.5;
+  let finalX=clickX+windOffset;
+  let finalY=clickY;
+  // clamp to canvas
+  finalX=Math.max(10,Math.min(W-10,finalX));
+  // animate arrow
+  animating=true;
+  let startPos={x:CX,y:H+20};
+  let endPos={x:finalX,y:finalY};
+  let t=0;
+  function animFrame(){
+    t+=0.05;
+    if(t>=1){
+      t=1;animating=false;
+      let pts=calcScore(endPos.x,endPos.y);
+      score+=pts;
+      shots.push({x:endPos.x,y:endPos.y,pts});
+      document.getElementById('score').textContent=score;
+      document.getElementById('msg').textContent=pts>=10?'BULLSEYE! +10':pts>0?`+${pts} points`:'Miss!';
+      document.getElementById('msg').style.color=pts>=8?'#22c55e':pts>0?'#facc15':'#ef4444';
+      arrowNum++;
+      updateShotsRow();
+      if(arrowNum>10){
+        setTimeout(endRound,800);return;
+      }
+      newWind();
+      document.getElementById('arrow').textContent=arrowNum;
+      drawTarget();return;
+    }
+    // ease out
+    let et=1-Math.pow(1-t,3);
+    let cx=startPos.x+(endPos.x-startPos.x)*et;
+    let cy=startPos.y+(endPos.y-startPos.y)*et;
+    drawTarget();
+    // draw flying arrow
+    ctx.save();
+    let angle=Math.atan2(endPos.y-startPos.y,endPos.x-startPos.x);
+    ctx.translate(cx,cy);ctx.rotate(angle);
+    ctx.fillStyle='#facc15';
+    ctx.fillRect(-15,-2,30,4);
+    // arrowhead
+    ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(10,-5);ctx.lineTo(10,5);ctx.closePath();ctx.fill();
+    // fletching
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath();ctx.moveTo(-15,0);ctx.lineTo(-20,-5);ctx.lineTo(-12,0);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(-15,0);ctx.lineTo(-20,5);ctx.lineTo(-12,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+    requestAnimationFrame(animFrame);
+  }
+  requestAnimationFrame(animFrame);
+}
+function updateShotsRow(){
+  let row=document.getElementById('shotsRow');row.innerHTML='';
+  for(let i=1;i<=10;i++){
+    let dot=document.createElement('div');dot.className='shot-dot';
+    if(i<arrowNum)dot.classList.add('used');
+    if(i===arrowNum)dot.classList.add('current');
+    row.appendChild(dot);
+  }
+}
+function endRound(){
+  gameActive=false;
+  if(score>highScore)highScore=score;
+  let avg=(score/10).toFixed(1);
+  document.getElementById('endMsg').textContent=`Score: ${score}/100 | Avg: ${avg} | Best: ${highScore}`;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+canvas.addEventListener('click',e=>{
+  if(!gameActive||animating)return;
+  let rect=canvas.getBoundingClientRect();
+  let sx=W/rect.width,sy=H/rect.height;
+  let x=(e.clientX-rect.left)*sx,y=(e.clientY-rect.top)*sy;
+  shoot(x,y);
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(!gameActive||animating)return;
+  let rect=canvas.getBoundingClientRect();
+  let sx=W/rect.width,sy=H/rect.height;
+  let t=e.touches[0];
+  let x=(t.clientX-rect.left)*sx,y=(t.clientY-rect.top)*sy;
+  shoot(x,y);
+},{passive:false});
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  score=0;arrowNum=1;shots=[];gameActive=true;animating=false;
+  newWind();updateShotsRow();drawTarget();
+  document.getElementById('score').textContent=0;
+  document.getElementById('arrow').textContent=1;
+  document.getElementById('high').textContent=highScore;
+  document.getElementById('msg').textContent='Click on the target to shoot!';
+  document.getElementById('msg').style.color='#facc15';
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'target-shooter',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+resize();
+</script>
+</body>
+</html>

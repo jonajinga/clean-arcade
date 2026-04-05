@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Speed Math</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:1.5rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#game{max-width:450px;width:100%;text-align:center}
+#timer-bar{height:10px;background:#334155;border-radius:5px;margin:.75rem 0;overflow:hidden}
+#timer-fill{height:100%;background:#22c55e;width:100%;transition:width 0.5s linear}
+#equation{font-size:3rem;font-weight:800;margin:1.5rem 0;color:#facc15;min-height:4rem;display:flex;align-items:center;justify-content:center}
+#answer-input{width:180px;padding:14px;font-size:1.5rem;text-align:center;border:3px solid #334155;border-radius:8px;background:#1e293b;color:#e2e8f0;outline:none;font-weight:700}
+#answer-input:focus{border-color:#6366f1}
+#feedback{font-size:1.3rem;font-weight:700;min-height:2rem;margin:.75rem 0}
+.fb-correct{color:#22c55e}.fb-wrong{color:#ef4444}
+#streak-bar{display:flex;gap:3px;justify-content:center;margin:.5rem 0;min-height:16px;flex-wrap:wrap}
+.streak-dot{width:14px;height:14px;border-radius:50%}
+.dot-correct{background:#22c55e}
+.dot-wrong{background:#ef4444}
+</style>
+</head>
+<body>
+<h1>Speed Math</h1>
+<div id="hud">
+<div>Score: <span id="score">0</span></div>
+<div>Time: <span id="time">60</span>s</div>
+<div>Streak: <span id="streak">0</span></div>
+<div>High: <span id="high">0</span></div>
+</div>
+<div id="game">
+<div id="timer-bar"><div id="timer-fill"></div></div>
+<div id="equation"></div>
+<input type="number" id="answer-input" placeholder="?" autocomplete="off" inputmode="numeric">
+<div id="feedback">&nbsp;</div>
+<div id="streak-bar"></div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Speed Math</h2>
+<p>Solve as many equations as you can in 60 seconds! Type your answer and press Enter. Difficulty increases as you go. Build streaks for bonus points!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2>Time's Up!</h2>
+<p class="score" id="end-score"></p>
+<p id="end-stats"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='speed-math';
+let score,highScore=0,timer,timerInt,streak,answered,correct,difficulty,currentAnswer,results;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;timer=60;streak=0;answered=0;correct=0;difficulty=1;results=[];
+  document.getElementById('feedback').innerHTML='&nbsp;';
+  document.getElementById('streak-bar').innerHTML='';
+  updateHUD();
+  newEquation();
+  document.getElementById('answer-input').value='';
+  document.getElementById('answer-input').focus();
+  clearInterval(timerInt);
+  timerInt=setInterval(()=>{
+    timer--;
+    document.getElementById('time').textContent=timer;
+    let pct=timer/60*100;
+    document.getElementById('timer-fill').style.width=pct+'%';
+    document.getElementById('timer-fill').style.background=timer<10?'#ef4444':timer<20?'#facc15':'#22c55e';
+    if(timer<=0){clearInterval(timerInt);endGame();}
+  },1000);
+}
+
+function newEquation(){
+  let maxNum,ops;
+  if(difficulty<=3){maxNum=12;ops=['+','-'];}
+  else if(difficulty<=6){maxNum=20;ops=['+','-','*'];}
+  else if(difficulty<=10){maxNum=50;ops=['+','-','*'];}
+  else{maxNum=100;ops=['+','-','*','/'];}
+
+  let op=ops[Math.floor(Math.random()*ops.length)];
+  let a,b,answer;
+
+  if(op==='+'){
+    a=Math.floor(Math.random()*maxNum)+1;
+    b=Math.floor(Math.random()*maxNum)+1;
+    answer=a+b;
+  }else if(op==='-'){
+    a=Math.floor(Math.random()*maxNum)+1;
+    b=Math.floor(Math.random()*a)+1;
+    answer=a-b;
+  }else if(op==='*'){
+    a=Math.floor(Math.random()*Math.min(maxNum,12))+1;
+    b=Math.floor(Math.random()*12)+1;
+    answer=a*b;
+  }else{
+    b=Math.floor(Math.random()*12)+1;
+    answer=Math.floor(Math.random()*12)+1;
+    a=b*answer;
+  }
+
+  let display=op==='*'?'x':op;
+  document.getElementById('equation').textContent=a+' '+display+' '+b+' = ?';
+  currentAnswer=answer;
+}
+
+function submitAnswer(){
+  let input=document.getElementById('answer-input');
+  let val=parseInt(input.value);
+  input.value='';
+  if(isNaN(val))return;
+
+  answered++;
+  let fb=document.getElementById('feedback');
+
+  if(val===currentAnswer){
+    correct++;streak++;
+    let pts=10+(streak>1?streak*2:0);
+    score+=pts;
+    difficulty=Math.floor(correct/3)+1;
+    fb.textContent='Correct! +'+pts;
+    fb.className='fb-correct';
+    results.push(true);
+  }else{
+    streak=0;
+    fb.textContent='Wrong! Answer: '+currentAnswer;
+    fb.className='fb-wrong';
+    results.push(false);
+  }
+
+  updateHUD();
+  renderStreak();
+  newEquation();
+  input.focus();
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('streak').textContent=streak;
+  document.getElementById('high').textContent=highScore;
+}
+
+function renderStreak(){
+  let bar=document.getElementById('streak-bar');
+  bar.innerHTML='';
+  let recent=results.slice(-20);
+  for(let r of recent){
+    let d=document.createElement('div');
+    d.className='streak-dot '+(r?'dot-correct':'dot-wrong');
+    bar.appendChild(d);
+  }
+}
+
+function endGame(){
+  if(score>highScore)highScore=score;
+  let acc=answered>0?Math.round(correct/answered*100):0;
+  let epm=correct; // equations per minute (60s)
+  document.getElementById('end-score').textContent='Score: '+score+' | High: '+highScore;
+  document.getElementById('end-stats').textContent=correct+'/'+answered+' correct ('+acc+'%) | '+epm+' equations/min | Difficulty reached: '+difficulty;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+document.getElementById('answer-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter')submitAnswer();
+});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

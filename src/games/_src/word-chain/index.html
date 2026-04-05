@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Chain</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#game{max-width:500px;width:100%;margin:0 auto}
+#chain{min-height:200px;max-height:300px;overflow-y:auto;background:#1e293b;border-radius:6px;padding:.75rem;margin:.5rem 0;display:flex;flex-direction:column;gap:4px}
+.word-item{padding:4px 8px;border-radius:4px;font-size:1rem}
+.word-item.player{background:#6366f1;color:#fff;align-self:flex-end;text-align:right}
+.word-item.cpu{background:#334155;color:#e2e8f0;align-self:flex-start}
+#timer-bar{height:6px;background:#334155;border-radius:3px;margin:.5rem 0;overflow:hidden}
+#timer-fill{height:100%;background:#22c55e;transition:width 0.1s linear;width:100%}
+#input-row{display:flex;gap:8px}
+#word-input{flex:1;padding:10px;font-size:1rem;border:2px solid #334155;border-radius:6px;background:#1e293b;color:#e2e8f0;outline:none}
+#word-input:focus{border-color:#6366f1}
+#submit-btn{padding:10px 20px;font-size:1rem;border:none;border-radius:6px;background:#22c55e;color:#0f172a;font-weight:600;cursor:pointer}
+#message{text-align:center;margin:.5rem 0;min-height:1.5rem;color:#ef4444;font-size:.9rem}
+#last-letter{font-size:1.2rem;text-align:center;color:#facc15;margin:.25rem 0}
+</style>
+</head>
+<body>
+<h1>Word Chain</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>Round: <span id="round">0</span></div><div>High: <span id="high">0</span></div></div>
+<div id="game">
+<div id="last-letter"></div>
+<div id="timer-bar"><div id="timer-fill"></div></div>
+<div id="chain"></div>
+<div id="message"></div>
+<div id="input-row">
+<input type="text" id="word-input" placeholder="Type a word..." autocomplete="off" autocapitalize="off">
+<button id="submit-btn" onclick="submitWord()">Go</button>
+</div>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Word Chain</h2>
+<p>Take turns with the CPU. Each word must start with the last letter of the previous word. 10 seconds per turn. No repeats!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2 id="end-title">Game Over</h2>
+<p class="score" id="end-score"></p>
+<p id="end-msg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='word-chain';
+const WORDS=["about","above","after","again","agree","allow","alone","along","also","always","among","anger","animal","answer","apple","area","around","away","back","ball","band","bank","basic","beach","bear","beat","begin","below","best","bird","black","blood","blue","board","boat","body","bone","book","born","both","brain","bread","break","bring","broad","brown","build","burn","call","calm","came","camp","card","care","carry","case","catch","cause","cell","chair","chance","change","check","child","city","claim","class","clean","clear","climb","clock","close","cloud","cold","color","come","common","cool","copy","corn","cost","could","count","course","cover","cross","crowd","current","dance","dark","data","dead","deal","dear","death","deep","degree","design","detail","develop","die","dinner","direct","doctor","does","done","door","double","down","draw","dream","dress","drink","drive","drop","drug","during","each","early","earth","east","easy","edge","eight","else","empty","end","enemy","energy","enjoy","enough","enter","equal","even","evening","event","ever","every","exact","example","except","exist","expect","experience","explain","express","eye","face","fact","fail","fair","fall","family","farm","fast","father","fear","feel","field","fight","fill","final","find","fine","finger","fire","firm","first","fish","five","flat","floor","flower","follow","food","foot","force","foreign","forest","forget","form","former","forward","four","free","fresh","friend","from","front","fruit","full","further","future","game","garden","general","give","glad","glass","gold","gone","good","govern","grass","gray","great","green","grew","ground","group","grow","guess","guide","hair","half","hall","hand","hang","happen","happy","hard","have","head","hear","heart","heat","heavy","help","here","high","hill","history","hold","hole","home","hope","horse","hospital","hotel","hour","house","huge","human","hundred","hunt","hurry","idea","image","include","increase","indeed","indicate","industry","instead","interest","into","iron","island","issue","item","join","jump","just","justice","keep","kill","kind","king","kitchen","knee","knew","know","lack","lady","lake","land","language","large","last","late","laugh","lead","learn","least","leave","left","less","letter","level","life","lift","light","like","likely","line","list","listen","little","live","long","look","lord","lose","love","lower","luck","lunch","machine","main","major","make","male","manage","many","mark","market","mass","master","matter","maybe","mean","measure","meet","member","memory","mention","might","mile","mind","mine","minute","miss","modern","moment","money","month","moon","more","morning","most","mother","mountain","mouth","move","much","music","must","name","nation","nature","near","need","network","never","news","next","nice","night","nine","none","normal","north","note","nothing","notice","number","occur","offer","office","often","once","only","open","operate","order","other","outside","over","page","paint","pair","paper","park","part","party","pass","past","path","pattern","peace","people","perhaps","period","person","phone","pick","picture","piece","place","plan","plant","plate","play","please","point","pool","poor","popular","position","possible","power","prepare","present","president","pressure","pretty","prevent","price","private","probably","problem","produce","product","program","project","prove","provide","public","pull","push","quality","question","quick","quiet","quite","race","radio","rain","raise","range","rate","rather","reach","read","ready","real","reason","receive","record","reduce","reflect","region","relate","remain","remember","remove","repeat","report","require","rest","result","return","rich","ride","right","ring","rise","river","road","rock","role","room","rule","safe","same","save","scene","school","science","score","season","seat","second","section","security","seek","seem","sell","send","sense","serious","serve","service","seven","several","shake","shall","shape","share","sharp","short","shot","should","shoulder","show","side","sign","simple","since","sing","single","sister","site","situation","size","skill","skin","sleep","small","smile","snow","social","society","soldier","some","somebody","someone","something","sometimes","song","soon","sort","sound","south","space","speak","special","spend","sport","spread","spring","square","stage","stand","standard","star","start","state","station","stay","step","still","stock","stone","stop","store","story","strange","street","strong","structure","student","study","stuff","subject","success","such","sudden","suffer","suggest","summer","support","sure","surface","system","table","take","talk","task","teach","team","technology","tell","tend","term","test","than","thank","that","their","them","then","there","these","they","thick","thin","thing","think","third","this","those","though","thought","thousand","three","through","throw","thus","time","tiny","today","together","tonight","tool","total","touch","tough","toward","town","trade","train","travel","tree","trial","trip","trouble","true","trust","truth","turn","twelve","twenty","type","under","understand","unit","until","upon","usually","value","various","very","view","village","visit","voice","vote","wait","walk","wall","want","watch","water","weapon","wear","week","weight","well","west","western","what","whatever","wheel","when","where","whether","which","while","white","whole","whom","whose","wide","wife","wild","will","wind","window","wish","with","within","without","woman","wonder","wood","word","work","world","worry","worth","would","write","wrong","yard","yeah","year","young","yourself","youth","able","accept","action","active","actual","address","admit","adult","advance","advice","affect","afford","agent","ahead","alert","alive","annual","apart","appeal","apply","army","arrange","arrest","arrive","aside","assume","attach","attack","attempt","attend","attract","autumn","avoid","award","aware","awful","baby","bag","balance","battle","bedroom","beer","believe","bell","belong","bend","beside","beyond","billion","birth","bishop","bite","blame","blank","bless","blind","block","blow","bomb","bond","bore","borrow","boss","bother","bottle","bottom","bound","bowl","branch","brave","breakfast","breath","breathe","brick","bridge","brief","bright","brilliant","broad","broken","brother","budget","bunch","bureau","busy","butter","buyer","cabin","cabinet","cable","cake","calculate","camera","campaign","cancer","capable","capital","captain","capture","careful","career","careful","carry","cast","cat","category","celebrate","central","centre","century","ceremony","chain","chairman","chamber","champion","chapter","character","charge","charity","chart","chase","cheap","cheese","chemical","chest","chicken","chief","chip","chocolate","choice","choose","church","circle","citizen","civil","classic","climate","clothes","coach","coalition","code","coffee","collapse","colleague","collect","college","column","combine","comfort","command","comment","commercial","commission","commit","committee","communicate","community","compare","competition","complain","complete","complex","concentrate","concept","concern","conclude","condition","conduct","conference","confidence","confirm","conflict","congress","connect","conscious","consider","constant","construct","consumer","contact","contain","content","context","continue","contract","contrast","contribute","control","convention","conversation","convert","convince","corner","correct","cotton","council","counter","couple","courage","cousin","coverage","crack","crash","crazy","cream","create","creature","credit","crew","crime","criminal","crisis","critic","critical","crop","crowd","cry","cultural","culture","currency","customer","cycle","daily","damage","dangerous","dare","daughter","debate","decade","decent","decision","declare","decline","defeat","defend","deficit","define","definitely","degree","delay","deliberate","deliver","demand","democracy","democratic","deny","depart","depend","depression","derive","describe","deserve","desire","desk","desperate","destroy","destruction","detect","determine","device","dialogue","diamond","diet","differ","difference","different","difficult","dimension","dinner","direction","director","dirty","disappear","discipline","discover","discrimination","discuss","disease","display","distance","distinct","distribute","district","divide","division","doctor","document","dollar","domestic","dominant","double","doubt","dozen","draft","drag","dramatic","dress","drink","driver","drop","dust","duty","each","eager","earn","eastern","economy","editor","education","effect","effective","effort","election","element","eliminate","emerge","emission","emotion","emphasis","employ","enable","encourage","engage","engineer","enormous","enterprise","entire","entrance","entry","environment","episode","equipment","escape","especially","essay","essential","establish","estimate","ethnic","evaluate","eventual","evidence","evil","evolution","emerge","examine","excellent","exchange","exchange","exciting","executive","exercise","exhibit","exhibition","expansion","expensive","experiment","expert","exploit","explore","explosion","expose","extend","extent","extra","extreme","facility","factor","factory","failure","faith","familiar","famous","fancy","fashion","fault","favor","favorite","feature","federal","fiction","field","fifteen","fifth","fifty","file","finance","financial","finding","finger","finish","float","floor","flow","fly","folk","football","forever","forget","formal","formula","fortune","foundation","founder","fourth","frame","framework","freedom","frequent","friendly","fruit","fuel","function","fundamental","funny","gain","gallery","gate","gather","gender","general","generate","generation","genetic","gentleman","genuine","giant","gift","girl","give","global","goal","golden","golf","grab","grade","grand","grandmother","grant","grave","gray","greatest","guarantee","guard","guilty","gun","habit","handle","harbor","hardly","hate","headquarters","healthy","height","hello","hero","hide","highway","hire","historian","honest","hook","horizon","host","hostile","household","housing","hungry","hurt","hydrogen","identity","ignore","illegal","illustrate","imagination","imagine","immediate","immigrant","impact","implement","implication","imply","import","impose","impossible","impress","impression","improve","incident","income","incorporate","independence","independent","index","Indian","individual","inevitable","inflation","influence","inform","initial","initiative","injury","inner","innocent","innovation","input","inquiry","insert","inside","insist","install","instance","institution","insurance","intellectual","intelligent","intend","intense","intention","internal","international","Internet","interpret","intervention","interview","introduce","invasion","invest","investigate","investigation","investor","invisible","invitation","involve","Iraqi","Islamic","isolate","Israeli","justify","keen","killer","kiss","labor","lake","landscape","largely","launch","lawn","lawsuit","lawyer","layer","leadership","lean","leather","lecture","legal","legend","legislation","legitimate","length","lesson","liberal","liberty","library","license","lifetime","likewise","limitation","limited","link","liquid","literary","literature","load","loan","lobby","local","locate","lock","long","loose","loss","loud","lover","lower","loyal","magazine","magic","magnetic","maintain","maintenance","maker","manner","manufacturer","manufacturing","margin","marine","match","material","math","mayor","meal","meanwhile","meat","mechanism","media","medium","mental","merely","message","metal","method","middle","might","military","milk","million","minister","minor","minority","miracle","mirror","missile","mission","mistake","mixture","model","moderate","modify","mom","momentum","monitor","mood","moral","moreover","mortgage","mostly","motor","mount","movement","multiple","murder","muscle","museum","Muslim","mutual","mystery","myth","naked","narrative","narrow","nasty","naval","nearby","necessarily","neck","negative","negotiate","neighbor","neither","nerve","nevertheless","newly","newspaper","nobody","nod","noise","nomination","nominee","nor","northeast","northern","nose","notable","novel","nowhere","nuclear","numerous","nurse","nutrition","object","objection","objective","obligation","observation","observe","observer","obstacle","obtain","obvious","occasion","occasionally","occupation","occupy","ocean","odd","offense","offensive","official","Olympic","ongoing","online","opponent","opportunity","oppose","opposite","opposition","option","orange","ordinary","organic","organization","organize","orientation","origin","original","otherwise","ought","outcome","output","overall","overcome","overlook","overwhelming","owner","package","panel","parent","partially","participate","particular","partly","partner","passenger","passion","passive","pause","payment","peak","peer","penalty","pension","perceive","percentage","perception","perfect","perfectly","performance","permanent","permission","permit","personally","perspective","persuade","phase","phenomenon","philosophy","photograph","phrase","physician","pilot","pine","pitch","pizza","plain","planet","planning","plastic","platform","pleasure","plenty","pocket","poem","poet","poetry","pollution","pond","pool","pop","portion","portrait","portray","pose","possess","possession","post","potato","potential","poverty","powder","powerful","practical","practice","pray","prayer","precisely","predict","prefer","pregnancy","prejudice","premier","premise","premium","presence","preserve","presidential","presumably","pretend","prevent","previously","pride","priest","primarily","primary","prime","principal","principle","prior","priority","prisoner","privacy","probe","proceed","process","processor","professor","profile","profit","programming","progress","prominent","promise","promote","proportion","proposal","propose","prosecutor","prospect","protect","protein","protest","proud","psychological","pump","punch","purchase","pure","pursue","qualification","qualify","quarter","rage","rapid","rare","rarely","ratio","raw","reaction","reading","realistic","reality","realize","rear","reasonable","recall","recovery","recruit","reference","reform","refuse","regard","regime","regional","register","regulate","regulation","reinforce","reject","relationship","relative","release","relevant","relief","religion","religious","reluctant","rely","remarkable","remote","removal","render","repeatedly","replace","replacement","reporter","represent","representation","representative","reproduce","republic","reputation","request","researcher","reservation","reserve","resident","residential","resign","resist","resistance","resolution","resolve","resort","resource","respond","response","responsibility","responsible","restaurant","restoration","restore","restriction","retain","retire","retirement","retreat","reveal","revenue","reverse","revolution","rhetoric","rhythm","rid","rifle","ritual","rival","romantic","roof","root","rope","rough","route","routine","royal","ruling","rural","rush","sacred","sacrifice","saint","sake","salary","sand","satellite","satisfaction","satisfy","sauce","scared","scenario","schedule","scholar","scholarship","scientific","scream","screen","script","search","secondary","secretary","sector","segment","seize","selection","senator","senior","sentence","separate","sequence","series","serve","session","settle","settlement","severe","sexual","shadow","shallow","shame","shelf","shell","shelter","shift","shine","ship","shock","shoe","shooting","shopping","shore","shortage","shoulder","shout","shower","sight","signal","significance","significant","silence","silent","silver","similarly","sink","sir","slip","slow","smart","smell","smoke","smooth","snap","softly","soil","solar","somewhat","sophisticated","soul","southeast","southern","southwest","span","spark","speaker","specific","specifically","spectrum","speech","speed","spell","spending","sphere","spiritual","split","spokesman","sponsor","spot","spray","stability","stable","stadium","staff","stair","stake","standing","stare","statement","statistics","statue","status","steady","steal","steel","stem","stiff","stimulus","stomach","straight","strain","strategic","strategy","streak","stream","strengthen","stretch","strike","string","strip","stroke","struggle","studio","stupid","substance","substantial","succeed","sufficient","sugar","suicide","suit","super","supply","supporter","suppose","supreme","survive","suspect","suspend","sustain","swallow","swear","sweep","sweet","swim","swing","switch","symbol","sympathy","syndrome","tabloid","tackle","tail","talent","target","taxpayer","teenager","temple","temporary","tennis","tension","terrorist","testimony","texture","theme","theory","therapy","thick","thinking","threat","threaten","throat","ticket","tight","timber","tip","tissue","title","tobacco","tolerance","tomorrow","tone","tongue","tournament","tower","trace","track","tradition","traffic","tragedy","trail","trainer","transaction","transformation","transition","translate","transmission","transport","transportation","trap","treasure","treaty","tremendous","trend","trick","troop","tropical","truck","truly","tune","tunnel","twice","twist","typical","ugly","ultimate","unable","uncle","undergo","undermine","undertake","unemployment","unfair","unfortunately","unhappy","uniform","unique","universe","unknown","unless","unlikely","unusual","upper","upset","urban","urge","useful","user","usual","utility","vacation","valley","valuable","variable","variation","vast","vehicle","venture","version","veteran","victim","violation","violence","violent","virtual","virtue","visible","visitor","visual","vital","volume","voluntary","volunteer","vulnerability","wage","wake","warm","warn","warning","wash","waste","wave","weakness","wealth","weather","weigh","welcome","welfare","wheel","wherever","whisper","widely","willing","winner","winter","wire","wisdom","withdraw","witness","wooden","worker","working","workplace","workshop","wrap","writer","writing","yellow","zone"];
+
+let used,chain,score,highScore=0,round,lastLetter,timer,timerInterval,playerTurn;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  used=new Set();chain=[];score=0;round=0;playerTurn=true;lastLetter='';
+  document.getElementById('chain').innerHTML='';
+  document.getElementById('message').textContent='';
+  document.getElementById('last-letter').textContent='You go first! Any word.';
+  document.getElementById('word-input').value='';
+  document.getElementById('word-input').focus();
+  updateHUD();
+  startTimer();
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('round').textContent=round;
+  document.getElementById('high').textContent=highScore;
+}
+
+function startTimer(){
+  clearInterval(timerInterval);
+  timer=10;
+  document.getElementById('timer-fill').style.width='100%';
+  document.getElementById('timer-fill').style.background='#22c55e';
+  timerInterval=setInterval(()=>{
+    timer-=0.1;
+    let pct=Math.max(0,timer/10*100);
+    document.getElementById('timer-fill').style.width=pct+'%';
+    if(timer<3)document.getElementById('timer-fill').style.background='#ef4444';
+    else if(timer<5)document.getElementById('timer-fill').style.background='#facc15';
+    if(timer<=0){
+      clearInterval(timerInterval);
+      if(playerTurn)endGame('Time\'s up!');
+      else endGame('CPU couldn\'t think of a word. You win!');
+    }
+  },100);
+}
+
+function addWord(word,isPlayer){
+  let div=document.createElement('div');
+  div.className='word-item '+(isPlayer?'player':'cpu');
+  div.textContent=word;
+  let chainEl=document.getElementById('chain');
+  chainEl.appendChild(div);
+  chainEl.scrollTop=chainEl.scrollHeight;
+}
+
+function submitWord(){
+  if(!playerTurn)return;
+  let input=document.getElementById('word-input');
+  let word=input.value.trim().toLowerCase();
+  input.value='';
+  if(!word){return}
+  if(!WORDS.includes(word)){
+    document.getElementById('message').textContent='Not a valid word!';return;
+  }
+  if(used.has(word)){
+    document.getElementById('message').textContent='Already used!';return;
+  }
+  if(lastLetter&&word[0]!==lastLetter){
+    document.getElementById('message').textContent='Must start with "'+lastLetter.toUpperCase()+'"!';return;
+  }
+  document.getElementById('message').textContent='';
+  used.add(word);
+  chain.push(word);
+  addWord(word,true);
+  lastLetter=word[word.length-1];
+  score+=word.length;
+  round++;
+  updateHUD();
+  document.getElementById('last-letter').textContent='Next letter: '+lastLetter.toUpperCase();
+  playerTurn=false;
+  clearInterval(timerInterval);
+  setTimeout(cpuTurn,800+Math.random()*1200);
+}
+
+function cpuTurn(){
+  let options=WORDS.filter(w=>w[0]===lastLetter&&!used.has(w));
+  if(options.length===0){endGame('CPU is stuck. You win!');return}
+  let word=options[Math.floor(Math.random()*options.length)];
+  used.add(word);
+  chain.push(word);
+  addWord(word,false);
+  lastLetter=word[word.length-1];
+  round++;
+  document.getElementById('last-letter').textContent='Your turn! Start with: '+lastLetter.toUpperCase();
+  playerTurn=true;
+  document.getElementById('word-input').focus();
+  startTimer();
+}
+
+function endGame(msg){
+  clearInterval(timerInterval);
+  if(score>highScore)highScore=score;
+  updateHUD();
+  document.getElementById('end-title').textContent=msg.includes('win')?'You Win!':'Game Over';
+  document.getElementById('end-score').textContent='Score: '+score+' | '+round+' rounds';
+  document.getElementById('end-msg').textContent=msg;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+document.getElementById('word-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter')submitWord();
+});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

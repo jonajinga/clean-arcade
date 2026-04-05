@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spot the Difference</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.3rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:800px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.25rem .6rem;border-radius:.25rem}
+.boards{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
+.board{position:relative;background:#1e293b;border-radius:.25rem;overflow:hidden}
+.board .shape{position:absolute;border-radius:3px}
+.board .found-marker{position:absolute;border:3px solid #22c55e;border-radius:50%;pointer-events:none;z-index:5}
+.feedback{font-size:1rem;min-height:1.5rem;margin:.5rem 0;color:#facc15}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Spot the Difference</h2>
+<p>Two grids of colored shapes — find 5 differences! Click on the grid where you see a difference. Race against the clock!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2 id="endTitle"></h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Spot the Difference</h1>
+<div class="hud">
+<span>Found: <b id="found">0</b>/5</span>
+<span>Round: <b id="round">1</b></span>
+<span>Time: <b id="timer">0</b>s</span>
+<span>Score: <b id="score">0</b></span>
+</div>
+<div class="boards">
+<div class="board" id="boardL"></div>
+<div class="board" id="boardR"></div>
+</div>
+<div class="feedback" id="feedback"></div>
+</div>
+<script>
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316','#ec4899','#14b8a6'];
+const SHAPES=['rect','circle'];
+let shapes,diffs,foundDiffs,roundNum,totalScore,startTime,timerInt,highScore=0,boardSize;
+function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function calcSize(){boardSize=Math.min(350,Math.floor((window.innerWidth-32)/2));return boardSize;}
+function generateRound(){
+  calcSize();
+  shapes=[];diffs=[];foundDiffs=[];
+  let count=20+roundNum*3;
+  let cellW=boardSize,cellH=boardSize;
+  for(let i=0;i<count;i++){
+    let w=randInt(15,40),h=randInt(15,40);
+    shapes.push({
+      x:randInt(2,cellW-w-2),y:randInt(2,cellH-h-2),w,h,
+      color:COLORS[randInt(0,COLORS.length-1)],
+      shape:SHAPES[randInt(0,SHAPES.length-1)]
+    });
+  }
+  // pick 5 differences
+  let indices=[...Array(count).keys()].sort(()=>Math.random()-.5).slice(0,5);
+  indices.forEach(idx=>{
+    let type=randInt(0,2);
+    let alt={...shapes[idx]};
+    if(type===0){alt.color=COLORS[(COLORS.indexOf(alt.color)+randInt(1,COLORS.length-1))%COLORS.length];}
+    else if(type===1){alt.shape=alt.shape==='rect'?'circle':'rect';}
+    else{alt.x+=randInt(-15,15);alt.y+=randInt(-15,15);}
+    diffs.push({idx,alt,found:false});
+  });
+}
+function renderBoard(el,useDiffs,clickable){
+  el.style.width=boardSize+'px';el.style.height=boardSize+'px';
+  el.innerHTML='';
+  shapes.forEach((s,i)=>{
+    let d=useDiffs?diffs.find(df=>df.idx===i):null;
+    let sh=d?d.alt:s;
+    let div=document.createElement('div');div.className='shape';
+    div.style.left=sh.x+'px';div.style.top=sh.y+'px';div.style.width=sh.w+'px';div.style.height=sh.h+'px';
+    div.style.background=sh.color;
+    if(sh.shape==='circle')div.style.borderRadius='50%';
+    el.appendChild(div);
+  });
+  // show found markers
+  diffs.filter(d=>d.found).forEach(d=>{
+    let sh=useDiffs?d.alt:shapes[d.idx];
+    let m=document.createElement('div');m.className='found-marker';
+    m.style.left=(sh.x-5)+'px';m.style.top=(sh.y-5)+'px';
+    m.style.width=(sh.w+10)+'px';m.style.height=(sh.h+10)+'px';
+    el.appendChild(m);
+  });
+  if(clickable){
+    el.onclick=(e)=>{
+      let rect=el.getBoundingClientRect();
+      let x=(e.clientX-rect.left)*(boardSize/rect.width);
+      let y=(e.clientY-rect.top)*(boardSize/rect.height);
+      checkClick(x,y);
+    };
+  }
+}
+function render(){
+  renderBoard(document.getElementById('boardL'),false,true);
+  renderBoard(document.getElementById('boardR'),true,true);
+  document.getElementById('found').textContent=foundDiffs.length;
+  document.getElementById('round').textContent=roundNum;
+  document.getElementById('score').textContent=totalScore;
+}
+function checkClick(x,y){
+  let hit=false;
+  for(let d of diffs){
+    if(d.found)continue;
+    let s=shapes[d.idx];
+    let a=d.alt;
+    // check near either original or alt position
+    for(let sh of[s,a]){
+      if(x>=sh.x-10&&x<=sh.x+sh.w+10&&y>=sh.y-10&&y<=sh.y+sh.h+10){
+        d.found=true;foundDiffs.push(d);hit=true;
+        document.getElementById('feedback').textContent='Found one!';
+        document.getElementById('feedback').style.color='#22c55e';
+        break;
+      }
+    }
+    if(hit)break;
+  }
+  if(!hit){
+    document.getElementById('feedback').textContent='Nope — try again!';
+    document.getElementById('feedback').style.color='#ef4444';
+  }
+  render();
+  if(foundDiffs.length===5){
+    clearInterval(timerInt);
+    let elapsed=((Date.now()-startTime)/1000).toFixed(1);
+    totalScore+=Math.max(10,100-Math.round(elapsed));
+    roundNum++;
+    document.getElementById('feedback').textContent=`Round complete in ${elapsed}s! Next round...`;
+    document.getElementById('score').textContent=totalScore;
+    setTimeout(()=>{generateRound();startTime=Date.now();startTimer();render();document.getElementById('feedback').textContent='';},1500);
+  }
+}
+function startTimer(){
+  timerInt=setInterval(()=>{document.getElementById('timer').textContent=((Date.now()-startTime)/1000|0);},250);
+}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  roundNum=1;totalScore=0;
+  generateRound();startTime=Date.now();startTimer();render();
+  document.getElementById('feedback').textContent='';
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'spot-difference',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+window.addEventListener('resize',()=>{calcSize();render();});
+</script>
+</body>
+</html>

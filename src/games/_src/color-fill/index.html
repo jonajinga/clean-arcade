@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Fill</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:380px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:500px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.25rem .6rem;border-radius:.25rem}
+.grid{display:grid;gap:1px;margin:.5rem auto}
+.cell{border-radius:2px}
+.palette{display:flex;gap:.5rem;margin:.75rem 0;justify-content:center;flex-wrap:wrap}
+.pal-btn{width:44px;height:44px;border:3px solid transparent;border-radius:.25rem;cursor:pointer}
+.pal-btn:hover{border-color:#e2e8f0}
+.pal-btn.active{border-color:#facc15}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Color Fill</h2>
+<p>Flood-fill from the top-left corner. Pick a color to change all connected same-colored cells. Fill the entire grid in as few moves as possible!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2 id="endTitle"></h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Color Fill</h1>
+<div class="hud">
+<span>Moves: <b id="moves">0</b> / <b id="maxMoves">25</b></span>
+<span>Filled: <b id="filled">0</b>%</span>
+<span>Best: <b id="best">-</b></span>
+</div>
+<div class="grid" id="grid"></div>
+<div class="palette" id="palette"></div>
+</div>
+<script>
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316'];
+const GRID=14,MAX_MOVES=25;
+let grid,moves,bestScore=null,gameActive=false;
+function randGrid(){
+  grid=[];for(let r=0;r<GRID;r++){grid[r]=[];for(let c=0;c<GRID;c++)grid[r][c]=Math.random()*COLORS.length|0;}
+}
+function flood(newColor){
+  let old=grid[0][0];if(old===newColor)return;
+  let stack=[[0,0]],visited=new Set();
+  while(stack.length){
+    let[r,c]=stack.pop(),key=r*GRID+c;
+    if(visited.has(key))continue;visited.add(key);
+    if(grid[r][c]!==old)continue;
+    grid[r][c]=newColor;
+    if(r>0)stack.push([r-1,c]);if(r<GRID-1)stack.push([r+1,c]);
+    if(c>0)stack.push([r,c-1]);if(c<GRID-1)stack.push([r,c+1]);
+  }
+}
+function countFilled(){
+  let col=grid[0][0],count=0;
+  let stack=[[0,0]],visited=new Set();
+  while(stack.length){
+    let[r,c]=stack.pop(),key=r*GRID+c;
+    if(visited.has(key))continue;visited.add(key);
+    if(grid[r][c]!==col)continue;count++;
+    if(r>0)stack.push([r-1,c]);if(r<GRID-1)stack.push([r+1,c]);
+    if(c>0)stack.push([r,c-1]);if(c<GRID-1)stack.push([r,c+1]);
+  }
+  return count;
+}
+function render(){
+  let g=document.getElementById('grid');
+  let cellSize=Math.min(24,Math.floor((window.innerWidth-32)/GRID));
+  g.style.gridTemplateColumns=`repeat(${GRID},${cellSize}px)`;
+  g.innerHTML='';
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    let d=document.createElement('div');d.className='cell';
+    d.style.width=cellSize+'px';d.style.height=cellSize+'px';
+    d.style.background=COLORS[grid[r][c]];
+    g.appendChild(d);
+  }
+  let pct=Math.round(countFilled()/(GRID*GRID)*100);
+  document.getElementById('moves').textContent=moves;
+  document.getElementById('filled').textContent=pct;
+  document.getElementById('best').textContent=bestScore!==null?bestScore:'-';
+  // palette
+  let pal=document.getElementById('palette');pal.innerHTML='';
+  COLORS.forEach((col,i)=>{
+    let b=document.createElement('button');b.className='pal-btn'+(i===grid[0][0]?' active':'');
+    b.style.background=col;
+    b.onclick=()=>pickColor(i);
+    pal.appendChild(b);
+  });
+}
+function pickColor(i){
+  if(!gameActive||i===grid[0][0])return;
+  flood(i);moves++;render();
+  let total=GRID*GRID,filled=countFilled();
+  if(filled===total){
+    gameActive=false;
+    if(bestScore===null||moves<bestScore)bestScore=moves;
+    document.getElementById('endTitle').textContent='You Win!';
+    document.getElementById('endMsg').textContent=`Filled in ${moves} moves. Best: ${bestScore}`;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    saveState();
+  } else if(moves>=MAX_MOVES){
+    gameActive=false;
+    document.getElementById('endTitle').textContent='Out of Moves';
+    document.getElementById('endMsg').textContent=`Filled ${Math.round(filled/total*100)}%. Try again!`;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    saveState();
+  }
+}
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  randGrid();moves=0;gameActive=true;render();
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'color-fill',state:{bestScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){bestScore=e.data.state.bestScore||null;}});
+window.addEventListener('resize',()=>{if(gameActive)render();});
+</script>
+</body>
+</html>

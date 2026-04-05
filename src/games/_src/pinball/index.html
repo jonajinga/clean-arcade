@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pinball</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.5rem;margin:.5rem 0}
+canvas{display:block;border:1px solid #334155;border-radius:4px;max-width:100%;touch-action:none}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem}
+#hud span{color:#facc15}
+#pause-btn{padding:8px 24px;font-size:1.3rem;border:none;border-radius:6px;cursor:pointer;background:#334155;color:#e2e8f0;margin:.5rem 0}
+#touch-flippers{display:none;gap:2rem;margin:.5rem 0}
+#touch-flippers button{width:80px;height:56px;font-size:1rem;border:none;border-radius:8px;background:#6366f1;color:#fff;font-weight:700;cursor:pointer}
+@media(pointer:coarse){#touch-flippers{display:flex}}
+</style>
+</head>
+<body>
+<h1>Pinball</h1>
+<div id="hud"><div>Score: <span id="score">0</span></div><div>Balls: <span id="balls">3</span></div><div>High: <span id="high">0</span></div></div>
+<canvas id="c" width="360" height="600"></canvas>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+<div id="touch-flippers">
+<button ontouchstart="flipL=true" ontouchend="flipL=false">LEFT</button>
+<button ontouchstart="flipR=true" ontouchend="flipR=false">RIGHT</button>
+</div>
+<div id="start-overlay" class="overlay">
+<h2>Pinball</h2>
+<p>Left/Right arrow keys control flippers. Launch ball with Space. Hit bumpers and targets to score! 3 balls total.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2 id="end-title">Game Over</h2>
+<p class="score" id="end-score"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<script>
+const SLUG='pinball';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=360,H=600;
+let ball,score,ballsLeft,highScore=0,paused=false,gameOver=false,launched,animFrame;
+let flipL=false,flipR=false,flipLA=0,flipRA=0;
+const GRAVITY=0.15,FRICTION=0.998;
+const bumpers=[{x:120,y:180,r:25,score:100},{x:240,y:180,r:25,score:100},{x:180,y:260,r:25,score:100},{x:100,y:340,r:20,score:50},{x:260,y:340,r:20,score:50}];
+const targets=[{x:60,y:130,w:30,h:10,hit:false,score:200},{x:270,y:130,w:30,h:10,hit:false,score:200},{x:150,y:100,w:30,h:10,hit:false,score:200},{x:210,y:100,w:30,h:10,hit:false,score:200}];
+const walls=[{x1:30,y1:0,x2:30,y2:480},{x2:330,y2:0,x1:330,y1:480},{x1:30,y1:480,x2:80,y2:540},{x1:330,y1:480,x2:280,y2:540}];
+const FLIPPER_LEN=60,FLIPPER_W=10;
+const flipperL={px:110,py:555,angle:0.3};
+const flipperR={px:250,py:555,angle:Math.PI-0.3};
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;ballsLeft=3;paused=false;gameOver=false;launched=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  targets.forEach(t=>t.hit=false);
+  resetBall();
+  cancelAnimationFrame(animFrame);
+  loop();
+}
+
+function resetBall(){
+  ball={x:345,y:500,vx:0,vy:0,r:8};
+  launched=false;
+  updateHUD();
+}
+
+function launchBall(){
+  if(launched||gameOver||paused)return;
+  launched=true;
+  ball.vx=-2+Math.random()*-1;
+  ball.vy=-12-Math.random()*3;
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('balls').textContent=ballsLeft;
+  document.getElementById('high').textContent=highScore;
+}
+
+function reflectCircle(bx,by,bvx,bvy,cx,cy,cr,br){
+  let dx=bx-cx,dy=by-cy;
+  let dist=Math.hypot(dx,dy);
+  if(dist<cr+br){
+    let nx=dx/dist,ny=dy/dist;
+    let dot=bvx*nx+bvy*ny;
+    let speed=Math.hypot(bvx,bvy);
+    bvx-=2*dot*nx;bvy-=2*dot*ny;
+    let boost=Math.max(speed*1.2,5);
+    let ns=Math.hypot(bvx,bvy);
+    bvx=bvx/ns*boost;bvy=bvy/ns*boost;
+    bx=cx+nx*(cr+br+1);by=cy+ny*(cr+br+1);
+    return{x:bx,y:by,vx:bvx,vy:bvy,hit:true};
+  }
+  return{x:bx,y:by,vx:bvx,vy:bvy,hit:false};
+}
+
+function lineReflect(bx,by,bvx,bvy,br,x1,y1,x2,y2){
+  let dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);
+  let nx=-dy/len,ny=dx/len;
+  let d=(bx-x1)*nx+(by-y1)*ny;
+  if(Math.abs(d)<br){
+    let t=((bx-x1)*dx+(by-y1)*dy)/(len*len);
+    if(t>=0&&t<=1){
+      let dot=bvx*nx+bvy*ny;
+      if(dot<0){
+        bvx-=2*dot*nx;bvy-=2*dot*ny;
+        bx+=nx*(br-Math.abs(d)+1);by+=ny*(br-Math.abs(d)+1);
+      }
+    }
+  }
+  return{x:bx,y:by,vx:bvx,vy:bvy};
+}
+
+function getFlipperEnd(f,angle){
+  return{x:f.px+Math.cos(angle)*FLIPPER_LEN,y:f.py+Math.sin(angle)*FLIPPER_LEN};
+}
+
+function update(){
+  if(paused||gameOver||!launched)return;
+  ball.vy+=GRAVITY;
+  ball.vx*=FRICTION;ball.vy*=FRICTION;
+  ball.x+=ball.vx;ball.y+=ball.vy;
+  // walls
+  if(ball.x-ball.r<30){ball.x=30+ball.r;ball.vx=Math.abs(ball.vx)*0.8}
+  if(ball.x+ball.r>330){ball.x=330-ball.r;ball.vx=-Math.abs(ball.vx)*0.8}
+  if(ball.y-ball.r<0){ball.y=ball.r;ball.vy=Math.abs(ball.vy)*0.8}
+  // angled walls
+  for(let w of walls){
+    let r=lineReflect(ball.x,ball.y,ball.vx,ball.vy,ball.r,w.x1,w.y1,w.x2,w.y2);
+    ball.x=r.x;ball.y=r.y;ball.vx=r.vx;ball.vy=r.vy;
+  }
+  // bumpers
+  for(let b of bumpers){
+    let r=reflectCircle(ball.x,ball.y,ball.vx,ball.vy,b.x,b.y,b.r,ball.r);
+    if(r.hit){ball.x=r.x;ball.y=r.y;ball.vx=r.vx;ball.vy=r.vy;score+=b.score;b._flash=10;updateHUD();}
+    if(b._flash>0)b._flash--;
+  }
+  // targets
+  for(let t of targets){
+    if(t.hit)continue;
+    if(ball.x+ball.r>t.x&&ball.x-ball.r<t.x+t.w&&ball.y+ball.r>t.y&&ball.y-ball.r<t.y+t.h){
+      t.hit=true;score+=t.score;ball.vy=-Math.abs(ball.vy);updateHUD();
+      if(targets.every(t2=>t2.hit)){targets.forEach(t2=>t2.hit=false);score+=500;updateHUD();}
+    }
+  }
+  // flippers
+  let targetLA=flipL?-0.6:0.3;
+  let targetRA=flipR?Math.PI+0.6:Math.PI-0.3;
+  flipLA+=(targetLA-flipLA)*0.3;
+  flipRA+=(targetRA-flipRA)*0.3;
+  let fle=getFlipperEnd(flipperL,flipLA);
+  let r1=lineReflect(ball.x,ball.y,ball.vx,ball.vy,ball.r,flipperL.px,flipperL.py,fle.x,fle.y);
+  if(r1.vx!==ball.vx||r1.vy!==ball.vy){
+    ball.x=r1.x;ball.y=r1.y;ball.vx=r1.vx;ball.vy=r1.vy;
+    if(flipL){ball.vy-=5;ball.vx+=3;}
+  }
+  let fre=getFlipperEnd(flipperR,flipRA);
+  let r2=lineReflect(ball.x,ball.y,ball.vx,ball.vy,ball.r,flipperR.px,flipperR.py,fre.x,fre.y);
+  if(r2.vx!==ball.vx||r2.vy!==ball.vy){
+    ball.x=r2.x;ball.y=r2.y;ball.vx=r2.vx;ball.vy=r2.vy;
+    if(flipR){ball.vy-=5;ball.vx-=3;}
+  }
+  // ball lost
+  if(ball.y>H+20){
+    ballsLeft--;
+    if(ballsLeft<=0){endGame();}
+    else resetBall();
+  }
+}
+
+function render(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // walls
+  ctx.strokeStyle='#475569';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(30,0);ctx.lineTo(30,480);ctx.lineTo(80,540);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(330,0);ctx.lineTo(330,480);ctx.lineTo(280,540);ctx.stroke();
+  // launch lane
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  ctx.strokeRect(332,0,28,560);
+  // bumpers
+  for(let b of bumpers){
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+    ctx.fillStyle=b._flash>0?'#facc15':'#6366f1';ctx.fill();
+    ctx.strokeStyle='#818cf8';ctx.lineWidth=2;ctx.stroke();
+  }
+  // targets
+  for(let t of targets){
+    ctx.fillStyle=t.hit?'#334155':'#22c55e';
+    ctx.fillRect(t.x,t.y,t.w,t.h);
+  }
+  // flippers
+  let targetLA=flipL?-0.6:0.3;
+  let targetRA=flipR?Math.PI+0.6:Math.PI-0.3;
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=FLIPPER_W;ctx.lineCap='round';
+  let fle=getFlipperEnd(flipperL,flipLA);
+  ctx.beginPath();ctx.moveTo(flipperL.px,flipperL.py);ctx.lineTo(fle.x,fle.y);ctx.stroke();
+  let fre=getFlipperEnd(flipperR,flipRA);
+  ctx.beginPath();ctx.moveTo(flipperR.px,flipperR.py);ctx.lineTo(fre.x,fre.y);ctx.stroke();
+  ctx.lineCap='butt';ctx.lineWidth=1;
+  // ball
+  if(ball){
+    ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
+    ctx.fillStyle='#e2e8f0';ctx.fill();
+    ctx.strokeStyle='#94a3b8';ctx.stroke();
+  }
+  if(paused){
+    ctx.fillStyle='rgba(15,23,42,0.7)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';ctx.font='bold 36px system-ui';ctx.textAlign='center';
+    ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start';
+  }
+}
+
+function endGame(){
+  gameOver=true;
+  if(score>highScore)highScore=score;
+  updateHUD();
+  document.getElementById('end-title').textContent='Game Over';
+  document.getElementById('end-score').textContent='Score: '+score+' | High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+function loop(){
+  if(gameOver)return;
+  update();render();
+  animFrame=requestAnimationFrame(loop);
+}
+
+function togglePause(){
+  if(gameOver)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')flipL=true;
+  if(e.key==='ArrowRight')flipR=true;
+  if(e.key===' '){e.preventDefault();launchBall();}
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')flipL=false;
+  if(e.key==='ArrowRight')flipR=false;
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(!launched)launchBall();
+},{passive:false});
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}
+  }
+});
+</script>
+</body>
+</html>

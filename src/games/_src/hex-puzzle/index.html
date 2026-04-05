@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hex Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{color:#e2e8f0;max-width:400px}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
+.btn:hover{background:#818cf8}
+.hidden{display:none!important}
+#game{max-width:600px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
+.hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.5rem;flex-wrap:wrap;gap:.3rem}
+.hud span{background:#1e293b;padding:.25rem .6rem;border-radius:.25rem}
+canvas{display:block;max-width:100%;cursor:pointer;touch-action:none}
+.pieces-area{display:flex;gap:1rem;justify-content:center;margin-top:.5rem;flex-wrap:wrap}
+.piece-slot{background:#1e293b;border-radius:.5rem;padding:.5rem;min-width:80px;min-height:80px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid transparent}
+.piece-slot.selected{border-color:#facc15}
+.piece-slot canvas{pointer-events:none}
+.msg{text-align:center;color:#facc15;font-size:.9rem;min-height:1.2rem;margin:.3rem 0}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h2>Hex Puzzle</h2>
+<p>Place colored hex pieces on the grid. Complete full rows to clear them and score points. Game ends when no pieces fit!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+<h2>Game Over</h2>
+<p id="endMsg"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div id="game">
+<h1>Hex Puzzle</h1>
+<div class="hud">
+<span>Score: <b id="score">0</b></span>
+<span>Best: <b id="high">0</b></span>
+</div>
+<div class="msg" id="msg">Select a piece, then click the grid to place it</div>
+<canvas id="canvas"></canvas>
+<div class="pieces-area" id="piecesArea"></div>
+</div>
+<script>
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316'];
+const ROWS=9,COLS=9;
+let grid,pieces,selectedPiece,score,highScore=0,gameActive=false;
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+let hexR=20,hexH,hexW,offX,offY;
+
+function calcHex(){
+  hexR=Math.min(20,Math.floor((window.innerWidth-40)/(COLS*1.8)));
+  hexH=hexR*Math.sqrt(3);hexW=hexR*2;
+  let totalW=COLS*hexW*0.75+hexW*0.25+20;
+  let totalH=ROWS*hexH+hexH/2+20;
+  canvas.width=totalW;canvas.height=totalH;
+  canvas.style.width=totalW+'px';canvas.style.height=totalH+'px';
+  offX=10+hexR;offY=10+hexH/2;
+}
+function hexCenter(r,c){
+  let x=offX+c*hexW*0.75;
+  let y=offY+r*hexH+(c%2?hexH/2:0);
+  return{x,y};
+}
+function drawHex(cx,cy,r,fill,stroke){
+  ctx.beginPath();
+  for(let i=0;i<6;i++){
+    let a=Math.PI/180*(60*i-30);
+    let px=cx+r*Math.cos(a),py=cy+r*Math.sin(a);
+    i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}
+}
+function initGrid(){
+  grid=[];for(let r=0;r<ROWS;r++){grid[r]=[];for(let c=0;c<COLS;c++)grid[r][c]=null;}
+}
+// Piece shapes: arrays of [dr,dc] offsets from anchor
+const SHAPES=[
+  [[0,0]],
+  [[0,0],[0,1]],
+  [[0,0],[1,0]],
+  [[0,0],[0,1],[0,2]],
+  [[0,0],[1,0],[1,1]],
+  [[0,0],[0,1],[1,0]],
+  [[0,0],[0,1],[1,1]],
+  [[0,0],[1,0],[0,1],[1,1]],
+];
+function genPieces(){
+  pieces=[];
+  for(let i=0;i<3;i++){
+    let shape=SHAPES[Math.random()*SHAPES.length|0];
+    let color=COLORS[Math.random()*COLORS.length|0];
+    pieces.push({shape,color,placed:false});
+  }
+  selectedPiece=null;
+}
+function canPlace(shape,ar,ac){
+  for(let[dr,dc]of shape){
+    let r=ar+dr,c=ac+dc;
+    if(r<0||r>=ROWS||c<0||c>=COLS)return false;
+    if(grid[r][c])return false;
+  }
+  return true;
+}
+function place(piece,ar,ac){
+  for(let[dr,dc]of piece.shape){
+    grid[ar+dr][ac+dc]=piece.color;
+  }
+  piece.placed=true;
+  score+=piece.shape.length*5;
+}
+function checkRows(){
+  let cleared=0;
+  // check each row
+  for(let r=0;r<ROWS;r++){
+    let full=true;
+    for(let c=0;c<COLS;c++)if(!grid[r][c]){full=false;break;}
+    if(full){
+      for(let c=0;c<COLS;c++)grid[r][c]=null;
+      cleared++;
+    }
+  }
+  // check diagonals (columns in hex)
+  for(let c=0;c<COLS;c++){
+    let full=true;
+    for(let r=0;r<ROWS;r++)if(!grid[r][c]){full=false;break;}
+    if(full){
+      for(let r=0;r<ROWS;r++)grid[r][c]=null;
+      cleared++;
+    }
+  }
+  if(cleared)score+=cleared*50;
+  return cleared;
+}
+function anyPieceFits(){
+  for(let p of pieces){
+    if(p.placed)continue;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(canPlace(p.shape,r,c))return true;
+    }
+  }
+  return false;
+}
+function render(){
+  calcHex();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    let{x,y}=hexCenter(r,c);
+    drawHex(x,y,hexR-1,grid[r][c]||'#1e293b','#334155');
+  }
+  // highlight valid placements for selected piece
+  if(selectedPiece!==null&&!pieces[selectedPiece].placed){
+    let p=pieces[selectedPiece];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(canPlace(p.shape,r,c)){
+        let{x,y}=hexCenter(r,c);
+        drawHex(x,y,hexR-1,null,'rgba(250,204,21,0.3)');
+      }
+    }
+  }
+  document.getElementById('score').textContent=score;
+  document.getElementById('high').textContent=highScore;
+  renderPieces();
+}
+function renderPieces(){
+  let area=document.getElementById('piecesArea');area.innerHTML='';
+  pieces.forEach((p,i)=>{
+    let slot=document.createElement('div');
+    slot.className='piece-slot'+(selectedPiece===i?' selected':'');
+    if(p.placed){slot.style.opacity='0.3';slot.style.pointerEvents='none';}
+    else{slot.onclick=()=>{selectedPiece=i;render();};}
+    // mini canvas
+    let mc=document.createElement('canvas');
+    let mR=12;let mH=mR*Math.sqrt(3);let mW=mR*2;
+    let maxR=0,maxC=0;p.shape.forEach(([dr,dc])=>{maxR=Math.max(maxR,dr);maxC=Math.max(maxC,dc);});
+    mc.width=(maxC+1)*mW*0.75+mW*0.25+10;mc.height=(maxR+1)*mH+mH/2+10;
+    let mctx=mc.getContext('2d');
+    p.shape.forEach(([dr,dc])=>{
+      let x=5+mR+dc*mW*0.75;
+      let y=5+mH/2+dr*mH+(dc%2?mH/2:0);
+      mctx.beginPath();
+      for(let j=0;j<6;j++){let a=Math.PI/180*(60*j-30);let px=x+mR*Math.cos(a),py=y+mR*Math.sin(a);j===0?mctx.moveTo(px,py):mctx.lineTo(px,py);}
+      mctx.closePath();mctx.fillStyle=p.color;mctx.fill();mctx.strokeStyle='#334155';mctx.lineWidth=1;mctx.stroke();
+    });
+    slot.appendChild(mc);area.appendChild(slot);
+  });
+}
+canvas.addEventListener('click',e=>{
+  if(!gameActive||selectedPiece===null)return;
+  let rect=canvas.getBoundingClientRect();
+  let sx=canvas.width/rect.width,sy=canvas.height/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  // find closest hex
+  let bestD=Infinity,bestR=-1,bestC=-1;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    let{x,y}=hexCenter(r,c);
+    let d=Math.hypot(mx-x,my-y);
+    if(d<bestD){bestD=d;bestR=r;bestC=c;}
+  }
+  if(bestD>hexR*1.2)return;
+  let p=pieces[selectedPiece];
+  if(canPlace(p.shape,bestR,bestC)){
+    place(p,bestR,bestC);
+    checkRows();
+    selectedPiece=null;
+    // check if all pieces placed -> new set
+    if(pieces.every(pp=>pp.placed))genPieces();
+    // check game over
+    if(!anyPieceFits()){
+      gameActive=false;
+      if(score>highScore)highScore=score;
+      document.getElementById('endMsg').textContent=`Score: ${score} | Best: ${highScore}`;
+      document.getElementById('endOverlay').classList.remove('hidden');
+      saveState();
+    }
+    render();
+  }
+});
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  initGrid();score=0;gameActive=true;
+  genPieces();render();
+}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'hex-puzzle',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});
+window.addEventListener('resize',()=>{if(gameActive)render();});
+</script>
+</body>
+</html>

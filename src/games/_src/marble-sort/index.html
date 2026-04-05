@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marble Sort</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin:.5rem 0}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
+.overlay .score{font-size:1.4rem;color:#22c55e}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+#hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+#tubes{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:1rem 0;align-items:flex-end}
+.tube{display:flex;flex-direction:column-reverse;width:50px;min-height:200px;border:2px solid #475569;border-top:none;border-radius:0 0 8px 8px;padding:4px;gap:4px;cursor:pointer;transition:border-color .2s;position:relative;justify-content:flex-start}
+.tube.selected{border-color:#facc15;box-shadow:0 0 10px rgba(250,204,21,.3)}
+.tube:hover{border-color:#6366f1}
+.marble{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;transition:transform .15s}
+.tube.selected .marble:last-child{transform:translateY(-8px)}
+#msg{text-align:center;margin:.5rem 0;font-size:1rem;min-height:1.5rem;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Marble Sort</h1>
+<div id="hud"><div>Level: <span id="level">1</span></div><div>Moves: <span id="moves">0</span></div></div>
+<div id="msg"></div>
+<div id="tubes"></div>
+<div id="start-overlay" class="overlay">
+<h2>Marble Sort</h2>
+<p>Sort the marbles so each tube contains only one color. Click a tube to pick up the top marble, then click another tube to place it. Empty tubes help you sort!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="end-overlay" class="overlay hidden">
+<h2 id="end-title">Level Complete!</h2>
+<p class="score" id="end-score"></p>
+<button class="btn" id="end-btn" onclick="nextAction()">Next Level</button>
+</div>
+<script>
+const SLUG='marble-sort';
+const MARBLE_COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316','#ec4899','#06b6d4'];
+const CAPACITY=4;
+let tubes,selected,moves,level,highLevel=0;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  level=1;
+  loadLevel();
+}
+
+function loadLevel(){
+  let numColors=Math.min(3+level,8);
+  let numTubes=numColors+2;
+  // create marbles
+  let marbles=[];
+  for(let i=0;i<numColors;i++){
+    for(let j=0;j<CAPACITY;j++){
+      marbles.push(MARBLE_COLORS[i]);
+    }
+  }
+  // shuffle
+  for(let i=marbles.length-1;i>0;i--){
+    let j=Math.floor(Math.random()*(i+1));
+    [marbles[i],marbles[j]]=[marbles[j],marbles[i]];
+  }
+  tubes=[];
+  for(let t=0;t<numColors;t++){
+    tubes.push(marbles.splice(0,CAPACITY));
+  }
+  // add empty tubes
+  for(let t=0;t<2;t++)tubes.push([]);
+  selected=null;moves=0;
+  updateHUD();
+  render();
+}
+
+function updateHUD(){
+  document.getElementById('level').textContent=level;
+  document.getElementById('moves').textContent=moves;
+}
+
+function render(){
+  let container=document.getElementById('tubes');
+  container.innerHTML='';
+  for(let i=0;i<tubes.length;i++){
+    let tube=document.createElement('div');
+    tube.className='tube';
+    if(selected===i)tube.classList.add('selected');
+    tube.onclick=()=>clickTube(i);
+    for(let j=0;j<tubes[i].length;j++){
+      let marble=document.createElement('div');
+      marble.className='marble';
+      marble.style.background=tubes[i][j];
+      // add shine effect
+      marble.style.boxShadow='inset -4px -4px 8px rgba(0,0,0,.3), inset 4px 4px 8px rgba(255,255,255,.15)';
+      tube.appendChild(marble);
+    }
+    container.appendChild(tube);
+  }
+}
+
+function clickTube(i){
+  if(selected===null){
+    if(tubes[i].length===0)return;
+    selected=i;
+  }else if(selected===i){
+    selected=null;
+  }else{
+    // try to move
+    if(tubes[i].length>=CAPACITY){
+      document.getElementById('msg').textContent='Tube is full!';
+      setTimeout(()=>document.getElementById('msg').textContent='',1500);
+      selected=null;
+    }else{
+      let marble=tubes[selected][tubes[selected].length-1];
+      // only allow if target is empty or top marble matches
+      if(tubes[i].length===0||tubes[i][tubes[i].length-1]===marble){
+        tubes[selected].pop();
+        tubes[i].push(marble);
+        moves++;
+        updateHUD();
+        selected=null;
+        if(checkWin())return;
+      }else{
+        // switch selection
+        selected=i;
+      }
+    }
+  }
+  render();
+}
+
+function checkWin(){
+  for(let tube of tubes){
+    if(tube.length===0)continue;
+    if(tube.length!==CAPACITY)return false;
+    if(!tube.every(m=>m===tube[0]))return false;
+  }
+  // Win!
+  if(level>highLevel)highLevel=level;
+  document.getElementById('end-title').textContent='Level '+level+' Complete!';
+  document.getElementById('end-score').textContent='Solved in '+moves+' moves';
+  document.getElementById('end-btn').textContent='Next Level';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highLevel}},'*')}catch(e){}
+  return true;
+}
+
+function nextAction(){
+  document.getElementById('end-overlay').classList.add('hidden');
+  level++;
+  loadLevel();
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highLevel)highLevel=e.data.state.highLevel;
+  }
+});
+</script>
+</body>
+</html>
