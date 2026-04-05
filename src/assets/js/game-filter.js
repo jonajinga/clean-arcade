@@ -43,6 +43,7 @@ function applyFilters() {
 
   var noResults = document.getElementById("no-results");
   if (noResults) noResults.hidden = visible > 0;
+  sortAlpha();
   updateHash();
 }
 
@@ -50,7 +51,7 @@ function searchGames(query) {
   applyFilters();
 }
 
-function sortGames(sortBy) {
+function sortAlpha() {
   var grid = document.getElementById("game-grid");
   if (!grid) return;
   var cards = Array.from(grid.querySelectorAll(".game-card"));
@@ -58,7 +59,6 @@ function sortGames(sortBy) {
     return a.getAttribute("data-title").localeCompare(b.getAttribute("data-title"));
   });
   cards.forEach(function (card) { grid.appendChild(card); });
-  updateHash();
 }
 
 function updateHash() {
@@ -122,6 +122,7 @@ function filterBySlugList(slugs) {
   });
   var noResults = document.getElementById("no-results");
   if (noResults) noResults.hidden = visible > 0;
+  sortAlpha();
 }
 
 /* View toggle — grid vs list */
@@ -135,6 +136,7 @@ function toggleView() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  sortAlpha();
   var hash = window.location.hash.slice(1);
   if (!hash) return;
   var params = {};
