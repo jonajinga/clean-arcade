@@ -14,6 +14,7 @@
   align-items: center;
   justify-content: space-between;
   height: 100%;
+  gap: var(--space-sm);
 }
 
 .site-header__logo {
@@ -25,11 +26,64 @@
   font-weight: 700;
   font-size: var(--text-sm);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .site-header__logo:hover { color: var(--accent); }
 .site-header__logo svg { flex-shrink: 0; }
 
+/* Mobile: show "CA", desktop: show "Clean Arcade" */
+.logo-text--short { display: inline; }
+.logo-text--full { display: none; }
+
+@media (min-width: 640px) {
+  .logo-text--short { display: none; }
+  .logo-text--full { display: inline; }
+}
+
+/* Filter buttons in header — right-aligned */
+.site-header__filters {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.site-header__filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.site-header__filter-btn:hover {
+  color: var(--text);
+}
+
+.site-header__filter-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Mobile: smaller filter icons */
+@media (max-width: 639px) {
+  .site-header__filter-btn {
+    width: 24px;
+    height: 24px;
+  }
+
+  .site-header__filter-btn svg {
+    width: 11px;
+    height: 11px;
+  }
+}
 
 /* Icon buttons — used globally */
 .icon-btn {
@@ -61,4 +115,9 @@
 
 .game-active .site-header.header--show {
   transform: translateY(0);
+}
+
+/* Hide filter buttons on game pages */
+.game-active .site-header__filters {
+  display: none;
 }

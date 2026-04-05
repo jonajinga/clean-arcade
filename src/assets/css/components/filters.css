@@ -1,37 +1,6 @@
 /* === Game Filters === */
-.game-filter {
-  margin-bottom: var(--space-lg);
-}
 
-.game-filter__options {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-/* Icon buttons */
-.game-filter__icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--text-muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
-  flex-shrink: 0;
-}
-
-.game-filter__icon-btn:hover,
-.game-filter__icon-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Dropdown wrap */
+/* Dropdown wrap — used in header */
 .game-filter__dropdown-wrap {
   position: relative;
 }
@@ -41,7 +10,7 @@
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 50;
+  z-index: 150;
   background: var(--bg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
@@ -77,15 +46,16 @@
   color: var(--accent);
 }
 
-/* Search — hidden by default, shown on toggle */
+/* Search input — below header, hidden by default */
 .game-filter__search {
-  padding: 6px 10px;
+  display: block;
+  padding: 8px var(--space-lg);
   font-size: var(--text-xs);
-  border: 1px solid var(--border);
+  border: none;
+  border-bottom: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   width: 100%;
-  margin-top: 4px;
 }
 
 .game-filter__search--hidden {
@@ -93,6 +63,6 @@
 }
 
 .game-filter__search:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  border-bottom-color: var(--accent);
 }

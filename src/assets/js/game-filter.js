@@ -68,6 +68,7 @@ function applyFilters() {
   var noResults = document.getElementById("no-results");
   if (noResults) noResults.hidden = visible > 0;
   sortAlpha();
+  updateClearBtn();
   updateHash();
 }
 
@@ -94,6 +95,46 @@ function updateHash() {
   } else {
     history.replaceState(null, "", window.location.pathname);
   }
+}
+
+function updateClearBtn() {
+  var btn = document.getElementById("clear-filters");
+  if (!btn) return;
+  var searchInput = document.getElementById("game-search");
+  var hasSearch = searchInput && searchInput.value.length > 0;
+  var hasFilter = activeCategory !== "all" || activeLetter !== "all" || activeSpecial !== null || hasSearch;
+  btn.style.display = hasFilter ? "" : "none";
+}
+
+function clearAllFilters() {
+  activeCategory = "all";
+  activeLetter = "all";
+  activeSpecial = null;
+
+  var fb = document.getElementById("filter-favorites");
+  var rb = document.getElementById("filter-recent");
+  var cb = document.getElementById("cat-toggle");
+  var ab = document.getElementById("az-toggle");
+  var sb = document.getElementById("search-toggle");
+  if (fb) fb.classList.remove("active");
+  if (rb) rb.classList.remove("active");
+  if (cb) cb.classList.remove("active");
+  if (ab) ab.classList.remove("active");
+  if (sb) sb.classList.remove("active");
+
+  var searchInput = document.getElementById("game-search");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.classList.add("game-filter__search--hidden");
+  }
+
+  /* Reset dropdown active states */
+  var catItems = document.querySelectorAll("#cat-dropdown .game-filter__dropdown-item");
+  catItems.forEach(function(item) { item.classList.toggle("active", item.getAttribute("data-filter") === "all"); });
+  var azItems = document.querySelectorAll("#az-dropdown .game-filter__dropdown-item");
+  azItems.forEach(function(item) { item.classList.toggle("active", item.getAttribute("data-letter") === "all"); });
+
+  applyFilters();
 }
 
 /* Favorites / Recently played filters */
@@ -147,6 +188,7 @@ function filterBySlugList(slugs) {
   var noResults = document.getElementById("no-results");
   if (noResults) noResults.hidden = visible > 0;
   sortAlpha();
+  updateClearBtn();
 }
 
 /* View toggle — grid vs list */
@@ -157,6 +199,15 @@ function toggleView() {
   document.getElementById("view-icon-list").style.display = isList ? "none" : "";
   document.getElementById("view-icon-grid").style.display = isList ? "" : "none";
   localStorage.setItem("ca-view", isList ? "list" : "grid");
+}
+
+function toggleDropdown(id) {
+  var target = document.getElementById(id);
+  var drops = document.querySelectorAll(".game-filter__dropdown");
+  drops.forEach(function(d) {
+    if (d.id !== id) d.classList.remove("open");
+  });
+  if (target) target.classList.toggle("open");
 }
 
 /* Close dropdowns when clicking outside */
