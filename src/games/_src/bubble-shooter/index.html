@@ -267,7 +267,7 @@ function render(){
 }
 
 function loop(){
-  if(gameOver)return;
+  if(gameOver||paused)return;
   update();render();
   animFrame=requestAnimationFrame(loop);
 }
@@ -276,7 +276,7 @@ function togglePause(){
   if(gameOver)return;
   paused=!paused;
   document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
-  if(!paused){loop();}
+  if(!paused){cancelAnimationFrame(animFrame);loop();}
   try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}
 }
 

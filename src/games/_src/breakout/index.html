@@ -185,7 +185,7 @@
     running = true;
     overlay.classList.add("hidden");
     finalScoreEl.classList.add("hidden");
-    pauseBtn.classList.remove("hidden");
+    document.getElementById("pause-wrap").style.display = "";
     buildBricks();
     resetBall();
   }

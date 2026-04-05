@@ -197,7 +197,7 @@ canvas.addEventListener('click',e=>{
   if(foodCount<=0&&coins<5)return;
   if(foodCount<=0){coins-=5;foodCount+=5;document.getElementById('coinEl').textContent=coins;}
   const r=canvas.getBoundingClientRect();
-  const x=e.clientX-r.left,y=e.clientY-r.top;
+  const x=(e.clientX-r.left)*(W/r.width),y=(e.clientY-r.top)*(H/r.height);
   foods.push({x,y});foodCount--;
   document.getElementById('foodEl').textContent=foods.length;
   updateShop();

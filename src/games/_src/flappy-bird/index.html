@@ -86,6 +86,7 @@
   <h1 id="overlayTitle">Flappy Bird</h1>
   <p class="final-score hidden" id="finalScore"></p>
   <p id="overlayMsg">Tap or Press Space to Play</p>
+  <button class="play-again" id="startBtn" onclick="window._restart()" style="pointer-events:auto">Play</button>
   <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
 </div>
 <script>
@@ -148,6 +149,8 @@
   function start() {
     gameState = 'playing';
     overlay.classList.add('hidden');
+    var sb = document.getElementById('startBtn');
+    if (sb) sb.classList.add('hidden');
     pauseWrap.style.display = 'block';
     bird.vy = FLAP;
     loop();
