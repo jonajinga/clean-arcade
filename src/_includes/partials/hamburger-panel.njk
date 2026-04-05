@@ -41,5 +41,21 @@
         {% endfor %}
       </ul>
     </nav>
+
+    <hr class="hamburger-panel__divider">
+
+    {# Extra links (formerly in footer) #}
+    <nav aria-label="Additional links">
+      <ul class="hamburger-panel__nav hamburger-panel__nav--secondary">
+        <li><a href="/style-guide/" onclick="closeHamburger()">Style Guide</a></li>
+        <li><a href="/feed.xml" onclick="closeHamburger()">RSS</a></li>
+        <li><a href="/privacy-policy/" onclick="closeHamburger()">Privacy</a></li>
+      </ul>
+    </nav>
+
+    <div class="hamburger-panel__footer">
+      <span>&copy; {{ "" | year }} {{ meta.title }}</span>
+      <span>Website by <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a></span>
+    </div>
   </div>
 </div>

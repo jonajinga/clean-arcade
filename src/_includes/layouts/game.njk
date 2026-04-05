@@ -15,9 +15,6 @@ bodyClass: game-active
         <button class="icon-btn" id="share-btn" title="Share">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
         </button>
-        <button class="icon-btn" id="fs-btn" title="Fullscreen">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
       </div>
     </div>
 
@@ -32,7 +29,7 @@ bodyClass: game-active
     </div>
 
     <div class="game-embed__viewport">
-      <iframe id="game-frame" src="{{ game.gamePath }}" title="Play {{ game.title }}" allow="fullscreen" allowfullscreen></iframe>
+      <iframe id="game-frame" src="{{ game.gamePath }}" title="Play {{ game.title }}"></iframe>
     </div>
   </div>
 

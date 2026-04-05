@@ -62,11 +62,6 @@
   color: var(--white);
 }
 
-/* Hide fullscreen button on mobile */
-@media (pointer: coarse), (hover: none) {
-  #fs-btn { display: none; }
-}
-
 .game-embed__viewport {
   position: relative;
   width: 100%;
@@ -74,8 +69,13 @@
   min-height: 300px;
 }
 
-/* Desktop: cap it so it doesn't get absurdly tall */
+/* Desktop: constrain width and center the game embed */
 @media (min-width: 768px) {
+  .game-embed {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
   .game-embed__viewport {
     height: calc(85vh - 36px);
   }

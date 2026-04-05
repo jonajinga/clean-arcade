@@ -4,12 +4,13 @@ var activeCategory = "all";
 function filterGames(category) {
   activeCategory = category;
   var cards = document.querySelectorAll(".game-card");
-  var btns = document.querySelectorAll(".game-filter__btn");
   var visible = 0;
 
-  btns.forEach(function (btn) {
-    btn.classList.toggle("active", btn.getAttribute("data-filter") === category);
-  });
+  /* Sync dropdown if called programmatically */
+  var catSelect = document.getElementById("category-select");
+  if (catSelect && catSelect.value !== category) {
+    catSelect.value = category;
+  }
 
   cards.forEach(function (card) {
     var match = category === "all" || card.getAttribute("data-category") === category;

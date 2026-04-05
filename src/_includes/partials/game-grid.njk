@@ -1,11 +1,12 @@
 <div class="game-filter" id="game-filter">
-  <div class="game-filter__bar">
-    <button class="game-filter__btn active" onclick="filterGames('all')" data-filter="all">All</button>
-    {% for cat in categories %}
-      <button class="game-filter__btn" onclick="filterGames('{{ cat.slug }}')" data-filter="{{ cat.slug }}">{{ cat.label }}</button>
-    {% endfor %}
-  </div>
   <div class="game-filter__options">
+    <label class="sr-only" for="category-select">Category</label>
+    <select id="category-select" class="game-filter__sort" onchange="filterGames(this.value)">
+      <option value="all">All Categories</option>
+      {% for cat in categories %}
+        <option value="{{ cat.slug }}">{{ cat.label }}</option>
+      {% endfor %}
+    </select>
     <label class="sr-only" for="sort-select">Sort by</label>
     <select id="sort-select" class="game-filter__sort" onchange="sortGames(this.value)">
       <option value="title">A-Z</option>
