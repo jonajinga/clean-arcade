@@ -106,6 +106,7 @@ canvas {
 .touch-row { display: flex; gap: 4px; justify-content: center; }
 @media (pointer: coarse) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
 @media (hover: none) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
+@media (pointer: coarse), (hover: none) { .desktop-pause-wrap { display: none !important; } }
 </style>
 </head>
 <body>
@@ -159,7 +160,9 @@ canvas {
   <button class="touch-btn" id="pause-btn" onclick="togglePause()" style="display:none;" title="Pause">&#10074;&#10074;</button>
 </div>
 
-<button id="desktop-pause" onclick="togglePause()" title="Pause (P)" style="display:none;position:fixed;bottom:16px;left:16px;width:36px;height:36px;background:#1e293b;border:1px solid #475569;color:#e2e8f0;font-size:14px;cursor:pointer;z-index:5;">&#10074;&#10074;</button>
+<div class="desktop-pause-wrap" id="desktop-pause-wrap" style="display:none;text-align:center;padding:8px 0;">
+<button id="desktop-pause" onclick="togglePause()" title="Pause (P)" style="width:40px;height:40px;background:#1e293b;border:1px solid #475569;color:#e2e8f0;font-size:16px;cursor:pointer;">&#9208;</button>
+</div>
 
 <script>
 (function() {
@@ -376,8 +379,8 @@ canvas {
     document.getElementById('final-score-text').textContent = txt;
     document.getElementById('gameover-overlay').classList.remove('hidden');
     document.getElementById('pause-btn').style.display = 'none';
-    var dp = document.getElementById('desktop-pause');
-    if (dp) dp.style.display = 'none';
+    var dpw = document.getElementById('desktop-pause-wrap');
+    if (dpw) dpw.style.display = 'none';
     saveState();
   }
 
@@ -405,8 +408,10 @@ canvas {
     document.getElementById('pause-overlay').classList.add('hidden');
     document.getElementById('pause-btn').style.display = 'block';
     document.getElementById('pause-btn').innerHTML = '\u23F8';
+    var dpw = document.getElementById('desktop-pause-wrap');
+    if (dpw) dpw.style.display = '';
     var dp = document.getElementById('desktop-pause');
-    if (dp) { dp.style.display = 'block'; dp.innerHTML = '\u23F8'; }
+    if (dp) dp.innerHTML = '\u23F8';
     board = createBoard();
     score = 0; level = 1; lines = 0;
     dropTime = 1000; gameOver = false; paused = false;
@@ -544,8 +549,8 @@ canvas {
         document.getElementById('gameover-overlay').classList.add('hidden');
         document.getElementById('pause-overlay').classList.remove('hidden');
         document.getElementById('pause-btn').style.display = 'block';
-        var dp2 = document.getElementById('desktop-pause');
-        if (dp2) dp2.style.display = 'block';
+        var dpw2 = document.getElementById('desktop-pause-wrap');
+        if (dpw2) dpw2.style.display = '';
         updateUI();
         resize();
         drawNext();

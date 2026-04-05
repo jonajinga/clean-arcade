@@ -55,18 +55,14 @@
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
   .hidden { display: none !important; }
+  .pause-wrap { display: none; text-align: center; padding: 6px 0; }
   #pauseBtn {
-    position: absolute;
-    background: rgba(30,41,59,0.85);
-    color: #94a3b8;
-    border: 1px solid #334155;
-    font-size: 0.85rem;
-    padding: 0.2rem 0.5rem;
-    cursor: pointer;
-    z-index: 10;
-    line-height: 1;
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
   }
-  #pauseBtn:hover { color: #e2e8f0; }
+  #pauseBtn:hover { background: #334155; }
 </style>
 </head>
 <body>
@@ -76,7 +72,9 @@
   LIVES: <span id="livesEl">3</span> &nbsp;&nbsp;
   LEVEL: <span id="levelEl">1</span>
 </div>
-<button id="pauseBtn" class="hidden" onclick="window._togglePause()">&#10074;&#10074;</button>
+<div class="pause-wrap" id="pause-wrap">
+<button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
 <canvas id="c"></canvas>
 <div id="overlay">
   <h1 id="overlayTitle">Breakout</h1>
@@ -145,7 +143,7 @@
         ballSpeed = BASE_SPEED + (level - 1) * SPEED_INC;
         running = true; gameOverFlag = false; paused = true;
         overlay.classList.add("hidden");
-        pauseBtn.classList.remove("hidden");
+        document.getElementById("pause-wrap").style.display = "";
         draw();
         drawPauseOverlay();
       }
@@ -167,8 +165,6 @@
     overlay.style.height = canvas.height + "px";
     overlay.style.left = canvas.offsetLeft + "px";
     overlay.style.top = canvas.offsetTop + "px";
-    pauseBtn.style.left = (canvas.offsetLeft + canvas.width - 36) + "px";
-    pauseBtn.style.top = canvas.offsetTop + "px";
     if (paddle) {
       paddle.w = paddleW;
       paddle.y = H - 40;
@@ -312,7 +308,7 @@
     running = false;
     gameOverFlag = true;
     paused = false;
-    pauseBtn.classList.add("hidden");
+    document.getElementById("pause-wrap").style.display = "none";
     overlayTitle.textContent = "Game Over";
     finalScoreEl.textContent = "Score: " + score + "  |  Level: " + level;
     finalScoreEl.classList.remove("hidden");

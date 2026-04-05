@@ -7,6 +7,21 @@ eleventyExcludeFromCollections: true
 ---
 <div class="text-center">
   <p style="font-size: var(--text-4xl); font-family: var(--font-display); font-weight: 700; color: var(--accent); margin-bottom: var(--space-md);">404</p>
-  <p style="font-size: var(--text-xl); margin-bottom: var(--space-xl);">This page doesn't exist. Maybe the game moved?</p>
-  <a href="/" class="btn btn--primary">Back to Games</a>
+  <p style="font-size: var(--text-lg); margin-bottom: var(--space-xl); color: var(--text-muted);">This page doesn't exist.</p>
+  <div style="display: flex; gap: var(--space-md); justify-content: center; flex-wrap: wrap;">
+    <a href="/" class="btn btn--primary">All Games</a>
+    <a href="#" id="random-game" class="btn btn--outline">Random Game</a>
+  </div>
 </div>
+
+<script>
+(function() {
+  var games = {{ games | dump | safe }};
+  var link = document.getElementById("random-game");
+  if (link && games.length) {
+    var g = games[Math.floor(Math.random() * games.length)];
+    link.href = "/games/" + g.slug + "/";
+    link.textContent = "Play " + g.title;
+  }
+})();
+</script>

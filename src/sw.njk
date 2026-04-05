@@ -5,7 +5,19 @@ eleventyExcludeFromCollections: true
 var CACHE_NAME = "clean-arcade-{{ "" | buildHash }}";
 var PRECACHE = [
   "/",
-  "/assets/img/favicon.svg"
+  "/assets/css/global.css?v={{ "" | buildHash }}",
+  "/assets/js/game-filter.js",
+  "/assets/js/game-page.js",
+  "/assets/js/game-loader.js",
+  "/assets/js/save-system.js",
+  "/assets/js/my-games.js",
+  "/assets/js/nav.js",
+  "/assets/js/theme-toggle.js",
+  "/assets/js/search.js",
+  "/assets/js/share.js",
+  "/assets/img/favicon.svg",
+  {% for game in games %}"/games/_src/{{ game.slug }}/index.html",
+  {% endfor %}
 ];
 
 self.addEventListener("install", function (e) {
@@ -32,7 +44,23 @@ self.addEventListener("activate", function (e) {
 self.addEventListener("fetch", function (e) {
   var url = new URL(e.request.url);
 
-  /* Network first — cache is only a fallback for offline */
+  /* Game files: cache first (they rarely change), network fallback */
+  if (url.pathname.startsWith("/games/_src/")) {
+    e.respondWith(
+      caches.match(e.request).then(function (cached) {
+        return cached || fetch(e.request).then(function (response) {
+          if (response.ok) {
+            var clone = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) { cache.put(e.request, clone); });
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  /* Everything else: network first, cache fallback */
   e.respondWith(
     fetch(e.request).then(function (response) {
       if (response.ok && url.origin === self.location.origin) {

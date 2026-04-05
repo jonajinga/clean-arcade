@@ -32,13 +32,11 @@
 .site-header__logo:hover { color: var(--accent); }
 .site-header__logo svg { flex-shrink: 0; }
 
-/* Mobile: show "CA", desktop: show "Clean Arcade" */
-.logo-text--short { display: inline; }
-.logo-text--full { display: none; }
+/* Mobile: icon only, desktop: icon + text */
+.logo-text { display: none; }
 
 @media (min-width: 640px) {
-  .logo-text--short { display: none; }
-  .logo-text--full { display: inline; }
+  .logo-text { display: inline; }
 }
 
 /* Filter buttons in header — right-aligned */

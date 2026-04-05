@@ -204,7 +204,9 @@
 
     function handleHover(e) {
       if (gameOver) return;
-      var col = parseInt(e.target.dataset.col !== undefined ? e.target.dataset.col : e.target.closest('[data-col]').dataset.col);
+      var el = e.target.closest ? e.target.closest('[data-col]') : e.target;
+      var col = el ? parseInt(el.dataset.col) : NaN;
+      if (isNaN(col)) return;
       clearPreviews();
       var prev = document.getElementById('prev' + col);
       if (prev && !isColumnFull(col)) {
@@ -225,7 +227,8 @@
 
     function handleClick(e) {
       if (gameOver) return;
-      var col = parseInt(e.target.dataset.col !== undefined ? e.target.dataset.col : e.currentTarget.dataset.col);
+      var el = e.target.closest('[data-col]');
+      var col = el ? parseInt(el.dataset.col) : NaN;
       if (isNaN(col)) return;
 
       if (mode === 'multi' && currentPlayer !== myColor) return;

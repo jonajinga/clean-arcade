@@ -218,6 +218,14 @@ document.addEventListener("click", function(e) {
   }
 });
 
+/* Keyboard: Escape closes dropdowns */
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    var drops = document.querySelectorAll(".game-filter__dropdown");
+    drops.forEach(function(d) { d.classList.remove("open"); });
+  }
+});
+
 document.addEventListener("DOMContentLoaded", function () {
   sortAlpha();
 
