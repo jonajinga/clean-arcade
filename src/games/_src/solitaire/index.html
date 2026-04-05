@@ -6,7 +6,7 @@
 <title>Solitaire</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overflow-x:hidden;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overflow-x:hidden;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 #app{max-width:860px;margin:0 auto;padding:6px 8px}
 .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 0;flex-wrap:wrap;gap:6px}
 .hdr h1{font-size:1.15rem;font-weight:700;color:#6366f1}
@@ -61,6 +61,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
   </div>
   <div class="top-row" id="top-row"></div>
   <div class="board" id="board"></div>
+  <div style="text-align:center;margin-top:8px"><button onclick="newGame()" style="background:#334155;color:#e2e8f0;border:1px solid #475569;padding:6px 16px;font-size:0.8rem;cursor:pointer;font-family:inherit">New Deal</button></div>
 </div>
 <div class="win-overlay" id="win-overlay" style="display:none">
   <h2>You Win!</h2>

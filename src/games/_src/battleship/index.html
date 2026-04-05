@@ -6,7 +6,7 @@
 <title>Battleship</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden;touch-action:manipulation}
 h1{font-size:1.3rem;margin:8px 0 4px}
 #hud{font-size:0.95rem;margin-bottom:4px;text-align:center}
 #hud span{color:#facc15}
@@ -34,7 +34,7 @@ h1{font-size:1.3rem;margin:8px 0 4px}
 </head>
 <body>
 <h1>Battleship</h1>
-<div id="hud"><span>Wins: <b id="winsEl">0</b></span></div>
+<div id="hud"><span>Wins: <b id="winsEl">0</b></span> <button onclick="startGame()" style="background:#334155;color:#e2e8f0;border:1px solid #475569;padding:6px 16px;font-size:0.8rem;cursor:pointer;font-family:inherit">New Game</button></div>
 <div id="boards">
   <div class="board-wrap">
     <h3>Your Fleet</h3>

@@ -14,6 +14,7 @@
     color: #e2e8f0;
     user-select: none;
     -webkit-user-select: none;
+    touch-action: manipulation;
   }
   body {
     display: flex;
@@ -113,6 +114,7 @@
 <div id="keyboard"></div>
 <div class="pause-wrap" id="pause-wrap">
   <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+  <button onclick="window._restart()" style="background:#334155;color:#e2e8f0;border:1px solid #475569;padding:6px 16px;font-size:0.8rem;cursor:pointer;font-family:inherit;margin-left:6px">New Game</button>
 </div>
 <div id="overlay">
   <h1 id="overlayTitle">Hangman</h1>
