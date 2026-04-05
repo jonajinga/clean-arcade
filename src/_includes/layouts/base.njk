@@ -45,7 +45,6 @@
   <a class="skip-link" href="#main">Skip to content</a>
 
   {% include "partials/header.njk" %}
-  {% include "partials/hamburger-panel.njk" %}
 
   <main id="main">
     {{ content | safe }}
@@ -57,7 +56,7 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3L3 10h4v7h6v-7h4L10 3z" fill="currentColor"/></svg>
   </button>
 
-  {# GTranslate — dropdown mode, not floating #}
+  {# GTranslate #}
   <script>
     window.gtranslateSettings = {
       default_language: "en",
@@ -70,7 +69,6 @@
   <script src="https://cdn.gtranslate.net/widgets/latest/dropdown.js" defer></script>
 
   {# Site JS — Pagefind loaded dynamically by search.js #}
-  <script src="/assets/js/nav.js" defer></script>
   <script src="/assets/js/search.js" defer></script>
 
   {# Back to top + header show/hide on game pages #}
