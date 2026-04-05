@@ -10,9 +10,9 @@ body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe
 h1{font-size:1.8rem;margin-bottom:.3rem;color:#facc15}
 .stats{display:flex;gap:1.2rem;margin:.5rem 0;font-size:.95rem;color:#94a3b8;flex-wrap:wrap;justify-content:center}
 .stats span{color:#e2e8f0;font-weight:600}
-canvas{border:2px solid #334155;border-radius:4px;max-width:100%;touch-action:none}
+canvas{border:2px solid #334155;border-radius:0;max-width:100%;touch-action:none}
 .controls{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;justify-content:center}
-.ctrl-btn{padding:.5rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1rem;cursor:pointer}
+.ctrl-btn{padding:.5rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1rem;cursor:pointer}
 .ctrl-btn:hover{background:#6366f1}
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
 .overlay.hidden{display:none}
@@ -20,14 +20,14 @@ canvas{border:2px solid #334155;border-radius:4px;max-width:100%;touch-action:no
 .overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
 .overlay-box p{margin:.5rem 0;color:#94a3b8}
 .overlay-box p span{color:#e2e8f0;font-weight:600}
-.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e;margin:.3rem}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:0;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e;margin:.3rem}
 .btn:hover{background:#16a34a}
 .level-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin:1rem 0}
-.lvl-btn{padding:.5rem;border:2px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:6px;cursor:pointer;font-weight:600}
+.lvl-btn{padding:.5rem;border:2px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:0;cursor:pointer;font-weight:600}
 .lvl-btn:hover,.lvl-btn.unlocked{border-color:#6366f1}
 .lvl-btn.completed{border-color:#22c55e;background:#14532d33}
 .d-pad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px;margin:.75rem auto 0;width:fit-content}
-.d-btn{border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.d-btn{border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .d-btn:hover{background:#6366f1}
 .d-empty{visibility:hidden}
 </style>

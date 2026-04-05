@@ -14,7 +14,7 @@ h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
 .card{aspect-ratio:1;perspective:600px;cursor:pointer}
 .card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
 .card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
-.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .card-back{background:linear-gradient(135deg,#6366f1,#ec4899)}
 .card-back::after{content:'◇';font-size:2rem;opacity:.4;color:#fff}
 .card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155;overflow:hidden}
@@ -57,10 +57,10 @@ h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
 .overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
 .overlay-box p{margin:.5rem 0;color:#94a3b8}
 .overlay-box p span{color:#e2e8f0;font-weight:600}
-.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:0;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e}
 .btn:hover{background:#16a34a}
 .pause-wrap{text-align:center;margin-top:.75rem}
-.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1.3rem;cursor:pointer}
 .pause-btn:hover{background:#6366f1}
 </style>
 </head>

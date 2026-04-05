@@ -12,7 +12,7 @@ h1{font-size:1.5rem;margin:.5rem 0}
 .overlay h2{font-size:2rem;color:#facc15}
 .overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
 .overlay .score{font-size:1.4rem;color:#22c55e}
-.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:6px;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn{padding:12px 32px;font-size:1.1rem;border:none;border-radius:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
 .btn:hover{background:#4f46e5}
 .hidden{display:none!important}
 #hud{display:flex;gap:2rem;margin:.5rem 0;font-size:1rem}
@@ -24,14 +24,14 @@ h1{font-size:1.5rem;margin:.5rem 0}
 .block .top{transform:rotateX(90deg);transform-origin:bottom}
 .block .front{transform-origin:bottom}
 .block .right-face{transform:rotateY(90deg);transform-origin:left}
-#pause-btn{padding:8px 24px;font-size:1.3rem;border:none;border-radius:6px;cursor:pointer;background:#334155;color:#e2e8f0;margin:.5rem 0}
+#pause-btn{padding:8px 24px;font-size:1.3rem;border:none;border-radius:0;cursor:pointer;background:#334155;color:#e2e8f0;margin:.5rem 0}
 #tap-hint{text-align:center;color:#94a3b8;font-size:.9rem;margin:.25rem 0}
 </style>
 </head>
 <body>
 <h1>Stack Tower 3D</h1>
 <div id="hud"><div>Score: <span id="score">0</span></div><div>Best: <span id="high">0</span></div></div>
-<canvas id="c" width="320" height="480" style="border:1px solid #334155;border-radius:4px;max-width:100%;cursor:pointer;touch-action:none"></canvas>
+<canvas id="c" width="320" height="480" style="border:1px solid #334155;border-radius:0;max-width:100%;cursor:pointer;touch-action:none"></canvas>
 <button id="pause-btn" onclick="togglePause()">⏸</button>
 <p id="tap-hint">Tap or click to place block</p>
 <div id="start-overlay" class="overlay">

@@ -14,7 +14,7 @@ h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
 .card{aspect-ratio:1;perspective:600px;cursor:pointer}
 .card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
 .card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
-.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700}
 .card-back{background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;font-size:2rem}
 .card-back::after{content:'?';opacity:.6}
 .card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155;color:#e2e8f0}
@@ -25,14 +25,14 @@ h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
 .overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
 .overlay-box p{margin:.5rem 0;color:#94a3b8}
 .overlay-box p span{color:#e2e8f0;font-weight:600}
-.btn{display:inline-block;padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;margin:.4rem;color:#0f172a}
+.btn{display:inline-block;padding:.7rem 1.8rem;border:none;border-radius:0;font-size:1.1rem;font-weight:600;cursor:pointer;margin:.4rem;color:#0f172a}
 .btn-play{background:#22c55e}
 .btn-play:hover{background:#16a34a}
 .mode-btns{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}
-.mode-btn{padding:.6rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1rem;cursor:pointer;transition:background .2s}
+.mode-btn{padding:.6rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1rem;cursor:pointer;transition:background .2s}
 .mode-btn:hover,.mode-btn.active{background:#6366f1;color:#fff}
 .pause-wrap{text-align:center;margin-top:.75rem}
-.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1.3rem;cursor:pointer}
 .pause-btn:hover{background:#6366f1}
 </style>
 </head>

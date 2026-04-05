@@ -124,7 +124,7 @@
   let W, H, sc;
   const GW = 600, GH = 400;
   const PADDLE_W = 12, PADDLE_H = 80, BALL_R = 8;
-  const WIN_SCORE = 5;
+  const WIN_Score = 5;
 
   function resize() {
     const maxW = window.innerWidth - 16;
@@ -180,7 +180,7 @@
   function scored(who) {
     if (who === 'player') { pScore++; pScoreEl.textContent = pScore; }
     else { cScore++; cScoreEl.textContent = cScore; }
-    if (pScore >= WIN_SCORE || cScore >= WIN_SCORE) {
+    if (pScore >= WIN_Score || cScore >= WIN_SCORE) {
       gameState = 'over';
       const won = pScore >= WIN_SCORE;
       overlayTitle.textContent = won ? 'You Win!' : 'CPU Wins!';
@@ -197,7 +197,7 @@
   }
 
   function save() {
-    parent.postMessage({ type: 'ca-save', slug: 'pong', state: { wins: pScore >= WIN_SCORE ? 1 : 0 } }, '*');
+    parent.postMessage({ type: 'ca-save', slug: 'pong', state: { wins: pScore >= WIN_Score ? 1 : 0 } }, '*');
   }
 
   window.addEventListener('message', function(e) {
