@@ -4,19 +4,17 @@ title: "My Games"
 description: "Your recently played and favorite games — saved locally in your browser."
 permalink: /my-games/
 ---
-<p class="text-muted">Your game history and favorites are stored locally in your browser. Nothing is sent to any server.</p>
+<div class="content-page">
+  <p class="page-intro">Your game history and favorites are stored locally in your browser. Nothing is sent to any server.</p>
 
-<div style="margin-top: var(--space-2xl);">
   <h2>Favorites</h2>
   <div class="game-grid" id="favorites-grid">
     <p class="text-muted" id="no-favorites">No favorites yet. Click the heart on any game to save it here.</p>
   </div>
-</div>
 
-<div style="margin-top: var(--space-2xl);">
   <h2>Recently Played</h2>
   <div class="game-grid" id="recent-grid">
-    <p class="text-muted" id="no-recent">No games played yet. Go play something!</p>
+    <p class="text-muted" id="no-recent">No games played yet.</p>
   </div>
 </div>
 
@@ -44,8 +42,7 @@ permalink: /my-games/
       card.href = "/games/" + game.slug + "/";
       card.className = "game-card";
       card.innerHTML =
-        '<div class="game-card__thumb"><div class="game-card__thumb-placeholder" style="background: var(--cat-' + game.category + ')"><span>' + game.title + '</span></div></div>' +
-        '<div class="game-card__body"><h3 class="game-card__title">' + game.title + '</h3></div>';
+        '<div class="game-card__thumb"><div class="game-card__thumb-placeholder" style="background: var(--cat-' + game.category + ')"><span class="game-card__title">' + game.title + '</span></div></div>';
       grid.appendChild(card);
     });
   }
