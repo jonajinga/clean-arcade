@@ -4,8 +4,8 @@
 }
 
 .changelog-entry {
-  padding-bottom: var(--space-3xl);
-  margin-bottom: var(--space-3xl);
+  padding-bottom: var(--space-xl);
+  margin-bottom: var(--space-xl);
   border-bottom: 1px solid var(--border);
 }
 
@@ -35,7 +35,7 @@
 }
 
 .changelog-entry h3 {
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-sm);
 }
 
 .changelog-entry ul {
@@ -46,9 +46,9 @@
 .changelog-entry li {
   position: relative;
   padding-left: var(--space-lg);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
   font-size: var(--text-sm);
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .changelog-entry li::before {
@@ -70,14 +70,14 @@
   font-size: var(--text-base);
   color: var(--text-muted);
   max-width: 600px;
-  margin-bottom: var(--space-3xl);
-  line-height: 1.7;
+  margin-bottom: var(--space-xl);
+  line-height: 1.6;
 }
 
 .content-page h2 {
   font-size: var(--text-xl);
-  margin-top: var(--space-3xl);
-  margin-bottom: var(--space-md);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-sm);
 }
 
 .content-page h2:first-of-type {
@@ -86,29 +86,29 @@
 
 .content-page h3 {
   font-size: var(--text-lg);
-  margin-top: var(--space-2xl);
-  margin-bottom: var(--space-md);
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-sm);
 }
 
 .content-page p {
   font-size: var(--text-sm);
-  line-height: 1.8;
-  margin-bottom: var(--space-lg);
+  line-height: 1.6;
+  margin-bottom: var(--space-md);
   max-width: 640px;
 }
 
 .content-page ul {
   list-style: none;
   padding: 0;
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-md);
 }
 
 .content-page li {
   position: relative;
   padding-left: var(--space-lg);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-xs);
   font-size: var(--text-sm);
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .content-page li::before {
@@ -141,13 +141,13 @@
 .about-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--space-3xl);
+  gap: var(--space-xl);
   max-width: 640px;
 }
 
 .about-grid h2 {
   margin-top: 0;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 /* === Privacy Table === */
@@ -155,7 +155,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  margin-bottom: var(--space-2xl);
+  margin-bottom: var(--space-lg);
   max-width: 640px;
 }
 
@@ -163,7 +163,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   font-size: var(--text-sm);
   border-bottom: 1px solid var(--border);
 }
@@ -201,13 +201,13 @@
 .post-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   max-width: 640px;
 }
 
 .post-card {
   display: block;
-  padding: var(--space-xl) var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
   background: var(--bg-card);
   border: 1px solid var(--border);
   transition: border-color 0.15s;
