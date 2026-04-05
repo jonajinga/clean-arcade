@@ -1,24 +1,28 @@
 ---
 layout: layouts/page.njk
 title: "Blog"
-description: "Updates, game spotlights, and behind-the-scenes from Clean Arcade."
+description: "Updates, game guides, and how each game works on Clean Arcade."
 permalink: /blog/
 ---
-<div class="post-list">
-  {% for post in collections.posts %}
-    <a href="{{ post.url }}" class="post-card">
-      <h3 class="post-card__title">{{ post.data.title }}</h3>
-      <div class="post-card__meta">
-        <time datetime="{{ post.date | htmlDateString }}">{{ post.date | readableDate }}</time>
-        <span>{{ post.content | readingTime }}</span>
-      </div>
-      {% if post.data.description %}
-        <p class="post-card__excerpt">{{ post.data.description }}</p>
-      {% endif %}
-    </a>
-  {% endfor %}
-</div>
+<div class="content-page">
+  <p class="page-intro">Game guides, tips, and updates.</p>
 
-{% if collections.posts.length == 0 %}
-  <p class="text-muted text-center" style="padding: var(--space-3xl);">No posts yet. Check back soon.</p>
-{% endif %}
+  <div class="blog-grid">
+    {% for post in collections.posts %}
+      <a href="{{ post.url }}" class="blog-card">
+        <h3 class="blog-card__title">{{ post.data.title }}</h3>
+        {% if post.data.description %}
+          <p class="blog-card__excerpt">{{ post.data.description }}</p>
+        {% endif %}
+        <div class="blog-card__meta">
+          <time datetime="{{ post.date | htmlDateString }}">{{ post.date | readableDate }}</time>
+          <span>{{ post.content | readingTime }}</span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if collections.posts.length == 0 %}
+    <p class="text-muted" style="padding: var(--space-2xl) 0;">No posts yet.</p>
+  {% endif %}
+</div>

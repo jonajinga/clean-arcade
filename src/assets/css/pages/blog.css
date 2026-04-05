@@ -1,51 +1,59 @@
-/* === Blog === */
-.post-list {
+/* === Blog Index === */
+.blog-grid {
   display: grid;
-  gap: var(--space-xl);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-md);
 }
 
-.post-card {
-  display: block;
-  padding: var(--space-xl);
+.blog-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text);
   transition: border-color 0.15s;
 }
 
-.post-card:hover {
+.blog-card:hover {
   border-color: var(--accent);
   color: var(--text);
 }
 
-.post-card__title {
-  font-size: var(--text-xl);
-  margin-bottom: var(--space-sm);
-}
-
-.post-card__meta {
+.blog-card__title {
   font-size: var(--text-sm);
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+}
+
+.blog-card__excerpt {
+  font-size: var(--text-xs);
   color: var(--text-muted);
+  line-height: 1.5;
   margin-bottom: var(--space-sm);
+  flex: 1;
 }
 
-.post-card__excerpt {
-  font-size: var(--text-sm);
+.blog-card__meta {
+  font-size: var(--text-xs);
   color: var(--text-muted);
+  display: flex;
+  gap: var(--space-md);
+  margin-top: auto;
 }
 
-/* Post layout */
+/* === Post Layout === */
 .post__container {
-  max-width: 720px;
+  max-width: 680px;
 }
 
 .post__header {
-  margin-bottom: var(--space-2xl);
+  margin-bottom: var(--space-xl);
 }
 
 .post__header h1 {
-  font-size: var(--text-3xl);
-  margin-bottom: var(--space-sm);
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-xs);
 }
 
 .post__meta {
@@ -56,19 +64,19 @@
 }
 
 .post__body {
-  line-height: 1.8;
-  margin-bottom: var(--space-2xl);
+  line-height: 1.7;
+  margin-bottom: var(--space-xl);
 }
 
 .post__body h2 {
-  font-size: var(--text-2xl);
-  margin-top: var(--space-2xl);
-  margin-bottom: var(--space-md);
+  font-size: var(--text-xl);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-sm);
 }
 
 .post__body h3 {
-  font-size: var(--text-xl);
-  margin-top: var(--space-xl);
+  font-size: var(--text-lg);
+  margin-top: var(--space-lg);
   margin-bottom: var(--space-sm);
 }
 
@@ -88,7 +96,11 @@
   margin-bottom: var(--space-xs);
 }
 
+.post__body strong {
+  color: var(--heading);
+}
+
 .post__footer {
-  padding-top: var(--space-xl);
+  padding-top: var(--space-lg);
   border-top: 1px solid var(--border);
 }
