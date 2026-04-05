@@ -80,6 +80,23 @@
   margin-bottom: var(--space-sm);
 }
 
+/* Info page sections */
+.info-section {
+  padding-bottom: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--border);
+}
+
+.info-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.info-section h2 {
+  margin-top: 0;
+}
+
 .content-page h2:first-of-type {
   margin-top: 0;
 }
