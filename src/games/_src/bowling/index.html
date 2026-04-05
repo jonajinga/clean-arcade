@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bowling</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+#info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+#info span{color:#6366f1}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
+#scorecard{display:flex;gap:1px;margin:.5rem 0;flex-wrap:wrap;justify-content:center;font-size:.7rem;max-width:100%}
+.frame{background:#1e293b;padding:2px 4px;min-width:40px;text-align:center;border:1px solid #334155;border-radius:3px}
+.frame .fname{color:#6366f1;font-weight:700;margin-bottom:1px}
+.frame .frolls{color:#facc15;font-size:.65rem}
+.frame .ftotal{color:#22c55e;font-weight:700;font-size:.8rem}
+.frame.active{border-color:#facc15}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem}
+.overlay .score-line{color:#22c55e;font-size:1.3rem}
+.btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+#pauseBtn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;background:#3b82f6;color:#fff;border:none;border-radius:.5rem;cursor:pointer}
+.hidden{display:none!important}
+#controls{text-align:center;margin-top:.5rem;font-size:.85rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Bowling</h1>
+<div id="info">
+  <span>Frame: <b id="frameEl">1</b></span>
+  <span>Score: <b id="totalEl">0</b></span>
+  <span>High Game: <b id="highEl">0</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="controls">Arrow keys or touch drag to aim. Space/tap to start power, again to throw.</div>
+<div id="scorecard"></div>
+
+<div id="startOverlay" class="overlay">
+  <h2>Bowling</h2>
+  <p>10 frames. Aim, set power, throw!</p>
+  <p style="font-size:.85rem;color:#94a3b8">Arrow keys + Space, or touch</p>
+  <button class="btn" id="playBtn">Play</button>
+</div>
+<div id="overOverlay" class="overlay hidden">
+  <h2 id="overTitle">Game Over</h2>
+  <p class="score-line" id="overScore"></p>
+  <p class="score-line" id="overHigh"></p>
+  <button class="btn" id="replayBtn">Play Again</button>
+</div>
+
+<script>
+const SLUG='bowling';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H;
+
+function resize(){
+  W=Math.min(window.innerWidth-32,360);
+  H=Math.round(W*2);
+  canvas.width=W;canvas.height=H;
+}
+resize();
+window.addEventListener('resize',()=>{resize();if(state)draw();});
+
+const PIN_R=W*0.022;
+const BALL_R=W*0.035;
+const LANE_L=W*0.15,LANE_R=W*0.85;
+const LANE_W=LANE_R-LANE_L;
+
+let pins,ball,state,aim,power,powerDir,phase;
+let frameNum,rollNum,frames,highScore=0;
+let animBall,throwVX,throwVY;
+
+// Pin triangle layout (1-2-3-4)
+function pinPositions(){
+  const cx=W/2,startY=H*0.12;
+  const sp=PIN_R*3;
+  const rows=[[0],[-.5,.5],[-1,0,1],[-1.5,-.5,.5,1.5]];
+  const pos=[];
+  rows.forEach((row,ri)=>{
+    row.forEach(off=>{
+      pos.push({x:cx+off*sp,y:startY+ri*sp,standing:true,vx:0,vy:0});
+    });
+  });
+  return pos;
+}
+
+function initGame(){
+  frameNum=1;rollNum=1;
+  frames=[];
+  for(let i=0;i<10;i++)frames.push({rolls:[],score:null,display:[]});
+  pins=pinPositions();
+  aim=0;power=0;powerDir=1;
+  phase='aim'; // aim, power, rolling, settling, done
+  ball={x:W/2,y:H*0.85};
+  updateScorecard();
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById('frameEl').textContent=frameNum;
+  document.getElementById('totalEl').textContent=calcTotal();
+  document.getElementById('highEl').textContent=highScore;
+}
+
+function countStanding(){return pins.filter(p=>p.standing).length;}
+
+function nextPhase(){
+  const knocked=10-countStanding();
+  const f=frames[frameNum-1];
+
+  if(rollNum===1){
+    f.rolls.push(knocked);
+    if(knocked===10){
+      f.display.push('X');
+      if(frameNum<10){
+        advanceFrame();return;
+      }else{
+        rollNum=2;
+        pins=pinPositions();
+      }
+    }else{
+      f.display.push(knocked===0?'-':String(knocked));
+      rollNum=2;
+    }
+  }else if(rollNum===2){
+    const thisRoll=frameNum<10?knocked-f.rolls[0]:knocked;
+    f.rolls.push(frameNum<10?knocked-f.rolls[0]:knocked);
+    if(frameNum<10){
+      if(knocked===10){f.display.push('/');}
+      else{f.display.push(thisRoll===0?'-':String(thisRoll));}
+      advanceFrame();return;
+    }else{
+      // 10th frame
+      if(f.rolls[0]===10){
+        // First was strike
+        if(knocked===10){f.display.push('X');pins=pinPositions();}
+        else f.display.push(knocked===0?'-':String(knocked));
+        rollNum=3;
+      }else if(f.rolls[0]+f.rolls[1]===10){
+        f.display.push('/');
+        pins=pinPositions();
+        rollNum=3;
+      }else{
+        f.display.push(thisRoll===0?'-':String(thisRoll));
+        endGame();return;
+      }
+    }
+  }else if(rollNum===3){
+    // 10th frame 3rd roll
+    f.rolls.push(knocked);
+    if(knocked===10)f.display.push('X');
+    else if(f.rolls[1]+knocked===10&&f.rolls[0]===10)f.display.push(knocked===0?'-':String(knocked));
+    else f.display.push(knocked===0?'-':String(knocked));
+    endGame();return;
+  }
+
+  phase='aim';aim=0;
+  ball={x:W/2,y:H*0.85};
+  updateScorecard();updateUI();
+}
+
+function advanceFrame(){
+  frameNum++;rollNum=1;
+  pins=pinPositions();
+  phase='aim';aim=0;
+  ball={x:W/2,y:H*0.85};
+  if(frameNum>10){endGame();return;}
+  updateScorecard();updateUI();
+}
+
+function calcTotal(){
+  let total=0;
+  for(let i=0;i<10;i++){
+    const f=frames[i];
+    if(!f.rolls.length)break;
+    if(i<9){
+      if(f.rolls[0]===10){
+        // Strike
+        let b1=0,b2=0;
+        const nf=frames[i+1];
+        if(nf&&nf.rolls.length>0)b1=nf.rolls[0];
+        if(nf&&nf.rolls.length>1)b2=nf.rolls[1];
+        else if(i+2<10&&frames[i+2]&&frames[i+2].rolls.length>0)b2=frames[i+2].rolls[0];
+        if(nf&&nf.rolls.length>0)total+=10+b1+b2;
+        else total+=10;
+      }else if(f.rolls.length>=2&&f.rolls[0]+f.rolls[1]===10){
+        // Spare
+        const nf=frames[i+1];
+        if(nf&&nf.rolls.length>0)total+=10+nf.rolls[0];
+        else total+=10;
+      }else if(f.rolls.length>=2){
+        total+=f.rolls[0]+f.rolls[1];
+      }else{
+        total+=f.rolls[0];
+      }
+    }else{
+      // 10th frame: sum all rolls
+      total+=f.rolls.reduce((a,b)=>a+b,0);
+    }
+  }
+  return total;
+}
+
+function updateScorecard(){
+  const sc=document.getElementById('scorecard');
+  sc.innerHTML='';
+  let runTotal=0;
+  for(let i=0;i<10;i++){
+    const f=frames[i];
+    const el=document.createElement('div');
+    el.className='frame'+(i===frameNum-1?' active':'');
+    const disp=f.display.join(' ');
+    // Calculate running total
+    let ft='';
+    if(f.rolls.length>0){
+      // Simplified: just show current calc
+      ft=String(calcTotalThrough(i));
+    }
+    el.innerHTML=`<div class="fname">${i+1}</div><div class="frolls">${disp||'—'}</div><div class="ftotal">${ft}</div>`;
+    sc.appendChild(el);
+  }
+}
+
+function calcTotalThrough(idx){
+  let total=0;
+  for(let i=0;i<=idx;i++){
+    const f=frames[i];
+    if(!f.rolls.length)break;
+    if(i<9){
+      if(f.rolls[0]===10){
+        const nf=frames[i+1];
+        let b1=0,b2=0;
+        if(nf&&nf.rolls.length>0)b1=nf.rolls[0];
+        if(nf&&nf.rolls.length>1)b2=nf.rolls[1];
+        else if(i+2<=idx&&frames[i+2]&&frames[i+2].rolls.length>0)b2=frames[i+2].rolls[0];
+        total+=10+b1+b2;
+      }else if(f.rolls.length>=2&&f.rolls[0]+f.rolls[1]===10){
+        const nf=frames[i+1];
+        if(nf&&nf.rolls.length>0)total+=10+nf.rolls[0];
+        else total+=10;
+      }else if(f.rolls.length>=2){
+        total+=f.rolls[0]+f.rolls[1];
+      }else total+=f.rolls[0];
+    }else{
+      total+=f.rolls.reduce((a,b)=>a+b,0);
+    }
+  }
+  return total;
+}
+
+function throwBall(){
+  const angle=aim*0.6; // aim in radians, limited
+  const spd=3+power*7;
+  throwVX=Math.sin(angle)*spd;
+  throwVY=-spd;
+  phase='rolling';
+}
+
+function update(){
+  if(phase==='power'){
+    power+=powerDir*0.02;
+    if(power>=1){power=1;powerDir=-1;}
+    if(power<=0){power=0;powerDir=1;}
+  }
+
+  if(phase==='rolling'){
+    ball.x+=throwVX;
+    ball.y+=throwVY;
+
+    // Pin collision
+    for(const p of pins){
+      if(!p.standing)continue;
+      const dx=ball.x-p.x,dy=ball.y-p.y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<BALL_R+PIN_R){
+        p.standing=false;
+        p.vx=dx/dist*4;
+        p.vy=dy/dist*4;
+        // Chain reaction
+        for(const p2 of pins){
+          if(!p2.standing||p2===p)continue;
+          const dx2=p2.x-p.x,dy2=p2.y-p.y;
+          const d2=Math.sqrt(dx2*dx2+dy2*dy2);
+          if(d2<PIN_R*3){
+            p2.standing=false;
+            p2.vx=dx2/d2*3;
+            p2.vy=dy2/d2*3;
+          }
+        }
+      }
+    }
+
+    // Ball off screen
+    if(ball.y<-BALL_R*2||ball.x<LANE_L-BALL_R||ball.x>LANE_R+BALL_R){
+      phase='settling';
+      setTimeout(()=>nextPhase(),600);
+    }
+  }
+
+  // Animate fallen pins
+  for(const p of pins){
+    if(!p.standing&&(Math.abs(p.vx)>0.1||Math.abs(p.vy)>0.1)){
+      p.x+=p.vx;p.y+=p.vy;
+      p.vx*=0.9;p.vy*=0.9;
+    }
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Lane
+  ctx.fillStyle='#8B6914';
+  ctx.fillRect(LANE_L,0,LANE_W,H);
+
+  // Gutters
+  ctx.fillStyle='#4a3808';
+  ctx.fillRect(LANE_L-8,0,8,H);
+  ctx.fillRect(LANE_R,0,8,H);
+
+  // Lane markings
+  ctx.strokeStyle='rgba(255,255,255,0.1)';
+  ctx.lineWidth=1;
+  for(let i=1;i<4;i++){
+    const x=LANE_L+LANE_W*i/4;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
+  }
+  // Arrows
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  const arrowY=H*0.55;
+  for(let i=0;i<3;i++){
+    const ax=LANE_L+LANE_W*(i+1)/4;
+    ctx.beginPath();ctx.moveTo(ax,arrowY);ctx.lineTo(ax-6,arrowY+12);ctx.lineTo(ax+6,arrowY+12);ctx.fill();
+  }
+
+  // Pins
+  for(const p of pins){
+    if(p.standing){
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.arc(p.x,p.y,PIN_R,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#ef4444';
+      ctx.beginPath();ctx.arc(p.x,p.y-PIN_R*0.3,PIN_R*0.4,0,Math.PI*2);ctx.fill();
+    }else{
+      ctx.fillStyle='rgba(255,255,255,0.3)';
+      ctx.beginPath();ctx.arc(p.x,p.y,PIN_R*0.8,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  // Ball
+  if(phase!=='settling'){
+    ctx.fillStyle='#6366f1';
+    ctx.beginPath();ctx.arc(ball.x,ball.y,BALL_R,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.beginPath();ctx.arc(ball.x-BALL_R*0.2,ball.y-BALL_R*0.2,BALL_R*0.15,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(ball.x+BALL_R*0.15,ball.y-BALL_R*0.3,BALL_R*0.12,0,Math.PI*2);ctx.fill();
+  }
+
+  // Aim line
+  if(phase==='aim'){
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+    ctx.setLineDash([6,4]);
+    const angle=aim*0.6;
+    ctx.beginPath();
+    ctx.moveTo(ball.x,ball.y);
+    ctx.lineTo(ball.x+Math.sin(angle)*200,ball.y-200);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Power meter
+  if(phase==='power'||phase==='aim'){
+    const mx=W-25,my=H*0.3,mh=H*0.4;
+    ctx.fillStyle='#1e293b';ctx.fillRect(mx-8,my,16,mh);
+    const fill=power*mh;
+    const grad=ctx.createLinearGradient(0,my+mh,0,my);
+    grad.addColorStop(0,'#22c55e');grad.addColorStop(0.5,'#facc15');grad.addColorStop(1,'#ef4444');
+    ctx.fillStyle=grad;
+    ctx.fillRect(mx-6,my+mh-fill,12,fill);
+    ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
+    ctx.strokeRect(mx-8,my,16,mh);
+  }
+
+  // Instructions
+  if(phase==='aim'){
+    ctx.fillStyle='#94a3b8';ctx.font='14px system-ui';ctx.textAlign='center';
+    ctx.fillText('← → to aim, Space/Tap to set power',W/2,H-30);
+  }else if(phase==='power'){
+    ctx.fillStyle='#facc15';ctx.font='14px system-ui';ctx.textAlign='center';
+    ctx.fillText('Space/Tap to throw!',W/2,H-30);
+  }
+}
+
+function loop(){
+  if(!state)return;
+  update();draw();
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  resize();initGame();
+  state=true;
+  requestAnimationFrame(loop);
+}
+
+function endGame(){
+  const total=calcTotal();
+  if(total>highScore)highScore=total;
+  state=false;
+  document.getElementById('overTitle').textContent='Game Over';
+  document.getElementById('overScore').textContent='Final Score: '+total;
+  document.getElementById('overHigh').textContent='High Game: '+highScore;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  updateScorecard();
+  saveState();
+}
+
+document.addEventListener('keydown',e=>{
+  if(!state)return;
+  if(phase==='aim'){
+    if(e.key==='ArrowLeft'){aim-=0.05;e.preventDefault();}
+    if(e.key==='ArrowRight'){aim+=0.05;e.preventDefault();}
+    aim=Math.max(-1,Math.min(1,aim));
+    if(e.key===' '){phase='power';power=0;powerDir=1;e.preventDefault();}
+  }else if(phase==='power'&&e.key===' '){
+    throwBall();e.preventDefault();
+  }
+});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(phase==='aim'){phase='power';power=0;powerDir=1;}
+  else if(phase==='power')throwBall();
+},{passive:false});
+
+let touchX=null;
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(phase==='aim'){
+    const r=canvas.getBoundingClientRect();
+    const x=(e.touches[0].clientX-r.left)*(W/r.width);
+    aim=(x-W/2)/(LANE_W/2)*0.8;
+    aim=Math.max(-1,Math.min(1,aim));
+  }
+},{passive:false});
+
+document.getElementById('playBtn').addEventListener('click',startGame);
+document.getElementById('replayBtn').addEventListener('click',startGame);
+
+function saveState(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    highScore=e.data.state.highScore||0;
+    document.getElementById('highEl').textContent=highScore;
+  }
+});
+</script>
+</body>
+</html>

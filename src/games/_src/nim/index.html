@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nim</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+#info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+#info span{color:#6366f1}
+#board{display:flex;flex-direction:column;align-items:center;gap:1.5rem;margin:1.5rem 0}
+.row-label{color:#6366f1;font-size:.85rem;font-weight:700;margin-bottom:.25rem}
+.stone-row{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
+.stone{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#94a3b8,#475569);border:2px solid #64748b;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center}
+.stone:hover{border-color:#facc15;transform:scale(1.1)}
+.stone.selected{background:radial-gradient(circle at 35% 35%,#facc15,#a16207);border-color:#facc15}
+.stone.removed{opacity:.15;cursor:default;pointer-events:none}
+#actions{display:flex;gap:.75rem;margin:1rem 0;flex-wrap:wrap;justify-content:center}
+#actions button{padding:.5rem 1.25rem;font-size:.9rem;border:none;border-radius:.5rem;cursor:pointer;font-weight:600}
+#takeBtn{background:#ef4444;color:#fff}
+#takeBtn:hover{background:#dc2626}
+#takeBtn:disabled{opacity:.4;cursor:not-allowed}
+#resetSelBtn{background:#3b82f6;color:#fff}
+#resetSelBtn:hover{background:#2563eb}
+#message{min-height:1.5rem;color:#facc15;font-weight:600;text-align:center;margin:.5rem 0;font-size:1.1rem}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem}
+.overlay .score-line{color:#22c55e;font-size:1.3rem}
+.btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Nim</h1>
+<div id="info">
+  <span>Wins: <b id="winsEl">0</b></span>
+  <span>Losses: <b id="lossesEl">0</b></span>
+</div>
+<div id="message">Your turn — select stones from one row</div>
+<div id="board"></div>
+<div id="actions">
+  <button id="resetSelBtn" onclick="resetSelection()">Clear Selection</button>
+  <button id="takeBtn" onclick="takeStones()" disabled>Take Stones</button>
+</div>
+
+<div id="startOverlay" class="overlay">
+  <h2>Nim</h2>
+  <p>Remove 1-3 stones from any row.</p>
+  <p style="font-size:.85rem;color:#94a3b8">The player who takes the LAST stone loses!</p>
+  <button class="btn" id="playBtn">Play</button>
+</div>
+<div id="overOverlay" class="overlay hidden">
+  <h2 id="overTitle">Game Over</h2>
+  <p class="score-line" id="overMsg"></p>
+  <p class="score-line" id="overRecord"></p>
+  <button class="btn" id="replayBtn">Play Again</button>
+</div>
+
+<script>
+const SLUG='nim';
+let rows=[3,5,7];
+let removed=[[],[],[]];
+let selected=[];
+let selectedRow=-1;
+let playerTurn=true;
+let wins=0,losses=0;
+let gameActive=false;
+
+function remaining(r){return rows[r]-removed[r].length;}
+function totalRemaining(){return rows.reduce((s,_,i)=>s+remaining(i),0);}
+
+function render(){
+  const board=document.getElementById('board');
+  board.innerHTML='';
+  rows.forEach((count,ri)=>{
+    const wrapper=document.createElement('div');
+    wrapper.style.textAlign='center';
+    const label=document.createElement('div');
+    label.className='row-label';
+    label.textContent=`Row ${ri+1} (${remaining(ri)} left)`;
+    wrapper.appendChild(label);
+    const rowEl=document.createElement('div');
+    rowEl.className='stone-row';
+    for(let si=0;si<count;si++){
+      const stone=document.createElement('div');
+      stone.className='stone';
+      if(removed[ri].includes(si)){
+        stone.classList.add('removed');
+      }else if(selected.some(s=>s.row===ri&&s.idx===si)){
+        stone.classList.add('selected');
+      }
+      stone.onclick=()=>toggleStone(ri,si);
+      rowEl.appendChild(stone);
+    }
+    wrapper.appendChild(rowEl);
+    board.appendChild(wrapper);
+  });
+  document.getElementById('takeBtn').disabled=selected.length===0;
+}
+
+function toggleStone(row,idx){
+  if(!gameActive||!playerTurn)return;
+  if(removed[row].includes(idx))return;
+
+  const already=selected.findIndex(s=>s.row===row&&s.idx===idx);
+  if(already>=0){
+    selected.splice(already,1);
+    if(selected.length===0)selectedRow=-1;
+    render();return;
+  }
+
+  if(selectedRow>=0&&selectedRow!==row){
+    setMessage('You can only take from one row per turn!');
+    return;
+  }
+  if(selected.length>=3){
+    setMessage('Maximum 3 stones per turn!');
+    return;
+  }
+
+  selected.push({row,idx});
+  selectedRow=row;
+  render();
+}
+
+function resetSelection(){
+  selected=[];selectedRow=-1;
+  render();
+}
+
+function takeStones(){
+  if(!gameActive||!playerTurn||selected.length===0)return;
+  selected.forEach(s=>removed[s.row].push(s.idx));
+  selected=[];selectedRow=-1;
+
+  if(totalRemaining()===0){
+    // Player took last stone — player loses (misere)
+    endGame(false);return;
+  }
+
+  playerTurn=false;
+  setMessage('AI thinking...');
+  render();
+  setTimeout(aiTurn,700);
+}
+
+function aiTurn(){
+  // Optimal misere strategy
+  const rem=rows.map((_,i)=>remaining(i));
+  const nimSum=rem.reduce((a,b)=>a^b,0);
+  let moveRow=-1,moveCount=0;
+
+  const totalLeft=rem.reduce((a,b)=>a+b,0);
+  const nonEmpty=rem.filter(r=>r>0).length;
+
+  if(nimSum===0){
+    // Losing position for AI — take 1 from any row
+    for(let i=0;i<3;i++){
+      if(rem[i]>0){moveRow=i;moveCount=1;break;}
+    }
+  }else{
+    // Misere: if all heaps are 0 or 1, take to leave odd number of 1-heaps
+    const allSmall=rem.every(r=>r<=1);
+    if(allSmall){
+      // Take from any heap with 1
+      const ones=rem.filter(r=>r===1).length;
+      if(ones%2===0){
+        // Leave odd ones — take 1
+        for(let i=0;i<3;i++){if(rem[i]===1){moveRow=i;moveCount=1;break;}}
+      }else{
+        // Already odd, just take 1
+        for(let i=0;i<3;i++){if(rem[i]===1){moveRow=i;moveCount=1;break;}}
+      }
+    }else{
+      // Normal nim strategy, but adjust for misere endgame
+      for(let i=0;i<3;i++){
+        if(rem[i]>0){
+          for(let take=1;take<=Math.min(3,rem[i]);take++){
+            const newRem=[...rem];
+            newRem[i]-=take;
+            const ns=newRem.reduce((a,b)=>a^b,0);
+            const nNon=newRem.filter(r=>r>0).length;
+            const nAllSmall=newRem.every(r=>r<=1);
+            if(nAllSmall){
+              // Leave odd number of 1-heaps for misere
+              const ones=newRem.filter(r=>r===1).length;
+              if(ones%2===1){moveRow=i;moveCount=take;break;}
+            }else if(ns===0){
+              moveRow=i;moveCount=take;break;
+            }
+          }
+          if(moveRow>=0)break;
+        }
+      }
+      if(moveRow<0){
+        // Fallback
+        for(let i=0;i<3;i++){
+          if(rem[i]>0){moveRow=i;moveCount=1;break;}
+        }
+      }
+    }
+  }
+
+  // Execute AI move
+  let taken=0;
+  for(let si=0;si<rows[moveRow]&&taken<moveCount;si++){
+    if(!removed[moveRow].includes(si)){
+      removed[moveRow].push(si);
+      taken++;
+    }
+  }
+
+  if(totalRemaining()===0){
+    endGame(true);return;
+  }
+
+  playerTurn=true;
+  setMessage(`AI took ${moveCount} from row ${moveRow+1}. Your turn!`);
+  render();
+}
+
+function setMessage(t){document.getElementById('message').textContent=t;}
+
+function endGame(playerWon){
+  gameActive=false;
+  if(playerWon)wins++;else losses++;
+  document.getElementById('winsEl').textContent=wins;
+  document.getElementById('lossesEl').textContent=losses;
+  document.getElementById('overTitle').textContent=playerWon?'You Win!':'You Lose!';
+  document.getElementById('overMsg').textContent=playerWon?'AI took the last stone!':'You took the last stone!';
+  document.getElementById('overRecord').textContent=`Record: ${wins}W — ${losses}L`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  removed=[[],[],[]];
+  selected=[];selectedRow=-1;
+  playerTurn=true;
+  gameActive=true;
+  setMessage('Your turn — select stones from one row');
+  render();
+}
+
+document.getElementById('playBtn').addEventListener('click',startGame);
+document.getElementById('replayBtn').addEventListener('click',startGame);
+
+function saveState(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{wins,losses}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    wins=e.data.state.wins||0;
+    losses=e.data.state.losses||0;
+    document.getElementById('winsEl').textContent=wins;
+    document.getElementById('lossesEl').textContent=losses;
+  }
+});
+</script>
+</body>
+</html>

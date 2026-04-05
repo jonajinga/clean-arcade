@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plant Growing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+#info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+#info span{color:#6366f1}
+#toolbar{display:flex;gap:.5rem;margin:.5rem 0;flex-wrap:wrap;justify-content:center}
+#toolbar button{padding:.5rem 1rem;font-size:.85rem;border:2px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:.5rem;cursor:pointer;transition:border-color .2s}
+#toolbar button:hover,#toolbar button.active{border-color:#facc15;color:#facc15}
+#toolbar button:disabled{opacity:.4;cursor:not-allowed}
+#garden{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;max-width:480px;width:100%;margin:.5rem 0}
+.pot{background:#1e293b;border:2px solid #334155;border-radius:.75rem;padding:1rem;text-align:center;cursor:pointer;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;transition:border-color .2s;position:relative}
+.pot:hover{border-color:#6366f1}
+.pot .stage{font-size:.75rem;color:#94a3b8;margin-top:.25rem}
+.pot .water-bar{width:80%;height:6px;background:#334155;border-radius:3px;margin-top:.35rem;overflow:hidden}
+.pot .water-fill{height:100%;background:#3b82f6;border-radius:3px;transition:width .3s}
+.pot .plant-visual{font-size:3rem;margin-bottom:.25rem}
+.pot .label{font-size:.8rem;color:#facc15;font-weight:600}
+.pot.empty{justify-content:center}
+.pot.empty::after{content:'+ Plant';color:#6366f1;font-size:.9rem}
+#seedPicker{background:#1e293b;border:2px solid #6366f1;border-radius:.75rem;padding:1rem;margin:.5rem 0;max-width:480px;width:100%;text-align:center}
+#seedPicker h3{color:#facc15;margin-bottom:.5rem;font-size:1rem}
+#seedPicker .seeds{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
+#seedPicker .seed-opt{padding:.5rem 1rem;border:2px solid #334155;background:#0f172a;color:#e2e8f0;border-radius:.5rem;cursor:pointer;font-size:.85rem}
+#seedPicker .seed-opt:hover{border-color:#22c55e}
+#seedPicker .seed-opt .cost{color:#facc15;font-size:.75rem}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem}
+.overlay .score-line{color:#22c55e;font-size:1.3rem}
+.btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+@media(max-width:400px){#garden{grid-template-columns:repeat(2,1fr)}.pot{min-height:150px}.pot .plant-visual{font-size:2.5rem}}
+</style>
+</head>
+<body>
+<h1>Plant Growing</h1>
+<div id="info">
+  <span>Coins: <b id="coinsEl">20</b></span>
+  <span>Bloomed: <b id="bloomedEl">0</b></span>
+  <span>Total Earned: <b id="earnedEl">0</b></span>
+</div>
+<div id="toolbar">
+  <button id="waterBtn" onclick="setTool('water')">Water Can</button>
+  <button id="harvestBtn" onclick="setTool('harvest')">Harvest</button>
+</div>
+<div id="garden"></div>
+<div id="seedPicker" class="hidden"></div>
+
+<div id="startOverlay" class="overlay">
+  <h2>Plant Growing</h2>
+  <p>Plant seeds, water them, watch them grow!</p>
+  <p style="font-size:.85rem;color:#94a3b8">Click pots to plant. Water to grow. Harvest blooms for coins.</p>
+  <button class="btn" id="playBtn">Play</button>
+</div>
+
+<script>
+const SLUG='plant-growing';
+const FLOWERS=[
+  {name:'Sunflower',icon:'🌻',stages:['🫘','🌱','🌿','🌻'],cost:5,reward:15,growTime:8000},
+  {name:'Rose',icon:'🌹',stages:['🫘','🌱','🥀','🌹'],cost:8,reward:25,growTime:12000},
+  {name:'Tulip',icon:'🌷',stages:['🫘','🌱','🌿','🌷'],cost:4,reward:12,growTime:6000},
+  {name:'Cherry Blossom',icon:'🌸',stages:['🫘','🌱','🌿','🌸'],cost:10,reward:35,growTime:15000},
+  {name:'Daisy',icon:'🌼',stages:['🫘','🌱','🌿','🌼'],cost:3,reward:10,growTime:5000},
+];
+
+let pots=[];// {flower:idx, stage:0-3, water:100, lastWater:time, planted:time}
+let coins=20,bloomed=0,totalEarned=0;
+let tool='water';
+let gameActive=false;
+let selectedPot=-1;
+
+function setTool(t){
+  tool=t;
+  document.querySelectorAll('#toolbar button').forEach(b=>b.classList.remove('active'));
+  if(t==='water')document.getElementById('waterBtn').classList.add('active');
+  if(t==='harvest')document.getElementById('harvestBtn').classList.add('active');
+}
+
+function initGame(){
+  pots=[];
+  for(let i=0;i<6;i++)pots.push(null);
+  coins=20;bloomed=0;totalEarned=0;
+  tool='water';
+  setTool('water');
+  render();
+  updateUI();
+  gameActive=true;
+  gameLoop();
+}
+
+function updateUI(){
+  document.getElementById('coinsEl').textContent=coins;
+  document.getElementById('bloomedEl').textContent=bloomed;
+  document.getElementById('earnedEl').textContent=totalEarned;
+}
+
+function render(){
+  const garden=document.getElementById('garden');
+  garden.innerHTML='';
+  pots.forEach((pot,i)=>{
+    const el=document.createElement('div');
+    el.className='pot'+(pot?'':' empty');
+    if(pot){
+      const f=FLOWERS[pot.flower];
+      el.innerHTML=`
+        <div class="plant-visual">${f.stages[pot.stage]}</div>
+        <div class="label">${f.name}</div>
+        <div class="stage">${['Seed','Sprout','Growing','Bloomed'][pot.stage]}</div>
+        <div class="water-bar"><div class="water-fill" style="width:${pot.water}%"></div></div>
+      `;
+      el.onclick=()=>potClick(i);
+    }else{
+      el.onclick=()=>showSeedPicker(i);
+    }
+    garden.appendChild(el);
+  });
+}
+
+function potClick(i){
+  const pot=pots[i];
+  if(!pot)return;
+  if(tool==='water'){
+    pot.water=Math.min(100,pot.water+30);
+    pot.lastWater=Date.now();
+    render();
+  }else if(tool==='harvest'&&pot.stage===3){
+    const f=FLOWERS[pot.flower];
+    coins+=f.reward;
+    totalEarned+=f.reward;
+    bloomed++;
+    pots[i]=null;
+    updateUI();render();
+    saveState();
+  }
+}
+
+function showSeedPicker(potIdx){
+  selectedPot=potIdx;
+  const picker=document.getElementById('seedPicker');
+  picker.classList.remove('hidden');
+  picker.innerHTML=`<h3>Choose a Seed</h3><div class="seeds"></div>`;
+  const container=picker.querySelector('.seeds');
+  FLOWERS.forEach((f,fi)=>{
+    const btn=document.createElement('button');
+    btn.className='seed-opt';
+    btn.innerHTML=`${f.icon} ${f.name}<br><span class="cost">${f.cost} coins → ${f.reward} coins</span>`;
+    btn.disabled=coins<f.cost;
+    btn.onclick=()=>{
+      if(coins<f.cost)return;
+      coins-=f.cost;
+      pots[selectedPot]={flower:fi,stage:0,water:50,lastWater:Date.now(),planted:Date.now()};
+      picker.classList.add('hidden');
+      updateUI();render();
+      saveState();
+    };
+    container.appendChild(btn);
+  });
+  // Cancel
+  const cancel=document.createElement('button');
+  cancel.className='seed-opt';
+  cancel.textContent='Cancel';
+  cancel.style.borderColor='#ef4444';
+  cancel.onclick=()=>picker.classList.add('hidden');
+  container.appendChild(cancel);
+}
+
+function gameLoop(){
+  if(!gameActive)return;
+  const now=Date.now();
+  let changed=false;
+  pots.forEach(pot=>{
+    if(!pot||pot.stage>=3)return;
+    // Water decreases over time
+    const elapsed=now-pot.lastWater;
+    pot.water=Math.max(0,pot.water-0.3);
+    // Growth check
+    if(pot.water>20){
+      const f=FLOWERS[pot.flower];
+      const growElapsed=now-pot.planted;
+      const stageTime=f.growTime/(3);
+      const targetStage=Math.min(3,Math.floor(growElapsed/stageTime));
+      if(targetStage>pot.stage){
+        pot.stage=targetStage;
+        changed=true;
+      }
+    }
+  });
+  if(changed){render();saveState();}
+  else{
+    // Just update water bars
+    document.querySelectorAll('.pot .water-fill').forEach((el,i)=>{
+      if(pots[i])el.style.width=pots[i].water+'%';
+    });
+  }
+  updateUI();
+  setTimeout(gameLoop,500);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  initGame();
+}
+
+document.getElementById('playBtn').addEventListener('click',startGame);
+
+function saveState(){
+  window.parent.postMessage({type:'ca-save',slug:SLUG,state:{
+    coins,bloomed,totalEarned,
+    pots:pots.map(p=>p?{flower:p.flower,stage:p.stage,water:p.water}:null)
+  }},'*');
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    const s=e.data.state;
+    coins=s.coins||20;
+    bloomed=s.bloomed||0;
+    totalEarned=s.totalEarned||0;
+    if(s.pots){
+      pots=s.pots.map(p=>p?{...p,lastWater:Date.now(),planted:Date.now()-FLOWERS[p.flower].growTime*p.stage/3}:null);
+    }
+    updateUI();
+    if(gameActive)render();
+  }
+});
+</script>
+</body>
+</html>

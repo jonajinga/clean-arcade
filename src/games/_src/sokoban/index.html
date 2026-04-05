@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sokoban</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;user-select:none}
+h1{font-size:1.8rem;margin-bottom:.3rem;color:#facc15}
+.stats{display:flex;gap:1.2rem;margin:.5rem 0;font-size:.95rem;color:#94a3b8;flex-wrap:wrap;justify-content:center}
+.stats span{color:#e2e8f0;font-weight:600}
+canvas{border:2px solid #334155;border-radius:4px;max-width:100%;touch-action:none}
+.controls{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;justify-content:center}
+.ctrl-btn{padding:.5rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1rem;cursor:pointer}
+.ctrl-btn:hover{background:#6366f1}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:400px;width:90%;max-height:90vh;overflow-y:auto}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e;margin:.3rem}
+.btn:hover{background:#16a34a}
+.level-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.4rem;margin:1rem 0}
+.lvl-btn{padding:.5rem;border:2px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:6px;cursor:pointer;font-weight:600}
+.lvl-btn:hover,.lvl-btn.unlocked{border-color:#6366f1}
+.lvl-btn.completed{border-color:#22c55e;background:#14532d33}
+.d-pad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:4px;margin:.75rem auto 0;width:fit-content}
+.d-btn{border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.d-btn:hover{background:#6366f1}
+.d-empty{visibility:hidden}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Sokoban</h2>
+<p>Push all boxes onto the targets!</p>
+<p style="font-size:.85rem">Arrow keys or swipe to move. Z to undo.</p>
+<div class="level-grid" id="levelGrid"></div>
+<button class="btn" onclick="startLevel(1)">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2>Level Complete!</h2>
+<p>Level: <span id="endLevel">1</span></p>
+<p>Moves: <span id="endMoves">0</span></p>
+<button class="btn" onclick="nextLevelFromEnd()">Next Level</button>
+<button class="btn" style="background:#3b82f6" onclick="showLevelSelect()">Level Select</button>
+</div>
+</div>
+
+<h1>Sokoban</h1>
+<div class="stats">
+<div>Level: <span id="level">1</span></div>
+<div>Moves: <span id="moves">0</span></div>
+</div>
+<canvas id="canvas" width="360" height="360"></canvas>
+<div class="d-pad">
+<div class="d-empty"></div>
+<button class="d-btn" onclick="move(0,-1)">&#9650;</button>
+<div class="d-empty"></div>
+<button class="d-btn" onclick="move(-1,0)">&#9664;</button>
+<div class="d-empty"></div>
+<button class="d-btn" onclick="move(1,0)">&#9654;</button>
+<div class="d-empty"></div>
+<button class="d-btn" onclick="move(0,1)">&#9660;</button>
+<div class="d-empty"></div>
+</div>
+<div class="controls">
+<button class="ctrl-btn" onclick="undo()">Undo (Z)</button>
+<button class="ctrl-btn" onclick="resetLevel()">Reset</button>
+<button class="ctrl-btn" onclick="showLevelSelect()">Levels</button>
+</div>
+
+<script>
+const SLUG='sokoban';
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+
+// Level format: # = wall, . = target, $ = box, @ = player, * = box on target, + = player on target, space = floor
+const LEVELS=[
+  // Level 1 - Tutorial
+  ['#####','#.@ #','# $ #','#  .#','# $ #','#   #','#####'],
+  // Level 2
+  ['######','#    #','# #@ #','# $  #','# .$ #','#  . #','######'],
+  // Level 3
+  ['  ####','###  #','# $  #','# .# #','# .$ #','# @  #','######'],
+  // Level 4
+  ['######','#    #','# @$ #','## $ #','#. . #','#    #','######'],
+  // Level 5
+  ['#######','#  .  #','# # # #','#$ @ $#','# # # #','#  .  #','#######'],
+  // Level 6
+  [' #####','##   #','# $# #','#. . #','# $# #','# @  #','######'],
+  // Level 7
+  ['#######','#     #','#.$.$.#','# # # #','# $ $ #','#  @  #','#######'],
+  // Level 8
+  ['########','#   #  #','# $  $ #','## .@. #','# $  $ #','#   #  #','########'],
+  // Level 9
+  ['  #####',' ## . #','## $  #','# .$# #','#  $  #','# @ ###','######'],
+  // Level 10
+  ['########','#  ... #','# $$$  #','## @ ###','# $$$  #','#  ... #','########']
+];
+
+let currentLevel=1,moveCount=0,grid=[],playerR=0,playerC=0,history=[],completed=new Set(),gameStarted=false;
+let cellSize=0;
+
+function parseLevel(lvl){
+  const lines=LEVELS[lvl-1];
+  const rows=lines.length;
+  const cols=Math.max(...lines.map(l=>l.length));
+  const g=[];
+  let pr=0,pc=0;
+  for(let r=0;r<rows;r++){
+    g[r]=[];
+    for(let c=0;c<cols;c++){
+      const ch=(lines[r][c])||' ';
+      let floor='empty',hasBox=false,hasPlayer=false;
+      switch(ch){
+        case '#':floor='wall';break;
+        case '.':floor='target';break;
+        case '$':floor='floor';hasBox=true;break;
+        case '@':floor='floor';hasPlayer=true;break;
+        case '*':floor='target';hasBox=true;break;
+        case '+':floor='target';hasPlayer=true;break;
+        case ' ':floor='floor';break;
+      }
+      g[r][c]={floor,hasBox,hasPlayer};
+      if(hasPlayer){pr=r;pc=c;}
+    }
+  }
+  return {grid:g,playerR:pr,playerC:pc,rows,cols};
+}
+
+function startLevel(lvl){
+  currentLevel=lvl;
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  loadLevel();
+}
+
+function loadLevel(){
+  const data=parseLevel(currentLevel);
+  grid=data.grid;playerR=data.playerR;playerC=data.playerC;
+  moveCount=0;history=[];gameStarted=true;
+  document.getElementById('level').textContent=currentLevel;
+  document.getElementById('moves').textContent='0';
+  const rows=data.rows,cols=data.cols;
+  cellSize=Math.min(360/cols,360/rows);
+  canvas.width=cols*cellSize;canvas.height=rows*cellSize;
+  draw();
+}
+
+function resetLevel(){loadLevel();}
+
+function draw(){
+  const rows=grid.length,cols=grid[0].length;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x=c*cellSize,y=r*cellSize,cell=grid[r][c];
+      const s=cellSize;
+
+      if(cell.floor==='wall'){
+        ctx.fillStyle='#334155';
+        ctx.fillRect(x,y,s,s);
+        ctx.strokeStyle='#475569';ctx.lineWidth=1;
+        ctx.strokeRect(x+1,y+1,s-2,s-2);
+      }else if(cell.floor==='empty'){
+        continue;
+      }else{
+        ctx.fillStyle='#1e293b';
+        ctx.fillRect(x,y,s,s);
+        if(cell.floor==='target'){
+          ctx.fillStyle='#22c55e33';
+          ctx.fillRect(x,y,s,s);
+          ctx.strokeStyle='#22c55e';ctx.lineWidth=2;
+          ctx.beginPath();ctx.arc(x+s/2,y+s/2,s*0.15,0,Math.PI*2);ctx.stroke();
+        }
+      }
+
+      if(cell.hasBox){
+        const onTarget=cell.floor==='target';
+        ctx.fillStyle=onTarget?'#22c55e':'#facc15';
+        const m=s*0.12;
+        ctx.fillRect(x+m,y+m,s-m*2,s-m*2);
+        ctx.strokeStyle=onTarget?'#16a34a':'#d97706';
+        ctx.lineWidth=2;
+        ctx.strokeRect(x+m,y+m,s-m*2,s-m*2);
+        // X pattern
+        ctx.beginPath();ctx.moveTo(x+m+4,y+m+4);ctx.lineTo(x+s-m-4,y+s-m-4);ctx.moveTo(x+s-m-4,y+m+4);ctx.lineTo(x+m+4,y+s-m-4);ctx.stroke();
+      }
+
+      if(cell.hasPlayer){
+        ctx.fillStyle='#3b82f6';
+        ctx.beginPath();ctx.arc(x+s/2,y+s/2,s*0.35,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#93c5fd';
+        ctx.beginPath();ctx.arc(x+s/2-s*0.08,y+s/2-s*0.08,s*0.12,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+}
+
+function move(dx,dy){
+  if(!gameStarted)return;
+  const nr=playerR+dy,nc=playerC+dx;
+  if(nr<0||nr>=grid.length||nc<0||nc>=grid[0].length)return;
+  if(grid[nr][nc].floor==='wall'||grid[nr][nc].floor==='empty')return;
+
+  if(grid[nr][nc].hasBox){
+    const br=nr+dy,bc=nc+dx;
+    if(br<0||br>=grid.length||bc<0||bc>=grid[0].length)return;
+    if(grid[br][bc].floor==='wall'||grid[br][bc].floor==='empty'||grid[br][bc].hasBox)return;
+    // Push box
+    history.push({pr:playerR,pc:playerC,boxFrom:[nr,nc],boxTo:[br,bc]});
+    grid[nr][nc].hasBox=false;
+    grid[br][bc].hasBox=true;
+  }else{
+    history.push({pr:playerR,pc:playerC,boxFrom:null,boxTo:null});
+  }
+
+  grid[playerR][playerC].hasPlayer=false;
+  playerR=nr;playerC=nc;
+  grid[playerR][playerC].hasPlayer=true;
+  moveCount++;
+  document.getElementById('moves').textContent=moveCount;
+  draw();
+  checkWin();
+}
+
+function undo(){
+  if(history.length===0)return;
+  const h=history.pop();
+  grid[playerR][playerC].hasPlayer=false;
+  playerR=h.pr;playerC=h.pc;
+  grid[playerR][playerC].hasPlayer=true;
+  if(h.boxFrom){
+    grid[h.boxTo[0]][h.boxTo[1]].hasBox=false;
+    grid[h.boxFrom[0]][h.boxFrom[1]].hasBox=true;
+  }
+  moveCount--;
+  document.getElementById('moves').textContent=moveCount;
+  draw();
+}
+
+function checkWin(){
+  for(let r=0;r<grid.length;r++){
+    for(let c=0;c<grid[0].length;c++){
+      if(grid[r][c].floor==='target'&&!grid[r][c].hasBox)return;
+    }
+  }
+  // Win!
+  gameStarted=false;
+  completed.add(currentLevel);
+  document.getElementById('endLevel').textContent=currentLevel;
+  document.getElementById('endMoves').textContent=moveCount;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function nextLevelFromEnd(){
+  if(currentLevel<LEVELS.length){currentLevel++;document.getElementById('endOverlay').classList.add('hidden');loadLevel();}
+  else showLevelSelect();
+}
+
+function showLevelSelect(){
+  gameStarted=false;
+  document.getElementById('endOverlay').classList.add('hidden');
+  const lg=document.getElementById('levelGrid');
+  lg.innerHTML='';
+  for(let i=1;i<=LEVELS.length;i++){
+    const b=document.createElement('button');
+    b.className='lvl-btn'+(completed.has(i)?' completed':'');
+    b.textContent=i;
+    b.onclick=()=>startLevel(i);
+    lg.appendChild(b);
+  }
+  document.getElementById('startOverlay').classList.remove('hidden');
+}
+
+// Touch/swipe
+let touchStartX=0,touchStartY=0;
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];touchStartX=t.clientX;touchStartY=t.clientY;e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  const t=e.changedTouches[0];
+  const dx=t.clientX-touchStartX,dy=t.clientY-touchStartY;
+  if(Math.abs(dx)+Math.abs(dy)<20)return;
+  if(Math.abs(dx)>Math.abs(dy))move(dx>0?1:-1,0);
+  else move(0,dy>0?1:-1);
+  e.preventDefault();
+},{passive:false});
+
+document.addEventListener('keydown',e=>{
+  switch(e.key){
+    case 'ArrowUp':move(0,-1);e.preventDefault();break;
+    case 'ArrowDown':move(0,1);e.preventDefault();break;
+    case 'ArrowLeft':move(-1,0);e.preventDefault();break;
+    case 'ArrowRight':move(1,0);e.preventDefault();break;
+    case 'z':case 'Z':undo();break;
+  }
+});
+
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{completed:[...completed]}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){if(e.data.state.completed)completed=new Set(e.data.state.completed);}});
+
+// Init level grid
+showLevelSelect();
+</script>
+</body>
+</html>

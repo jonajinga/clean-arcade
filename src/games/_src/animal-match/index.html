@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Animal Match</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
+h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
+.stats{display:flex;gap:1.5rem;margin:.75rem 0;font-size:1rem;color:#94a3b8}
+.stats span{color:#e2e8f0;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;max-width:420px;width:100%;margin:0 auto}
+.card{aspect-ratio:1;perspective:600px;cursor:pointer}
+.card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
+.card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card-back{background:linear-gradient(135deg,#ef4444,#facc15);font-size:2rem}
+.card-back::after{content:'🐾';opacity:.5}
+.card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155;font-size:3rem}
+.card-front .name{font-size:.75rem;color:#94a3b8;margin-top:.2rem;opacity:0;transition:opacity .3s}
+.card.matched .card-front{border-color:#22c55e;background:#14532d33}
+.card.matched .card-front .name{opacity:1}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{display:inline-block;padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;margin:.4rem;color:#0f172a;background:#22c55e}
+.btn:hover{background:#16a34a}
+.pause-wrap{text-align:center;margin-top:.75rem}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn:hover{background:#6366f1}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Animal Match 🐾</h2>
+<p>Flip cards to find matching animal pairs!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2 id="endTitle">Great Job!</h2>
+<p>Moves: <span id="endMoves">0</span></p>
+<p>Pairs Found: <span id="endPairs">8</span>/8</p>
+<p>Best Score: <span id="endHigh">0</span> moves</p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<h1>Animal Match</h1>
+<div class="stats">
+<div>Moves: <span id="moves">0</span></div>
+<div>Pairs: <span id="pairs">0</span>/8</div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="pause-wrap">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<script>
+const SLUG='animal-match';
+const ANIMALS=[
+  {emoji:'🐶',name:'Dog'},{emoji:'🐱',name:'Cat'},{emoji:'🐸',name:'Frog'},{emoji:'🐵',name:'Monkey'},
+  {emoji:'🐮',name:'Cow'},{emoji:'🐷',name:'Pig'},{emoji:'🐔',name:'Chicken'},{emoji:'🐴',name:'Horse'}
+];
+let moves=0,pairsFound=0,firstCard=null,secondCard=null,locked=false,paused=false,highScore=Infinity,gameStarted=false;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  moves=0;pairsFound=0;firstCard=null;secondCard=null;locked=false;paused=false;gameStarted=true;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('pairs').textContent='0';
+  document.getElementById('pauseBtn').textContent='⏸';
+  const cards=shuffle([...ANIMALS,...ANIMALS].map((a,i)=>({...a,id:i})));
+  const grid=document.getElementById('grid');
+  grid.innerHTML='';
+  cards.forEach(a=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.dataset.name=a.name;
+    card.innerHTML=`<div class="card-inner"><div class="card-back"></div><div class="card-front">${a.emoji}<div class="name">${a.name}</div></div></div>`;
+    card.addEventListener('click',()=>flipCard(card));
+    grid.appendChild(card);
+  });
+}
+
+function flipCard(card){
+  if(locked||paused||card.classList.contains('flipped')||card.classList.contains('matched'))return;
+  card.classList.add('flipped');
+  if(!firstCard){firstCard=card;return;}
+  secondCard=card;locked=true;moves++;
+  document.getElementById('moves').textContent=moves;
+  if(firstCard.dataset.name===secondCard.dataset.name){
+    firstCard.classList.add('matched');secondCard.classList.add('matched');
+    pairsFound++;document.getElementById('pairs').textContent=pairsFound;
+    firstCard=null;secondCard=null;locked=false;
+    if(pairsFound===8)endGame();
+  }else{
+    setTimeout(()=>{firstCard.classList.remove('flipped');secondCard.classList.remove('flipped');firstCard=null;secondCard=null;locked=false;},800);
+  }
+}
+
+function endGame(){
+  gameStarted=false;
+  if(moves<highScore)highScore=moves;
+  document.getElementById('endMoves').textContent=moves;
+  document.getElementById('endPairs').textContent=pairsFound;
+  document.getElementById('endHigh').textContent=highScore===Infinity?moves:highScore;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function togglePause(){
+  if(!gameStarted)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused)saveState();
+}
+
+function saveState(){
+  try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:highScore===Infinity?null:highScore}},'*');}catch(e){}
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore!=null)highScore=e.data.state.highScore;
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shapes 2D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
+h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
+.stats{display:flex;gap:1.5rem;margin:.75rem 0;font-size:1rem;color:#94a3b8}
+.stats span{color:#e2e8f0;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;max-width:420px;width:100%;margin:0 auto}
+.card{aspect-ratio:1;perspective:600px;cursor:pointer}
+.card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
+.card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.card-back{background:linear-gradient(135deg,#3b82f6,#6366f1)}
+.card-back::after{content:'◆';font-size:2rem;opacity:.4;color:#fff}
+.card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155}
+.card.matched .card-front{border-color:#22c55e;background:#14532d33}
+.card-front canvas{width:70%;height:70%}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{display:inline-block;padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e}
+.btn:hover{background:#16a34a}
+.pause-wrap{text-align:center;margin-top:.75rem}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn:hover{background:#6366f1}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Shapes 2D</h2>
+<p>Match pairs of 2D shapes!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2>Complete!</h2>
+<p>Moves: <span id="endMoves">0</span></p>
+<p>Time: <span id="endTime">0s</span></p>
+<p>Best: <span id="endHigh">0</span> moves</p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<h1>Shapes 2D</h1>
+<div class="stats">
+<div>Moves: <span id="moves">0</span></div>
+<div>Pairs: <span id="pairs">0</span>/8</div>
+<div>Time: <span id="time">0s</span></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="pause-wrap">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<script>
+const SLUG='shapes-2d';
+const SHAPES=[
+  {name:'circle',color:'#ef4444'},
+  {name:'square',color:'#3b82f6'},
+  {name:'triangle',color:'#22c55e'},
+  {name:'rectangle',color:'#facc15'},
+  {name:'pentagon',color:'#6366f1'},
+  {name:'hexagon',color:'#ec4899'},
+  {name:'star',color:'#f97316'},
+  {name:'diamond',color:'#14b8a6'}
+];
+let moves=0,pairsFound=0,firstCard=null,secondCard=null,locked=false,timerInterval=null,seconds=0,paused=false,highScore=Infinity,gameStarted=false;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function drawShape(canvas,shape){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width,h=canvas.height;
+  const cx=w/2,cy=h/2,r=w*0.38;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle=shape.color;
+  ctx.strokeStyle=shape.color;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  switch(shape.name){
+    case 'circle':
+      ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();break;
+    case 'square':
+      ctx.fillRect(cx-r,cy-r,r*2,r*2);break;
+    case 'triangle':
+      ctx.moveTo(cx,cy-r);ctx.lineTo(cx+r,cy+r);ctx.lineTo(cx-r,cy+r);ctx.closePath();ctx.fill();break;
+    case 'rectangle':
+      ctx.fillRect(cx-r,cy-r*0.6,r*2,r*1.2);break;
+    case 'pentagon':
+      polygon(ctx,cx,cy,r,5);ctx.fill();break;
+    case 'hexagon':
+      polygon(ctx,cx,cy,r,6);ctx.fill();break;
+    case 'star':
+      star(ctx,cx,cy,r,r*0.45,5);ctx.fill();break;
+    case 'diamond':
+      ctx.moveTo(cx,cy-r);ctx.lineTo(cx+r*0.6,cy);ctx.lineTo(cx,cy+r);ctx.lineTo(cx-r*0.6,cy);ctx.closePath();ctx.fill();break;
+  }
+}
+
+function polygon(ctx,cx,cy,r,sides){
+  ctx.moveTo(cx+r*Math.cos(-Math.PI/2),cy+r*Math.sin(-Math.PI/2));
+  for(let i=1;i<=sides;i++){
+    const a=-Math.PI/2+2*Math.PI*i/sides;
+    ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+function star(ctx,cx,cy,or,ir,points){
+  ctx.moveTo(cx,cy-or);
+  for(let i=0;i<points;i++){
+    const a1=-Math.PI/2+2*Math.PI*i/points+Math.PI/points;
+    ctx.lineTo(cx+ir*Math.cos(a1),cy+ir*Math.sin(a1));
+    const a2=-Math.PI/2+2*Math.PI*(i+1)/points;
+    ctx.lineTo(cx+or*Math.cos(a2),cy+or*Math.sin(a2));
+  }
+  ctx.closePath();
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  moves=0;pairsFound=0;seconds=0;firstCard=null;secondCard=null;locked=false;paused=false;gameStarted=true;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('pairs').textContent='0';
+  document.getElementById('time').textContent='0s';
+  document.getElementById('pauseBtn').textContent='⏸';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{if(!paused){seconds++;document.getElementById('time').textContent=seconds+'s';}},1000);
+  const cards=shuffle([...SHAPES,...SHAPES].map((s,i)=>({...s,id:i})));
+  const grid=document.getElementById('grid');
+  grid.innerHTML='';
+  cards.forEach(s=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.dataset.name=s.name;
+    const canvas=document.createElement('canvas');
+    canvas.width=120;canvas.height=120;
+    card.innerHTML=`<div class="card-inner"><div class="card-back"></div><div class="card-front"></div></div>`;
+    card.querySelector('.card-front').appendChild(canvas);
+    card.addEventListener('click',()=>flipCard(card));
+    grid.appendChild(card);
+    drawShape(canvas,s);
+  });
+}
+
+function flipCard(card){
+  if(locked||paused||card.classList.contains('flipped')||card.classList.contains('matched'))return;
+  card.classList.add('flipped');
+  if(!firstCard){firstCard=card;return;}
+  secondCard=card;locked=true;moves++;
+  document.getElementById('moves').textContent=moves;
+  if(firstCard.dataset.name===secondCard.dataset.name){
+    firstCard.classList.add('matched');secondCard.classList.add('matched');
+    pairsFound++;document.getElementById('pairs').textContent=pairsFound;
+    firstCard=null;secondCard=null;locked=false;
+    if(pairsFound===8)endGame();
+  }else{
+    setTimeout(()=>{firstCard.classList.remove('flipped');secondCard.classList.remove('flipped');firstCard=null;secondCard=null;locked=false;},800);
+  }
+}
+
+function endGame(){
+  clearInterval(timerInterval);gameStarted=false;
+  if(moves<highScore)highScore=moves;
+  document.getElementById('endMoves').textContent=moves;
+  document.getElementById('endTime').textContent=seconds+'s';
+  document.getElementById('endHigh').textContent=highScore===Infinity?moves:highScore;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function togglePause(){
+  if(!gameStarted)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused)saveState();
+}
+
+function saveState(){
+  try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:highScore===Infinity?null:highScore}},'*');}catch(e){}
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.highScore!=null)highScore=e.data.state.highScore;
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

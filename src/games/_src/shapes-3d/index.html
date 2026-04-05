@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shapes 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
+h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
+.stats{display:flex;gap:1.5rem;margin:.75rem 0;font-size:1rem;color:#94a3b8}
+.stats span{color:#e2e8f0;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;max-width:440px;width:100%;margin:0 auto}
+.card{aspect-ratio:1;perspective:600px;cursor:pointer}
+.card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
+.card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card-back{background:linear-gradient(135deg,#6366f1,#ec4899)}
+.card-back::after{content:'◇';font-size:2rem;opacity:.4;color:#fff}
+.card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155;overflow:hidden}
+.card.matched .card-front{border-color:#22c55e;background:#14532d33}
+.shape-label{font-size:.65rem;color:#94a3b8;margin-top:4px;text-transform:capitalize}
+.scene{width:60px;height:60px;perspective:200px}
+/* Cube */
+.cube{width:40px;height:40px;position:relative;transform-style:preserve-3d;transform:rotateX(-25deg) rotateY(35deg);margin:10px auto}
+.cube .face{position:absolute;width:40px;height:40px;border:1.5px solid rgba(255,255,255,.3)}
+.cube .front{transform:translateZ(20px)}.cube .back{transform:translateZ(-20px)}.cube .left{transform:rotateY(-90deg) translateZ(20px)}.cube .right{transform:rotateY(90deg) translateZ(20px)}.cube .top{transform:rotateX(90deg) translateZ(20px)}.cube .bottom{transform:rotateX(-90deg) translateZ(20px)}
+/* Sphere */
+.sphere{width:50px;height:50px;border-radius:50%;margin:5px auto}
+/* Cylinder */
+.cylinder{width:36px;height:50px;border-radius:18px/8px;margin:5px auto;position:relative}
+.cylinder::before{content:'';position:absolute;top:0;left:0;right:0;height:16px;border-radius:50%;background:rgba(255,255,255,.15)}
+/* Cone */
+.cone{width:0;height:0;border-left:25px solid transparent;border-right:25px solid transparent;border-bottom:50px solid;margin:5px auto;border-radius:0 0 4px 4px}
+/* Pyramid */
+.pyramid-wrap{width:50px;height:50px;position:relative;transform-style:preserve-3d;transform:rotateX(-20deg) rotateY(30deg);margin:5px auto}
+.pyramid-face{position:absolute;width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-bottom:40px solid;transform-origin:bottom center;opacity:.85}
+.pyramid-face:nth-child(1){left:5px;top:0;transform:rotateX(30deg)}.pyramid-face:nth-child(2){left:5px;top:0;transform:rotateY(90deg) rotateX(30deg) translateZ(0)}
+.pyramid-base{position:absolute;bottom:0;left:5px;width:40px;height:40px;transform:rotateX(90deg);opacity:.6}
+/* Torus */
+.torus{width:50px;height:50px;border-radius:50%;border:10px solid;margin:5px auto;transform:rotateX(50deg)}
+/* Prism */
+.prism-wrap{width:50px;height:50px;position:relative;margin:5px auto}
+.prism-side{position:absolute;bottom:0;left:5px;width:40px;height:50px;opacity:.7;clip-path:polygon(50% 0%,100% 100%,0% 100%)}
+.prism-side2{position:absolute;bottom:0;left:12px;width:34px;height:50px;opacity:.5;clip-path:polygon(40% 0%,100% 100%,0% 100%)}
+/* Hemisphere */
+.hemisphere{width:50px;height:25px;border-radius:50px 50px 0 0;margin:15px auto 5px;position:relative}
+.hemisphere::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:8px;border-radius:50%;background:rgba(255,255,255,.1)}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e}
+.btn:hover{background:#16a34a}
+.pause-wrap{text-align:center;margin-top:.75rem}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn:hover{background:#6366f1}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Shapes 3D</h2>
+<p>Match pairs of 3D shapes!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2>Complete!</h2>
+<p>Moves: <span id="endMoves">0</span></p>
+<p>Time: <span id="endTime">0s</span></p>
+<p>Best: <span id="endHigh">0</span> moves</p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<h1>Shapes 3D</h1>
+<div class="stats">
+<div>Moves: <span id="moves">0</span></div>
+<div>Pairs: <span id="pairs">0</span>/8</div>
+<div>Time: <span id="time">0s</span></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="pause-wrap">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<script>
+const SLUG='shapes-3d';
+const SHAPES=[
+  {name:'cube',color:'#ef4444'},
+  {name:'sphere',color:'#3b82f6'},
+  {name:'cylinder',color:'#22c55e'},
+  {name:'cone',color:'#facc15'},
+  {name:'pyramid',color:'#6366f1'},
+  {name:'torus',color:'#ec4899'},
+  {name:'prism',color:'#f97316'},
+  {name:'hemisphere',color:'#14b8a6'}
+];
+
+function makeShapeHTML(s){
+  const c=s.color;
+  const light=c+'cc';
+  switch(s.name){
+    case 'cube':
+      return `<div class="cube"><div class="face front" style="background:${c}"></div><div class="face back" style="background:${c}88"></div><div class="face left" style="background:${c}aa"></div><div class="face right" style="background:${c}cc"></div><div class="face top" style="background:${c}ee"></div><div class="face bottom" style="background:${c}66"></div></div>`;
+    case 'sphere':
+      return `<div class="sphere" style="background:radial-gradient(circle at 35% 35%,${c}ee,${c}66)"></div>`;
+    case 'cylinder':
+      return `<div class="cylinder" style="background:linear-gradient(90deg,${c}88,${c},${c}88)"></div>`;
+    case 'cone':
+      return `<div class="cone" style="border-bottom-color:${c}"></div>`;
+    case 'pyramid':
+      return `<div class="pyramid-wrap"><div class="pyramid-face" style="border-bottom-color:${c}"></div><div class="pyramid-face" style="border-bottom-color:${c}aa"></div><div class="pyramid-base" style="background:${c}66"></div></div>`;
+    case 'torus':
+      return `<div class="torus" style="border-color:${c}"></div>`;
+    case 'prism':
+      return `<div class="prism-wrap"><div class="prism-side" style="background:${c}"></div><div class="prism-side2" style="background:${c}aa"></div></div>`;
+    case 'hemisphere':
+      return `<div class="hemisphere" style="background:radial-gradient(circle at 40% 30%,${c}ee,${c}77)"></div>`;
+  }
+}
+
+let moves=0,pairsFound=0,firstCard=null,secondCard=null,locked=false,timerInterval=null,seconds=0,paused=false,highScore=Infinity,gameStarted=false;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  moves=0;pairsFound=0;seconds=0;firstCard=null;secondCard=null;locked=false;paused=false;gameStarted=true;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('pairs').textContent='0';
+  document.getElementById('time').textContent='0s';
+  document.getElementById('pauseBtn').textContent='⏸';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{if(!paused){seconds++;document.getElementById('time').textContent=seconds+'s';}},1000);
+  const cards=shuffle([...SHAPES,...SHAPES]);
+  const grid=document.getElementById('grid');
+  grid.innerHTML='';
+  cards.forEach(s=>{
+    const card=document.createElement('div');
+    card.className='card';
+    card.dataset.name=s.name;
+    card.innerHTML=`<div class="card-inner"><div class="card-back"></div><div class="card-front">${makeShapeHTML(s)}<div class="shape-label">${s.name}</div></div></div>`;
+    card.addEventListener('click',()=>flipCard(card));
+    grid.appendChild(card);
+  });
+}
+
+function flipCard(card){
+  if(locked||paused||card.classList.contains('flipped')||card.classList.contains('matched'))return;
+  card.classList.add('flipped');
+  if(!firstCard){firstCard=card;return;}
+  secondCard=card;locked=true;moves++;
+  document.getElementById('moves').textContent=moves;
+  if(firstCard.dataset.name===secondCard.dataset.name){
+    firstCard.classList.add('matched');secondCard.classList.add('matched');
+    pairsFound++;document.getElementById('pairs').textContent=pairsFound;
+    firstCard=null;secondCard=null;locked=false;
+    if(pairsFound===8)endGame();
+  }else{
+    setTimeout(()=>{firstCard.classList.remove('flipped');secondCard.classList.remove('flipped');firstCard=null;secondCard=null;locked=false;},800);
+  }
+}
+
+function endGame(){
+  clearInterval(timerInterval);gameStarted=false;
+  if(moves<highScore)highScore=moves;
+  document.getElementById('endMoves').textContent=moves;
+  document.getElementById('endTime').textContent=seconds+'s';
+  document.getElementById('endHigh').textContent=highScore===Infinity?moves:highScore;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function togglePause(){if(!gameStarted)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(paused)saveState();}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:highScore===Infinity?null:highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){if(e.data.state.highScore!=null)highScore=e.data.state.highScore;}});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

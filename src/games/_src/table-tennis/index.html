@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Table Tennis</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+#info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem}
+#info span{color:#6366f1}
+#scores{display:flex;gap:2rem;margin-bottom:.5rem;font-size:1.2rem;font-weight:700}
+#scores .ai{color:#ef4444}
+#scores .you{color:#22c55e}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none;cursor:none}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem}
+.overlay .score-line{color:#22c55e;font-size:1.3rem}
+.btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+#pauseBtn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;background:#3b82f6;color:#fff;border:none;border-radius:.5rem;cursor:pointer}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Table Tennis</h1>
+<div id="scores">
+  <span class="ai">AI: <b id="aiScoreEl">0</b></span>
+  <span class="you">You: <b id="youScoreEl">0</b></span>
+</div>
+<div id="info"><span>High Score: <b id="highEl">0</b></span><span>Rally: <b id="rallyEl">0</b></span></div>
+<canvas id="c"></canvas>
+<button id="pauseBtn" class="hidden">⏸</button>
+
+<div id="startOverlay" class="overlay">
+  <h2>Table Tennis</h2>
+  <p>First to 11 (win by 2). Move mouse/touch.</p>
+  <button class="btn" id="playBtn">Play</button>
+</div>
+<div id="overOverlay" class="overlay hidden">
+  <h2 id="overTitle">Game Over</h2>
+  <p class="score-line" id="overScore"></p>
+  <button class="btn" id="replayBtn">Play Again</button>
+</div>
+
+<script>
+const SLUG='table-tennis';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H,PADDLE_W,PADDLE_H,BALL_R;
+let playerX,aiX,ballX,ballY,ballVX,ballVY;
+let playerScore=0,aiScore=0,highScore=0,rally=0,paused=false,running=false;
+let baseSpeed=5;
+
+function resize(){
+  W=Math.min(window.innerWidth-32,400);
+  H=Math.round(W*1.4);
+  canvas.width=W;canvas.height=H;
+  PADDLE_W=W*0.22;PADDLE_H=H*0.02;BALL_R=W*0.02;
+}
+resize();
+window.addEventListener('resize',()=>{resize();if(running)draw();});
+
+function resetBall(toPlayer){
+  ballX=W/2;ballY=H/2;
+  const angle=(Math.random()*0.8-0.4);
+  const spd=baseSpeed+rally*0.15;
+  ballVX=Math.sin(angle)*spd;
+  ballVY=(toPlayer?1:-1)*Math.cos(angle)*spd;
+  rally=0;
+}
+
+function initGame(){
+  playerScore=0;aiScore=0;rally=0;baseSpeed=5;
+  playerX=W/2;aiX=W/2;
+  resetBall(true);
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById('aiScoreEl').textContent=aiScore;
+  document.getElementById('youScoreEl').textContent=playerScore;
+  document.getElementById('highEl').textContent=highScore;
+  document.getElementById('rallyEl').textContent=rally;
+}
+
+function checkWin(){
+  const max=Math.max(playerScore,aiScore);
+  const min=Math.min(playerScore,aiScore);
+  if(max>=11&&max-min>=2)return true;
+  return false;
+}
+
+function update(){
+  if(paused||!running)return;
+
+  ballX+=ballVX;ballY+=ballVY;
+
+  // Wall bounce
+  if(ballX-BALL_R<0){ballX=BALL_R;ballVX=-ballVX;}
+  if(ballX+BALL_R>W){ballX=W-BALL_R;ballVX=-ballVX;}
+
+  // Player paddle (bottom)
+  const py=H-40;
+  if(ballVY>0&&ballY+BALL_R>=py&&ballY+BALL_R<=py+PADDLE_H+ballVY){
+    if(ballX>playerX-PADDLE_W/2-BALL_R&&ballX<playerX+PADDLE_W/2+BALL_R){
+      const hit=(ballX-playerX)/(PADDLE_W/2);
+      const spd=Math.sqrt(ballVX*ballVX+ballVY*ballVY)*1.02;
+      const angle=hit*1.1;
+      ballVX=Math.sin(angle)*spd;
+      ballVY=-Math.cos(angle)*spd;
+      ballY=py-BALL_R;
+      rally++;
+      updateUI();
+    }
+  }
+
+  // AI paddle (top)
+  const ay=30;
+  if(ballVY<0&&ballY-BALL_R<=ay+PADDLE_H&&ballY-BALL_R>=ay+ballVY){
+    if(ballX>aiX-PADDLE_W/2-BALL_R&&ballX<aiX+PADDLE_W/2+BALL_R){
+      const hit=(ballX-aiX)/(PADDLE_W/2);
+      const spd=Math.sqrt(ballVX*ballVX+ballVY*ballVY)*1.02;
+      const angle=hit*1.1;
+      ballVX=Math.sin(angle)*spd;
+      ballVY=Math.cos(angle)*spd;
+      ballY=ay+PADDLE_H+BALL_R;
+      rally++;
+      updateUI();
+    }
+  }
+
+  // Score
+  if(ballY<-BALL_R){
+    playerScore++;
+    updateUI();
+    if(checkWin()){endGame();return;}
+    resetBall(true);
+  }
+  if(ballY>H+BALL_R){
+    aiScore++;
+    updateUI();
+    if(checkWin()){endGame();return;}
+    resetBall(false);
+  }
+
+  // AI movement
+  const aiSpeed=3.5+rally*0.1;
+  const diff=ballX-aiX;
+  if(Math.abs(diff)>3)aiX+=Math.sign(diff)*Math.min(aiSpeed,Math.abs(diff));
+  aiX=Math.max(PADDLE_W/2,Math.min(W-PADDLE_W/2,aiX));
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Table
+  ctx.fillStyle='#1a3a2a';ctx.fillRect(W*0.05,10,W*0.9,H-20);
+  // Center line
+  ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.setLineDash([8,8]);
+  ctx.beginPath();ctx.moveTo(W*0.05,H/2);ctx.lineTo(W*0.95,H/2);ctx.stroke();
+  ctx.setLineDash([]);
+  // Net
+  ctx.fillStyle='#94a3b8';ctx.fillRect(W*0.03,H/2-2,W*0.94,4);
+  // Border
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;
+  ctx.strokeRect(W*0.05,10,W*0.9,H-20);
+
+  // AI paddle
+  ctx.fillStyle='#ef4444';
+  ctx.fillRect(aiX-PADDLE_W/2,30,PADDLE_W,PADDLE_H);
+
+  // Player paddle
+  ctx.fillStyle='#22c55e';
+  ctx.fillRect(playerX-PADDLE_W/2,H-40,PADDLE_W,PADDLE_H);
+
+  // Ball
+  ctx.fillStyle='#facc15';
+  ctx.beginPath();ctx.arc(ballX,ballY,BALL_R,0,Math.PI*2);ctx.fill();
+
+  // Scores on table
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  ctx.font='bold '+Math.round(W*0.12)+'px system-ui';
+  ctx.textAlign='center';
+  ctx.fillText(aiScore,W/2,H*0.35);
+  ctx.fillText(playerScore,W/2,H*0.72);
+}
+
+function endGame(){
+  running=false;
+  const won=playerScore>aiScore;
+  if(playerScore>highScore)highScore=playerScore;
+  document.getElementById('overTitle').textContent=won?'You Win!':'AI Wins!';
+  document.getElementById('overScore').textContent=`${playerScore} — ${aiScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.add('hidden');
+  saveState();
+}
+
+function loop(){
+  if(!running)return;
+  update();draw();
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  resize();initGame();
+  running=true;paused=false;
+  document.getElementById('pauseBtn').textContent='⏸';
+  requestAnimationFrame(loop);
+}
+
+// Controls
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  playerX=(e.clientX-r.left)*(W/r.width);
+  playerX=Math.max(PADDLE_W/2,Math.min(W-PADDLE_W/2,playerX));
+});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  playerX=(e.touches[0].clientX-r.left)*(W/r.width);
+  playerX=Math.max(PADDLE_W/2,Math.min(W-PADDLE_W/2,playerX));
+},{passive:false});
+
+document.getElementById('pauseBtn').addEventListener('click',()=>{
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(!paused)requestAnimationFrame(loop);
+  else saveState();
+});
+document.addEventListener('keydown',e=>{
+  if((e.key==='p'||e.key==='P')&&running)document.getElementById('pauseBtn').click();
+});
+
+document.getElementById('playBtn').addEventListener('click',startGame);
+document.getElementById('replayBtn').addEventListener('click',startGame);
+
+function saveState(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    highScore=e.data.state.highScore||0;
+    document.getElementById('highEl').textContent=highScore;
+  }
+});
+</script>
+</body>
+</html>

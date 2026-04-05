@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gomoku</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+#info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+#info span{color:#6366f1}
+#message{min-height:1.5rem;color:#facc15;font-weight:600;text-align:center;margin:.25rem 0}
+canvas{display:block;border:2px solid #6366f1;cursor:pointer;touch-action:none}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{font-size:2rem;color:#facc15}
+.overlay p{font-size:1.1rem}
+.overlay .score-line{color:#22c55e;font-size:1.3rem}
+.btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
+.btn:hover{background:#4f46e5}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Gomoku</h1>
+<div id="info">
+  <span>Wins: <b id="winsEl">0</b></span>
+  <span>Losses: <b id="lossesEl">0</b></span>
+  <span>Draws: <b id="drawsEl">0</b></span>
+</div>
+<div id="message">Your turn (Black)</div>
+<canvas id="c"></canvas>
+
+<div id="startOverlay" class="overlay">
+  <h2>Gomoku</h2>
+  <p>Get 5 in a row to win!</p>
+  <p style="font-size:.85rem;color:#94a3b8">You are Black. Click to place stones.</p>
+  <button class="btn" id="playBtn">Play</button>
+</div>
+<div id="overOverlay" class="overlay hidden">
+  <h2 id="overTitle">Game Over</h2>
+  <p class="score-line" id="overMsg"></p>
+  <p class="score-line" id="overRecord"></p>
+  <button class="btn" id="replayBtn">Play Again</button>
+</div>
+
+<script>
+const SLUG='gomoku';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const SIZE=window.innerWidth<500?13:15;
+let CELL,PAD,W;
+let board,playerTurn,gameActive;
+let wins=0,losses=0,draws=0;
+let lastMove=null;
+let hoverPos=null;
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-32,560);
+  CELL=Math.floor(maxW/(SIZE+1));
+  PAD=CELL;
+  W=CELL*(SIZE-1)+PAD*2;
+  canvas.width=W;canvas.height=W;
+}
+resize();
+window.addEventListener('resize',()=>{resize();if(gameActive)draw();});
+
+function initGame(){
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  playerTurn=true;
+  gameActive=true;
+  lastMove=null;
+  setMessage('Your turn (Black)');
+  draw();
+}
+
+function setMessage(t){document.getElementById('message').textContent=t;}
+
+function toGrid(px,py){
+  const r=canvas.getBoundingClientRect();
+  const x=(px-r.left)*(W/r.width);
+  const y=(py-r.top)*(W/r.height);
+  const col=Math.round((x-PAD)/CELL);
+  const row=Math.round((y-PAD)/CELL);
+  if(col<0||col>=SIZE||row<0||row>=SIZE)return null;
+  return{row,col};
+}
+
+function checkWin(r,c,player){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for(const[dr,dc]of dirs){
+    let count=1;
+    for(let d=1;d<5;d++){
+      const nr=r+dr*d,nc=c+dc*d;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||board[nr][nc]!==player)break;
+      count++;
+    }
+    for(let d=1;d<5;d++){
+      const nr=r-dr*d,nc=c-dc*d;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE||board[nr][nc]!==player)break;
+      count++;
+    }
+    if(count>=5)return true;
+  }
+  return false;
+}
+
+function isFull(){
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)if(board[r][c]===0)return false;
+  return true;
+}
+
+function place(row,col,player){
+  if(board[row][col]!==0)return false;
+  board[row][col]=player;
+  lastMove={row,col};
+  return true;
+}
+
+function playerMove(row,col){
+  if(!gameActive||!playerTurn)return;
+  if(!place(row,col,1))return;
+  draw();
+  if(checkWin(row,col,1)){endGame('win');return;}
+  if(isFull()){endGame('draw');return;}
+  playerTurn=false;
+  setMessage('AI thinking...');
+  setTimeout(aiMove,300);
+}
+
+function aiMove(){
+  if(!gameActive)return;
+  const move=findBestMove();
+  place(move.row,move.col,2);
+  draw();
+  if(checkWin(move.row,move.col,2)){endGame('lose');return;}
+  if(isFull()){endGame('draw');return;}
+  playerTurn=true;
+  setMessage('Your turn (Black)');
+}
+
+function scorePattern(counts,player){
+  // counts: consecutive stones with open ends
+  // Returns a heuristic score
+  let score=0;
+  // Check threats
+  if(counts.five)return 100000;
+  if(counts.openFour)return 50000;
+  if(counts.closedFour)score+=5000;
+  if(counts.openThree)score+=3000;
+  if(counts.closedThree)score+=500;
+  if(counts.openTwo)score+=200;
+  return score;
+}
+
+function evaluatePosition(r,c,player){
+  if(board[r][c]!==0)return-1;
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  let totalScore=0;
+
+  for(const[dr,dc]of dirs){
+    // Count consecutive in both directions
+    let fwd=0,bwd=0,fwdOpen=false,bwdOpen=false;
+    for(let d=1;d<=5;d++){
+      const nr=r+dr*d,nc=c+dc*d;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE)break;
+      if(board[nr][nc]===player)fwd++;
+      else{fwdOpen=board[nr][nc]===0;break;}
+    }
+    for(let d=1;d<=5;d++){
+      const nr=r-dr*d,nc=c-dc*d;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE)break;
+      if(board[nr][nc]===player)bwd++;
+      else{bwdOpen=board[nr][nc]===0;break;}
+    }
+    const total=fwd+bwd;
+    const opens=(fwdOpen?1:0)+(bwdOpen?1:0);
+
+    if(total>=4)totalScore+=100000;
+    else if(total===3&&opens===2)totalScore+=50000;
+    else if(total===3&&opens===1)totalScore+=5000;
+    else if(total===2&&opens===2)totalScore+=3000;
+    else if(total===2&&opens===1)totalScore+=500;
+    else if(total===1&&opens===2)totalScore+=200;
+    else if(total===1&&opens===1)totalScore+=50;
+  }
+  return totalScore;
+}
+
+function findBestMove(){
+  let bestScore=-1,bestMoves=[];
+
+  // Only check cells near existing stones
+  const candidates=new Set();
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      if(board[r][c]!==0){
+        for(let dr=-2;dr<=2;dr++){
+          for(let dc=-2;dc<=2;dc++){
+            const nr=r+dr,nc=c+dc;
+            if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&board[nr][nc]===0){
+              candidates.add(nr*SIZE+nc);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if(candidates.size===0){
+    // First move — play center
+    return{row:Math.floor(SIZE/2),col:Math.floor(SIZE/2)};
+  }
+
+  for(const key of candidates){
+    const r=Math.floor(key/SIZE),c=key%SIZE;
+    // Score for AI offense + player defense
+    const attack=evaluatePosition(r,c,2);
+    const defend=evaluatePosition(r,c,1);
+    const score=attack*1.1+defend;
+    if(score>bestScore){bestScore=score;bestMoves=[{row:r,col:c}];}
+    else if(score===bestScore)bestMoves.push({row:r,col:c});
+  }
+  return bestMoves[Math.random()*bestMoves.length|0];
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+
+  // Board background
+  ctx.fillStyle='#1a2744';
+  ctx.fillRect(PAD-CELL/2,PAD-CELL/2,CELL*(SIZE-1)+CELL,CELL*(SIZE-1)+CELL);
+
+  // Grid lines
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let i=0;i<SIZE;i++){
+    const p=PAD+i*CELL;
+    ctx.beginPath();ctx.moveTo(PAD,p);ctx.lineTo(PAD+(SIZE-1)*CELL,p);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p,PAD);ctx.lineTo(p,PAD+(SIZE-1)*CELL);ctx.stroke();
+  }
+
+  // Star points
+  ctx.fillStyle='#475569';
+  const stars=SIZE===15?[3,7,11]:SIZE===13?[3,6,9]:[2,4,6];
+  for(const r of stars){
+    for(const c of stars){
+      ctx.beginPath();ctx.arc(PAD+c*CELL,PAD+r*CELL,3,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  // Stones
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      if(board[r][c]===0)continue;
+      const x=PAD+c*CELL,y=PAD+r*CELL,rad=CELL*0.42;
+      if(board[r][c]===1){
+        // Black
+        const g=ctx.createRadialGradient(x-rad*0.3,y-rad*0.3,rad*0.1,x,y,rad);
+        g.addColorStop(0,'#4a5568');g.addColorStop(1,'#1a202c');
+        ctx.fillStyle=g;
+      }else{
+        // White
+        const g=ctx.createRadialGradient(x-rad*0.3,y-rad*0.3,rad*0.1,x,y,rad);
+        g.addColorStop(0,'#fff');g.addColorStop(1,'#cbd5e0');
+        ctx.fillStyle=g;
+      }
+      ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill();
+      // Last move indicator
+      if(lastMove&&lastMove.row===r&&lastMove.col===c){
+        ctx.strokeStyle='#ef4444';ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(x,y,rad+2,0,Math.PI*2);ctx.stroke();
+      }
+    }
+  }
+
+  // Hover preview
+  if(hoverPos&&gameActive&&playerTurn&&board[hoverPos.row][hoverPos.col]===0){
+    const x=PAD+hoverPos.col*CELL,y=PAD+hoverPos.row*CELL;
+    ctx.globalAlpha=0.3;
+    ctx.fillStyle='#1a202c';
+    ctx.beginPath();ctx.arc(x,y,CELL*0.42,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // Coordinates
+  ctx.fillStyle='#64748b';ctx.font=`${Math.max(10,CELL*0.35)}px system-ui`;ctx.textAlign='center';
+  for(let i=0;i<SIZE;i++){
+    ctx.fillText(String.fromCharCode(65+i),PAD+i*CELL,W-5);
+    ctx.fillText(String(i+1),8,PAD+i*CELL+4);
+  }
+}
+
+function endGame(result){
+  gameActive=false;
+  if(result==='win')wins++;
+  else if(result==='lose')losses++;
+  else draws++;
+  document.getElementById('winsEl').textContent=wins;
+  document.getElementById('lossesEl').textContent=losses;
+  document.getElementById('drawsEl').textContent=draws;
+  const titles={win:'You Win!',lose:'AI Wins!',draw:'Draw!'};
+  const msgs={win:'Five in a row!',lose:'AI got five in a row.',draw:'Board is full.'};
+  document.getElementById('overTitle').textContent=titles[result];
+  document.getElementById('overMsg').textContent=msgs[result];
+  document.getElementById('overRecord').textContent=`W: ${wins} / L: ${losses} / D: ${draws}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  saveState();
+}
+
+canvas.addEventListener('click',e=>{
+  const pos=toGrid(e.clientX,e.clientY);
+  if(pos)playerMove(pos.row,pos.col);
+});
+canvas.addEventListener('mousemove',e=>{
+  hoverPos=toGrid(e.clientX,e.clientY);
+  if(gameActive)draw();
+});
+canvas.addEventListener('mouseleave',()=>{hoverPos=null;if(gameActive)draw();});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const pos=toGrid(e.touches[0].clientX,e.touches[0].clientY);
+  if(pos)playerMove(pos.row,pos.col);
+},{passive:false});
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  resize();initGame();
+}
+
+document.getElementById('playBtn').addEventListener('click',startGame);
+document.getElementById('replayBtn').addEventListener('click',startGame);
+
+function saveState(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{wins,losses,draws}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    wins=e.data.state.wins||0;
+    losses=e.data.state.losses||0;
+    draws=e.data.state.draws||0;
+    document.getElementById('winsEl').textContent=wins;
+    document.getElementById('lossesEl').textContent=losses;
+    document.getElementById('drawsEl').textContent=draws;
+  }
+});
+</script>
+</body>
+</html>

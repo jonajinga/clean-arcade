@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pac-Man</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5rem}
+h1{font-size:1.6rem;margin-bottom:.2rem;color:#facc15}
+.stats{display:flex;gap:1rem;margin:.4rem 0;font-size:.9rem;color:#94a3b8;flex-wrap:wrap;justify-content:center}
+.stats span{color:#e2e8f0;font-weight:600}
+canvas{border:2px solid #334155;border-radius:4px;max-width:100%;touch-action:none}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e;margin:.3rem}
+.btn:hover{background:#16a34a}
+.pause-wrap{text-align:center;margin-top:.5rem}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn:hover{background:#6366f1}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Pac-Man</h2>
+<p>Eat all the dots! Avoid ghosts!</p>
+<p style="font-size:.85rem">Arrow keys or swipe to move. Power pellets let you eat ghosts!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2 id="endTitle">Game Over</h2>
+<p>Score: <span id="endScore">0</span></p>
+<p>High Score: <span id="endHigh">0</span></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<h1>Pac-Man</h1>
+<div class="stats">
+<div>Score: <span id="score">0</span></div>
+<div>Lives: <span id="lives">3</span></div>
+<div>Level: <span id="level">1</span></div>
+<div>High: <span id="high">0</span></div>
+</div>
+<canvas id="canvas"></canvas>
+<div class="pause-wrap">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<script>
+const SLUG='pac-man';
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+
+// Map: 0=empty, 1=wall, 2=dot, 3=power pellet, 4=empty(eaten)
+const MAP_TEMPLATE=[
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
+  [1,3,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,3,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,2,1,2,1,1,1,1,1,2,1,2,1,1,2,1],
+  [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
+  [1,1,1,1,2,1,1,1,0,1,0,1,1,1,2,1,1,1,1],
+  [0,0,0,1,2,1,0,0,0,0,0,0,0,1,2,1,0,0,0],
+  [1,1,1,1,2,1,0,1,1,0,1,1,0,1,2,1,1,1,1],
+  [0,0,0,0,2,0,0,1,0,0,0,1,0,0,2,0,0,0,0],
+  [1,1,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,1,1],
+  [0,0,0,1,2,1,0,0,0,0,0,0,0,1,2,1,0,0,0],
+  [1,1,1,1,2,1,0,1,1,1,1,1,0,1,2,1,1,1,1],
+  [1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1],
+  [1,2,1,1,2,1,1,1,2,1,2,1,1,1,2,1,1,2,1],
+  [1,3,2,1,2,2,2,2,2,2,2,2,2,2,2,1,2,3,1],
+  [1,1,2,1,2,1,2,1,1,1,1,1,2,1,2,1,2,1,1],
+  [1,2,2,2,2,1,2,2,2,1,2,2,2,1,2,2,2,2,1],
+  [1,2,1,1,1,1,1,1,2,1,2,1,1,1,1,1,1,2,1],
+  [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+const ROWS=MAP_TEMPLATE.length,COLS=MAP_TEMPLATE[0].length;
+let CELL;
+
+function resizeCanvas(){
+  const maxW=Math.min(window.innerWidth-20,500);
+  CELL=Math.floor(maxW/COLS);
+  canvas.width=COLS*CELL;
+  canvas.height=ROWS*CELL;
+}
+
+let map,score,lives,level,highScore=0,paused=false,gameStarted=false,animFrame=null;
+let pac,ghosts,direction,nextDirection,powerTimer,dotsTotal,dotsEaten,mouthAngle=0,mouthDir=1;
+
+const GHOST_COLORS=['#ef4444','#ec4899','#3b82f6'];
+
+function resetMap(){
+  map=MAP_TEMPLATE.map(r=>[...r]);
+  dotsTotal=0;dotsEaten=0;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(map[r][c]===2||map[r][c]===3)dotsTotal++;
+  }
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  resizeCanvas();
+  score=0;lives=3;level=1;powerTimer=0;
+  document.getElementById('score').textContent='0';
+  document.getElementById('lives').textContent='3';
+  document.getElementById('level').textContent='1';
+  document.getElementById('high').textContent=highScore;
+  paused=false;gameStarted=true;
+  document.getElementById('pauseBtn').textContent='⏸';
+  resetMap();
+  resetPositions();
+  cancelAnimationFrame(animFrame);
+  lastTime=0;
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+function resetPositions(){
+  pac={r:15,c:9,x:9*CELL+CELL/2,y:15*CELL+CELL/2};
+  direction={dr:0,dc:0};nextDirection={dr:0,dc:0};
+  ghosts=[
+    {r:9,c:8,x:8*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[0],type:'chase',dr:0,dc:-1,scared:false},
+    {r:9,c:9,x:9*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[1],type:'random',dr:0,dc:1,scared:false},
+    {r:9,c:10,x:10*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[2],type:'patrol',dr:-1,dc:0,scared:false,patrolDir:1}
+  ];
+}
+
+function canMove(r,c){
+  if(r<0||r>=ROWS)return false;
+  // Wrap horizontally
+  const wc=((c%COLS)+COLS)%COLS;
+  return map[r][wc]!==1;
+}
+
+let lastTime=0,moveAccum=0;
+const MOVE_INTERVAL=150; // ms per tile move
+const GHOST_INTERVAL=200;
+let ghostAccum=0;
+
+function gameLoop(ts){
+  if(!gameStarted)return;
+  if(!lastTime)lastTime=ts;
+  const dt=ts-lastTime;
+  lastTime=ts;
+
+  if(!paused){
+    moveAccum+=dt;
+    ghostAccum+=dt;
+
+    // Move pac
+    while(moveAccum>=MOVE_INTERVAL){
+      moveAccum-=MOVE_INTERVAL;
+      movePac();
+    }
+
+    // Move ghosts
+    while(ghostAccum>=GHOST_INTERVAL){
+      ghostAccum-=GHOST_INTERVAL;
+      moveGhosts();
+    }
+
+    if(powerTimer>0)powerTimer-=dt;
+
+    // Mouth animation
+    mouthAngle+=mouthDir*0.15;
+    if(mouthAngle>0.8)mouthDir=-1;
+    if(mouthAngle<0.05)mouthDir=1;
+  }
+
+  draw();
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+function movePac(){
+  // Try next direction first
+  const nr=pac.r+nextDirection.dr;
+  const nc=((pac.c+nextDirection.dc)%COLS+COLS)%COLS;
+  if(canMove(nr,nc)){
+    direction=nextDirection;
+  }
+  const mr=pac.r+direction.dr;
+  const mc=((pac.c+direction.dc)%COLS+COLS)%COLS;
+  if(canMove(mr,mc)){
+    pac.r=mr;pac.c=mc;
+    pac.x=pac.c*CELL+CELL/2;
+    pac.y=pac.r*CELL+CELL/2;
+  }
+
+  // Eat dots
+  const tile=map[pac.r][pac.c];
+  if(tile===2){map[pac.r][pac.c]=4;score+=10;dotsEaten++;document.getElementById('score').textContent=score;}
+  else if(tile===3){map[pac.r][pac.c]=4;score+=50;dotsEaten++;powerTimer=6000;ghosts.forEach(g=>g.scared=true);document.getElementById('score').textContent=score;}
+
+  if(dotsEaten>=dotsTotal)levelUp();
+}
+
+function moveGhosts(){
+  ghosts.forEach(g=>{
+    if(powerTimer<=0)g.scared=false;
+
+    const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+    let best=null,bestDist=Infinity;
+
+    // Filter valid moves (not reversing)
+    const valid=dirs.filter(([dr,dc])=>{
+      if(dr===-g.dr&&dc===-g.dc)return false;
+      const nr=g.r+dr;
+      const nc=((g.c+dc)%COLS+COLS)%COLS;
+      return canMove(nr,nc);
+    });
+
+    if(valid.length===0){
+      // Reverse if stuck
+      const nr=g.r-g.dr;
+      const nc=((g.c-g.dc)%COLS+COLS)%COLS;
+      if(canMove(nr,nc)){g.dr=-g.dr;g.dc=-g.dc;}
+      return;
+    }
+
+    if(g.scared){
+      // Run away from pac
+      valid.sort((a,b)=>{
+        const da=Math.abs((g.r+a[0])-pac.r)+Math.abs((g.c+a[1])-pac.c);
+        const db=Math.abs((g.r+b[0])-pac.r)+Math.abs((g.c+b[1])-pac.c);
+        return db-da;
+      });
+      best=valid[0];
+    }else if(g.type==='chase'){
+      // Chase pac-man directly
+      valid.sort((a,b)=>{
+        const da=Math.abs((g.r+a[0])-pac.r)+Math.abs((g.c+a[1])-pac.c);
+        const db=Math.abs((g.r+b[0])-pac.r)+Math.abs((g.c+b[1])-pac.c);
+        return da-db;
+      });
+      best=valid[0];
+    }else if(g.type==='random'){
+      best=valid[Math.floor(Math.random()*valid.length)];
+    }else{
+      // Patrol: prefer current direction, otherwise random
+      const same=valid.find(([dr,dc])=>dr===g.dr&&dc===g.dc);
+      best=same||valid[Math.floor(Math.random()*valid.length)];
+    }
+
+    g.dr=best[0];g.dc=best[1];
+    g.r=g.r+g.dr;
+    g.c=((g.c+g.dc)%COLS+COLS)%COLS;
+    g.x=g.c*CELL+CELL/2;
+    g.y=g.r*CELL+CELL/2;
+
+    // Collision with pac
+    if(g.r===pac.r&&g.c===pac.c){
+      if(g.scared){
+        g.scared=false;
+        g.r=9;g.c=9;g.x=9*CELL+CELL/2;g.y=9*CELL+CELL/2;
+        score+=200;
+        document.getElementById('score').textContent=score;
+      }else{
+        loseLife();
+      }
+    }
+  });
+}
+
+function loseLife(){
+  lives--;
+  document.getElementById('lives').textContent=lives;
+  if(lives<=0){gameOver();return;}
+  resetPositions();
+}
+
+function gameOver(){
+  gameStarted=false;
+  cancelAnimationFrame(animFrame);
+  if(score>highScore)highScore=score;
+  document.getElementById('endTitle').textContent='Game Over';
+  document.getElementById('endScore').textContent=score;
+  document.getElementById('endHigh').textContent=highScore;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function levelUp(){
+  level++;
+  document.getElementById('level').textContent=level;
+  resetMap();
+  resetPositions();
+  powerTimer=0;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const x=c*CELL,y=r*CELL;
+      const tile=map[r][c];
+      if(tile===1){
+        ctx.fillStyle='#1e3a8a';
+        ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+        ctx.strokeStyle='#3b82f6';ctx.lineWidth=1;
+        ctx.strokeRect(x+1,y+1,CELL-2,CELL-2);
+      }else if(tile===2){
+        ctx.fillStyle='#facc15';
+        ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL*0.12,0,Math.PI*2);ctx.fill();
+      }else if(tile===3){
+        ctx.fillStyle='#facc15';
+        ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL*0.28,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+
+  // Draw pac-man
+  const angle=direction.dc===1?0:direction.dc===-1?Math.PI:direction.dr===-1?-Math.PI/2:direction.dr===1?Math.PI/2:0;
+  ctx.fillStyle='#facc15';
+  ctx.beginPath();
+  ctx.arc(pac.x,pac.y,CELL*0.42,angle+mouthAngle,angle+Math.PI*2-mouthAngle);
+  ctx.lineTo(pac.x,pac.y);
+  ctx.closePath();ctx.fill();
+
+  // Draw ghosts
+  ghosts.forEach(g=>{
+    ctx.fillStyle=g.scared?'#6366f1':g.color;
+    const gx=g.x,gy=g.y,gr=CELL*0.42;
+    ctx.beginPath();
+    ctx.arc(gx,gy-gr*0.2,gr,Math.PI,0);
+    ctx.lineTo(gx+gr,gy+gr*0.5);
+    // Wavy bottom
+    for(let i=0;i<3;i++){
+      const wx=gx+gr-gr*2*(i+0.5)/3;
+      ctx.quadraticCurveTo(gx+gr-gr*2*(i+0.25)/3,gy+gr*0.9,wx,gy+gr*0.5);
+    }
+    ctx.closePath();ctx.fill();
+    // Eyes
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(gx-gr*0.25,gy-gr*0.3,gr*0.22,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(gx+gr*0.25,gy-gr*0.3,gr*0.22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=g.scared?'#fff':'#1e293b';
+    ctx.beginPath();ctx.arc(gx-gr*0.2,gy-gr*0.25,gr*0.1,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(gx+gr*0.3,gy-gr*0.25,gr*0.1,0,Math.PI*2);ctx.fill();
+  });
+}
+
+// Controls
+document.addEventListener('keydown',e=>{
+  switch(e.key){
+    case 'ArrowUp':nextDirection={dr:-1,dc:0};e.preventDefault();break;
+    case 'ArrowDown':nextDirection={dr:1,dc:0};e.preventDefault();break;
+    case 'ArrowLeft':nextDirection={dr:0,dc:-1};e.preventDefault();break;
+    case 'ArrowRight':nextDirection={dr:0,dc:1};e.preventDefault();break;
+    case 'p':case 'P':togglePause();break;
+  }
+});
+
+let touchStartX=0,touchStartY=0;
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];touchStartX=t.clientX;touchStartY=t.clientY;e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  const t=e.changedTouches[0];
+  const dx=t.clientX-touchStartX,dy=t.clientY-touchStartY;
+  if(Math.abs(dx)+Math.abs(dy)<20)return;
+  if(Math.abs(dx)>Math.abs(dy))nextDirection={dr:0,dc:dx>0?1:-1};
+  else nextDirection={dr:dy>0?1:-1,dc:0};
+  e.preventDefault();
+},{passive:false});
+
+window.addEventListener('resize',()=>{if(gameStarted){resizeCanvas();draw();}});
+
+function togglePause(){if(!gameStarted)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(paused)saveState();}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){if(e.data.state.highScore)highScore=e.data.state.highScore;document.getElementById('high').textContent=highScore;}});
+</script>
+</body>
+</html>

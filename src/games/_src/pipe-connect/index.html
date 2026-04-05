@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pipe Connect</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem}
+h1{font-size:1.8rem;margin-bottom:.3rem;color:#facc15}
+.stats{display:flex;gap:1.5rem;margin:.5rem 0;font-size:1rem;color:#94a3b8}
+.stats span{color:#e2e8f0;font-weight:600}
+canvas{border:2px solid #334155;border-radius:4px;max-width:100%;touch-action:none;cursor:pointer}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box p{margin:.5rem 0;color:#94a3b8}
+.overlay-box p span{color:#e2e8f0;font-weight:600}
+.btn{padding:.7rem 1.8rem;border:none;border-radius:6px;font-size:1.1rem;font-weight:600;cursor:pointer;color:#0f172a;background:#22c55e;margin:.3rem}
+.btn:hover{background:#16a34a}
+.pause-wrap{text-align:center;margin-top:.75rem}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:6px;font-size:1.3rem;cursor:pointer}
+.pause-btn:hover{background:#6366f1}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Pipe Connect</h2>
+<p>Rotate pipe pieces to connect water from source to drain!</p>
+<p style="font-size:.85rem">Click/tap a pipe to rotate it 90 degrees.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<div class="overlay-box">
+<h2 id="endTitle">Level Complete!</h2>
+<p>Level: <span id="endLevel">1</span></p>
+<p>Moves: <span id="endMoves">0</span></p>
+<button class="btn" onclick="nextLevel()">Next Level</button>
+<button class="btn" style="background:#3b82f6" onclick="startGame()">Restart</button>
+</div>
+</div>
+
+<h1>Pipe Connect</h1>
+<div class="stats">
+<div>Level: <span id="level">1</span></div>
+<div>Moves: <span id="moves">0</span></div>
+</div>
+<canvas id="canvas" width="420" height="420"></canvas>
+<div class="pause-wrap">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<script>
+const SLUG='pipe-connect';
+const COLS=6,ROWS=6;
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+let cellSize,grid,moves,currentLevel=1,paused=false,gameStarted=false,highLevel=1,solved=false;
+
+// Pipe types: openings are [top, right, bottom, left] (booleans)
+// straight: 2 opposite, corner: 2 adjacent, tee: 3, cross: 4
+const PIPE_TYPES=['straight','corner','tee','cross'];
+
+function createPipe(type,rot){
+  let openings;
+  switch(type){
+    case 'straight':openings=[true,false,true,false];break;
+    case 'corner':openings=[true,true,false,false];break;
+    case 'tee':openings=[true,true,true,false];break;
+    case 'cross':openings=[true,true,true,true];break;
+  }
+  for(let i=0;i<rot;i++){openings=[openings[3],openings[0],openings[1],openings[2]];}
+  return {type,openings,rotation:rot};
+}
+
+function rotatePipe(pipe){
+  pipe.openings=[pipe.openings[3],pipe.openings[0],pipe.openings[1],pipe.openings[2]];
+  pipe.rotation=(pipe.rotation+1)%4;
+}
+
+function generatePuzzle(level){
+  // Build a valid path from source to drain using BFS/random walk
+  // Source: left edge row (random), Drain: right edge row (random)
+  const g=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  const sourceRow=Math.floor(Math.random()*ROWS);
+  const drainRow=Math.floor(Math.random()*ROWS);
+
+  // Create a random path from (sourceRow,0) to (drainRow,COLS-1)
+  const path=[];
+  const visited=new Set();
+  function key(r,c){return r*COLS+c;}
+
+  // Simple random walk with bias toward drain
+  let cr=sourceRow,cc=0;
+  path.push([cr,cc]);visited.add(key(cr,cc));
+
+  while(cc<COLS-1||cr!==drainRow){
+    const options=[];
+    if(cr>0&&!visited.has(key(cr-1,cc)))options.push([cr-1,cc]);
+    if(cr<ROWS-1&&!visited.has(key(cr+1,cc)))options.push([cr+1,cc]);
+    if(cc<COLS-1&&!visited.has(key(cr,cc+1)))options.push([cr,cc+1]);
+    if(cc>0&&!visited.has(key(cr,cc-1))&&Math.random()<0.1)options.push([cr,cc-1]);
+
+    if(options.length===0)break;
+    // Bias toward drain
+    options.sort((a,b)=>{
+      const da=Math.abs(a[0]-drainRow)+Math.abs(a[1]-(COLS-1));
+      const db=Math.abs(b[0]-drainRow)+Math.abs(b[1]-(COLS-1));
+      return da-db;
+    });
+    const pick=Math.random()<0.6?options[0]:options[Math.floor(Math.random()*options.length)];
+    cr=pick[0];cc=pick[1];
+    path.push([cr,cc]);visited.add(key(cr,cc));
+  }
+
+  // Determine connections for path cells
+  const connections=Array.from({length:ROWS},()=>Array.from({length:COLS},()=>({top:false,right:false,bottom:false,left:false})));
+
+  for(let i=0;i<path.length;i++){
+    const [r,c]=path[i];
+    if(i>0){
+      const [pr,pc]=path[i-1];
+      if(pr<r){connections[r][c].top=true;connections[pr][pc].bottom=true;}
+      if(pr>r){connections[r][c].bottom=true;connections[pr][pc].top=true;}
+      if(pc<c){connections[r][c].left=true;connections[pr][pc].right=true;}
+      if(pc>c){connections[r][c].right=true;connections[pr][pc].left=true;}
+    }
+  }
+
+  // Source and drain external connections
+  connections[sourceRow][0].left=true;
+  connections[drainRow][COLS-1].right=true;
+
+  // Convert connections to pipe types with correct rotation
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const conn=connections[r][c];
+      const opens=[conn.top,conn.right,conn.bottom,conn.left];
+      const count=opens.filter(Boolean).length;
+
+      if(count===0){
+        // Non-path cell: random pipe
+        const t=PIPE_TYPES[Math.floor(Math.random()*3)]; // no cross for non-path
+        const rot=Math.floor(Math.random()*4);
+        g[r][c]=createPipe(t,rot);
+      }else{
+        // Find matching pipe type and rotation
+        let found=false;
+        for(const t of PIPE_TYPES){
+          for(let rot=0;rot<4;rot++){
+            const p=createPipe(t,rot);
+            if(p.openings[0]===opens[0]&&p.openings[1]===opens[1]&&p.openings[2]===opens[2]&&p.openings[3]===opens[3]){
+              // Store correct rotation, then scramble
+              g[r][c]=createPipe(t,rot);
+              g[r][c]._correctRot=rot;
+              found=true;break;
+            }
+          }
+          if(found)break;
+        }
+        if(!found){g[r][c]=createPipe('cross',0);g[r][c]._correctRot=0;}
+      }
+    }
+  }
+
+  // Scramble all pipes
+  const scrambleAmount=Math.min(level+1,4);
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const times=1+Math.floor(Math.random()*3);
+      for(let t=0;t<times;t++)rotatePipe(g[r][c]);
+    }
+  }
+
+  return {grid:g,sourceRow,drainRow};
+}
+
+function checkConnection(){
+  // BFS from source
+  const puzzle=grid;
+  const visited=new Set();
+  const sourceR=grid.sourceRow;
+  const drainR=grid.drainRow;
+  const g=grid.grid;
+
+  // Check if source cell has left opening
+  if(!g[sourceR][0].openings[3])return {connected:false,visited:new Set()};
+
+  const queue=[[sourceR,0]];
+  visited.add(sourceR*COLS+0);
+
+  while(queue.length){
+    const [r,c]=queue.shift();
+    const cell=g[r][c];
+    // Check all 4 directions
+    const dirs=[[0,-1,3,1],[0,1,1,3],[-1,0,0,2],[1,0,2,0]]; // [dr,dc,myDir,theirDir]
+    for(const [dr,dc,myDir,theirDir] of dirs){
+      const nr=r+dr,nc=c+dc;
+      if(nr<0||nr>=ROWS||nc<0||nc>=COLS)continue;
+      if(visited.has(nr*COLS+nc))continue;
+      if(cell.openings[myDir]&&g[nr][nc].openings[theirDir]){
+        visited.add(nr*COLS+nc);
+        queue.push([nr,nc]);
+      }
+    }
+  }
+
+  // Check if drain is connected and has right opening
+  const connected=visited.has(drainR*COLS+(COLS-1))&&g[drainR][COLS-1].openings[1];
+  return {connected,visited};
+}
+
+function draw(){
+  const w=canvas.width,h=canvas.height;
+  cellSize=Math.min(w,h)/COLS;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,0,w,h);
+
+  const {connected,visited}=checkConnection();
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const x=c*cellSize,y=r*cellSize;
+      const cell=grid.grid[r][c];
+      const isFlow=visited.has(r*COLS+c);
+
+      // Cell background
+      ctx.fillStyle=isFlow&&connected?'#14532d44':'#1e293b';
+      ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+      ctx.strokeStyle='#334155';
+      ctx.strokeRect(x+1,y+1,cellSize-2,cellSize-2);
+
+      // Draw pipe
+      const cx=x+cellSize/2,cy=y+cellSize/2;
+      const pw=cellSize*0.22;
+      ctx.fillStyle=isFlow&&connected?'#22c55e':'#6366f1';
+      ctx.strokeStyle=isFlow&&connected?'#16a34a':'#4f46e5';
+      ctx.lineWidth=2;
+
+      // Center hub
+      ctx.fillRect(cx-pw/2,cy-pw/2,pw,pw);
+
+      // Extensions
+      if(cell.openings[0])ctx.fillRect(cx-pw/2,y+2,pw,cellSize/2-2); // top
+      if(cell.openings[2])ctx.fillRect(cx-pw/2,cy,pw,cellSize/2-2); // bottom
+      if(cell.openings[3])ctx.fillRect(x+2,cy-pw/2,cellSize/2-2,pw); // left
+      if(cell.openings[1])ctx.fillRect(cx,cy-pw/2,cellSize/2-2,pw); // right
+    }
+  }
+
+  // Source indicator
+  const sy=grid.sourceRow*cellSize+cellSize/2;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.arc(-2,sy,8,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('S',-2,sy);
+
+  // Drain indicator
+  const dy=grid.drainRow*cellSize+cellSize/2;
+  ctx.fillStyle=connected?'#22c55e':'#ef4444';
+  ctx.beginPath();ctx.arc(COLS*cellSize+2,dy,8,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.fillText('D',COLS*cellSize+2,dy);
+
+  if(connected&&!solved){
+    solved=true;
+    setTimeout(()=>{
+      document.getElementById('endLevel').textContent=currentLevel;
+      document.getElementById('endMoves').textContent=moves;
+      document.getElementById('endOverlay').classList.remove('hidden');
+      saveState();
+    },300);
+  }
+}
+
+canvas.addEventListener('click',e=>{
+  if(paused||solved)return;
+  const rect=canvas.getBoundingClientRect();
+  const scale=canvas.width/rect.width;
+  const mx=(e.clientX-rect.left)*scale;
+  const my=(e.clientY-rect.top)*scale;
+  const c=Math.floor(mx/cellSize);
+  const r=Math.floor(my/cellSize);
+  if(r>=0&&r<ROWS&&c>=0&&c<COLS){
+    rotatePipe(grid.grid[r][c]);
+    moves++;
+    document.getElementById('moves').textContent=moves;
+    draw();
+  }
+});
+
+function startGame(){
+  currentLevel=1;
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  loadLevel();
+}
+
+function nextLevel(){
+  currentLevel++;
+  document.getElementById('endOverlay').classList.add('hidden');
+  loadLevel();
+}
+
+function loadLevel(){
+  moves=0;solved=false;paused=false;gameStarted=true;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('level').textContent=currentLevel;
+  document.getElementById('pauseBtn').textContent='⏸';
+  grid=generatePuzzle(currentLevel);
+  draw();
+}
+
+function togglePause(){if(!gameStarted)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(paused)saveState();}
+function saveState(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highLevel:Math.max(highLevel,currentLevel)}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){if(e.data.state.highLevel)highLevel=e.data.state.highLevel;}});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>
