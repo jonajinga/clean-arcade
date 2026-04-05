@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Piano Tiles</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
+canvas{display:block;border:1px solid #6366f1;max-width:100%;touch-action:none}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.hud{width:100%;max-width:360px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
+.pause-btn{margin-top:12px;background:#3b82f6;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.5rem;cursor:pointer;font-family:inherit;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Piano Tiles</h1>
+<p>Tap the black tiles as they scroll down. Don't miss!</p>
+<p style="font-size:.85rem;color:#94a3b8">Tap/click tiles or use D F J K keys</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1>Game Over</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="hud hidden" id="hud">
+<span>Score: <span id="scoreEl">0</span></span>
+<span>Hi: <span id="hiEl">0</span></span>
+</div>
+<canvas id="c" width="360" height="640"></canvas>
+<button class="pause-btn hidden" id="pauseBtn" onclick="togglePause()">⏸</button>
+<script>
+const SLUG='piano-tiles';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=360,H=640,COLS=4,TW=W/COLS,TH=160;
+let state={highScore:0};
+let score,tiles,speed,paused,running,animId,lastTime,gameOver;
+
+// Audio
+let audioCtx;
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
+const NOTES=[261.63,293.66,329.63,349.23,392.00,440.00,493.88,523.25];
+function playNote(col){
+  if(!audioCtx)return;
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.type='sine';
+  osc.frequency.value=NOTES[(score+col)%NOTES.length];
+  gain.gain.setValueAtTime(.3,audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.3);
+  osc.connect(gain);gain.connect(audioCtx.destination);
+  osc.start();osc.stop(audioCtx.currentTime+.3);
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state=e.data.state;const h=document.getElementById('hiEl');if(h)h.textContent=state.highScore||0;}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+
+function resize(){const r=Math.min(window.innerWidth/W,1);canvas.style.width=W*r+'px';canvas.style.height=H*r+'px';}
+window.addEventListener('resize',resize);resize();
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  const map={d:0,f:1,j:2,k:3,D:0,F:1,J:2,K:3};
+  if(map[e.key]!==undefined)tapColumn(map[e.key]);
+});
+
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=(e.clientX-rect.left)*(W/rect.width);
+  tapColumn(Math.floor(x/TW));
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  initAudio();
+  const rect=canvas.getBoundingClientRect();
+  for(const t of e.changedTouches){
+    const x=(t.clientX-rect.left)*(W/rect.width);
+    tapColumn(Math.floor(x/TW));
+  }
+},{passive:false});
+
+function togglePause(){
+  if(!running||gameOver)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused){save();}else{lastTime=performance.now();loop();}
+}
+
+function spawnTile(){
+  const col=Math.floor(Math.random()*COLS);
+  tiles.push({col,y:-TH,tapped:false});
+}
+
+function tapColumn(col){
+  if(paused||gameOver||!running)return;
+  initAudio();
+  // Find lowest untapped tile in this column that's on screen
+  let best=null;
+  for(const t of tiles){
+    if(t.col===col&&!t.tapped&&t.y>-TH&&t.y<H){
+      if(!best||t.y>best.y)best=t;
+    }
+  }
+  if(best){
+    best.tapped=true;
+    score++;
+    speed=2+score*0.05;
+    document.getElementById('scoreEl').textContent=score;
+    playNote(col);
+  }else{
+    // Tapped wrong column
+    endGame();
+  }
+}
+
+function startGame(){
+  initAudio();
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  document.getElementById('pauseBtn').textContent='⏸';
+  score=0;tiles=[];speed=2;paused=false;running=true;gameOver=false;
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('hiEl').textContent=state.highScore||0;
+  // Pre-spawn tiles
+  for(let i=0;i<5;i++){
+    const col=Math.floor(Math.random()*COLS);
+    tiles.push({col,y:-TH-i*TH,tapped:false});
+  }
+  lastTime=performance.now();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function update(dt){
+  tiles.forEach(t=>t.y+=speed*60*dt);
+  // Spawn new
+  const topTile=tiles.reduce((min,t)=>t.y<min?t.y:min,Infinity);
+  if(topTile>0)spawnTile();
+  // Check if untapped tile passed bottom
+  for(const t of tiles){
+    if(!t.tapped&&t.y>H){endGame();return;}
+  }
+  // Remove tiles far below
+  tiles=tiles.filter(t=>t.y<H+TH);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Grid lines
+  ctx.strokeStyle='#1e293b';ctx.lineWidth=1;
+  for(let i=1;i<COLS;i++){ctx.beginPath();ctx.moveTo(i*TW,0);ctx.lineTo(i*TW,H);ctx.stroke();}
+  // Tiles
+  tiles.forEach(t=>{
+    if(t.tapped){
+      ctx.fillStyle='#1e293b';
+    }else{
+      ctx.fillStyle='#e2e8f0';
+    }
+    ctx.fillRect(t.col*TW+1,t.y,TW-2,TH-2);
+    if(!t.tapped){
+      ctx.fillStyle='#0f172a';
+      ctx.font='bold 24px system-ui';ctx.textAlign='center';
+      ctx.fillText(['D','F','J','K'][t.col],t.col*TW+TW/2,t.y+TH/2+8);
+    }
+  });
+  if(paused){
+    ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';ctx.font='bold 36px system-ui';ctx.textAlign='center';
+    ctx.fillText('PAUSED',W/2,H/2);
+  }
+}
+
+function endGame(){
+  gameOver=true;running=false;
+  if(score>state.highScore)state.highScore=score;
+  save();
+  document.getElementById('finalScore').textContent='Score: '+score;
+  document.getElementById('highScoreText').textContent='High Score: '+state.highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.add('hidden');
+}
+
+function loop(){
+  if(!running||paused)return;
+  const now=performance.now();
+  const dt=Math.min((now-lastTime)/1000,.05);
+  lastTime=now;
+  update(dt);
+  draw();
+  animId=requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

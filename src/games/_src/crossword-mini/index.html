@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crossword Mini</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:10px}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0;max-width:400px;text-align:center}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.game-area{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:500px}
+.grid{display:grid;grid-template-columns:repeat(5,56px);grid-template-rows:repeat(5,56px);gap:2px}
+@media(max-width:400px){.grid{grid-template-columns:repeat(5,48px);grid-template-rows:repeat(5,48px)}}
+.cell{width:100%;height:100%;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.cell.black{background:#0f172a;border-color:#0f172a;cursor:default}
+.cell.selected{border-color:#6366f1;background:#1e3a5f}
+.cell.highlight{border-color:#3b82f6;background:#172544}
+.cell.correct{border-color:#22c55e;background:#14532d}
+.cell input{width:100%;height:100%;background:transparent;border:none;color:#e2e8f0;font-size:1.4rem;text-align:center;text-transform:uppercase;font-family:inherit;outline:none;padding:0}
+.cell .num{position:absolute;top:2px;left:4px;font-size:.6rem;color:#94a3b8}
+.clues{display:flex;gap:24px;width:100%;justify-content:center;flex-wrap:wrap}
+.clue-group h3{color:#6366f1;margin-bottom:8px;font-size:1rem}
+.clue-group ul{list-style:none;font-size:.9rem;line-height:1.8}
+.clue-group li{cursor:pointer;padding:2px 6px;border-radius:3px}
+.clue-group li:hover{background:#1e293b}
+.clue-group li.active{background:#1e3a5f;color:#facc15}
+.hud{display:flex;gap:20px;align-items:center;font-size:1rem;color:#facc15}
+.check-btn{background:#22c55e;color:#0f172a;border:none;padding:8px 20px;font-size:1rem;cursor:pointer;border-radius:4px;font-weight:bold}
+.check-btn:hover{background:#4ade80}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Crossword Mini</h1>
+<p>Solve the 5x5 crossword puzzle! Click a cell, then type your answer.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1>Puzzle Complete!</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="game-area hidden" id="gameArea">
+<div class="hud">
+<span>Score: <span id="scoreEl">0</span></span>
+<span>Hi: <span id="hiEl">0</span></span>
+<button class="check-btn" onclick="checkPuzzle()">Check</button>
+</div>
+<div class="grid" id="grid"></div>
+<div class="clues" id="clues"></div>
+</div>
+<script>
+const SLUG='crossword-mini';
+let state={highScore:0};
+let currentPuzzle,selectedCell,selectedDir,score;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state=e.data.state;const h=document.getElementById('hiEl');if(h)h.textContent=state.highScore||0;}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+
+const PUZZLES=[
+  {
+    grid:[
+      ['S','T','A','R','S'],
+      ['H','.','R','.','.'],
+      ['A','P','E','S','S'],
+      ['R','.','A','.','U'],
+      ['K','N','O','T','N']
+    ],
+    clues:{
+      across:[
+        {num:1,row:0,col:0,text:'Celestial bodies',len:5},
+        {num:3,row:2,col:0,text:'Primates',len:4},
+        {num:5,row:2,col:3,text:'Celestial body',len:1},
+        {num:6,row:4,col:0,text:'A tied rope',len:4}
+      ],
+      down:[
+        {num:1,row:0,col:0,text:'A large fish',len:5},
+        {num:2,row:0,col:2,text:'Region or zone',len:4},
+        {num:4,row:2,col:3,text:'Our star',len:3},
+        {num:7,row:2,col:4,text:'Light from the sky',len:3}
+      ]
+    }
+  },
+  {
+    grid:[
+      ['B','L','A','Z','E'],
+      ['O','.','N','.','A'],
+      ['N','O','T','E','S'],
+      ['E','.','S','.','T'],
+      ['S','W','A','N','S']
+    ],
+    clues:{
+      across:[
+        {num:1,row:0,col:0,text:'A fire or flame',len:5},
+        {num:3,row:2,col:0,text:'Musical symbols',len:5},
+        {num:5,row:4,col:0,text:'Graceful birds',len:5}
+      ],
+      down:[
+        {num:1,row:0,col:0,text:'Skeletal parts',len:5},
+        {num:2,row:0,col:2,text:'Insects in a colony',len:4},
+        {num:4,row:0,col:4,text:'Direction on compass',len:5}
+      ]
+    }
+  },
+  {
+    grid:[
+      ['G','R','A','P','E'],
+      ['L','.','I','.','A'],
+      ['O','A','R','S','R'],
+      ['W','.','S','.','T'],
+      ['S','E','E','D','H']
+    ],
+    clues:{
+      across:[
+        {num:1,row:0,col:0,text:'A purple fruit',len:5},
+        {num:3,row:2,col:0,text:'Rowing tools',len:4},
+        {num:5,row:4,col:0,text:'A plant embryo',len:4}
+      ],
+      down:[
+        {num:1,row:0,col:0,text:'Shine or radiance',len:5},
+        {num:2,row:0,col:2,text:'Open and breezy',len:5},
+        {num:4,row:0,col:4,text:'Planet we live on',len:5}
+      ]
+    }
+  }
+];
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  score=0;
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('hiEl').textContent=state.highScore||0;
+  currentPuzzle=PUZZLES[Math.floor(Math.random()*PUZZLES.length)];
+  selectedCell=null;selectedDir='across';
+  buildGrid();
+  buildClues();
+}
+
+function buildGrid(){
+  const g=document.getElementById('grid');
+  g.innerHTML='';
+  const p=currentPuzzle;
+  // Compute cell numbers
+  const nums={};
+  [...p.clues.across,...p.clues.down].forEach(c=>{
+    const k=c.row+','+c.col;
+    if(!nums[k])nums[k]=c.num;
+  });
+  for(let r=0;r<5;r++)for(let c=0;c<5;c++){
+    const div=document.createElement('div');
+    div.className='cell';
+    if(p.grid[r][c]==='.'){div.classList.add('black');g.appendChild(div);continue;}
+    const k=r+','+c;
+    if(nums[k]){const n=document.createElement('span');n.className='num';n.textContent=nums[k];div.appendChild(n);}
+    const inp=document.createElement('input');
+    inp.maxLength=1;
+    inp.dataset.r=r;inp.dataset.c=c;
+    inp.addEventListener('focus',()=>selectCell(r,c));
+    inp.addEventListener('input',e=>{
+      const v=e.target.value.toUpperCase().replace(/[^A-Z]/g,'');
+      e.target.value=v;
+      if(v)advanceCursor(r,c);
+    });
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Backspace'&&!e.target.value)retreatCursor(r,c);
+      if(e.key==='Tab'){e.preventDefault();toggleDir();}
+    });
+    div.addEventListener('click',()=>{selectCell(r,c);inp.focus();});
+    div.appendChild(inp);
+    g.appendChild(div);
+  }
+}
+
+function selectCell(r,c){
+  selectedCell={r,c};
+  highlightCells();
+}
+function toggleDir(){selectedDir=selectedDir==='across'?'down':'across';highlightCells();}
+function highlightCells(){
+  document.querySelectorAll('.cell').forEach(c=>c.classList.remove('selected','highlight'));
+  if(!selectedCell)return;
+  const{r,c}=selectedCell;
+  const cells=document.querySelectorAll('.cell');
+  cells[r*5+c].classList.add('selected');
+}
+function advanceCursor(r,c){
+  let nr=r,nc=c;
+  if(selectedDir==='across')nc++;else nr++;
+  if(nr<5&&nc<5&&currentPuzzle.grid[nr][nc]!=='.'){
+    const inp=document.querySelector(`input[data-r="${nr}"][data-c="${nc}"]`);
+    if(inp)inp.focus();
+  }
+}
+function retreatCursor(r,c){
+  let nr=r,nc=c;
+  if(selectedDir==='across')nc--;else nr--;
+  if(nr>=0&&nc>=0&&currentPuzzle.grid[nr][nc]!=='.'){
+    const inp=document.querySelector(`input[data-r="${nr}"][data-c="${nc}"]`);
+    if(inp){inp.focus();inp.value='';}
+  }
+}
+
+function buildClues(){
+  const div=document.getElementById('clues');
+  div.innerHTML='';
+  ['across','down'].forEach(dir=>{
+    const g=document.createElement('div');
+    g.className='clue-group';
+    g.innerHTML=`<h3>${dir.charAt(0).toUpperCase()+dir.slice(1)}</h3>`;
+    const ul=document.createElement('ul');
+    currentPuzzle.clues[dir].forEach(c=>{
+      const li=document.createElement('li');
+      li.textContent=`${c.num}. ${c.text}`;
+      li.addEventListener('click',()=>{
+        selectedDir=dir;
+        selectCell(c.row,c.col);
+        const inp=document.querySelector(`input[data-r="${c.row}"][data-c="${c.col}"]`);
+        if(inp)inp.focus();
+      });
+      ul.appendChild(li);
+    });
+    g.appendChild(ul);
+    div.appendChild(g);
+  });
+}
+
+function checkPuzzle(){
+  const p=currentPuzzle;
+  let correct=0,total=0;
+  for(let r=0;r<5;r++)for(let c=0;c<5;c++){
+    if(p.grid[r][c]==='.')continue;
+    total++;
+    const inp=document.querySelector(`input[data-r="${r}"][data-c="${c}"]`);
+    const cell=inp.parentElement;
+    if(inp&&inp.value.toUpperCase()===p.grid[r][c]){
+      cell.classList.add('correct');correct++;
+    }else{
+      cell.classList.remove('correct');
+    }
+  }
+  score=Math.round(correct/total*100);
+  document.getElementById('scoreEl').textContent=score;
+  if(correct===total){
+    if(score>state.highScore)state.highScore=score;
+    save();
+    document.getElementById('finalScore').textContent='Score: '+score+'%';
+    document.getElementById('highScoreText').textContent='You solved it perfectly!';
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+  }
+}
+</script>
+</body>
+</html>

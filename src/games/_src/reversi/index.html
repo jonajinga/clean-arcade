@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reversi</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:16px}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0;max-width:400px;text-align:center}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.game-area{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:450px}
+.hud{width:100%;display:flex;justify-content:space-between;font-size:1rem;color:#e2e8f0;align-items:center}
+.score-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;background:#1e293b}
+.score-pill .dot{width:20px;height:20px;border-radius:50%;border:2px solid #334155}
+.dot-black{background:#1e293b;border-color:#94a3b8 !important}
+.dot-white{background:#e2e8f0}
+.turn-text{color:#facc15;font-size:.9rem}
+.board{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;background:#1e293b;border:2px solid #334155;padding:2px;width:100%;aspect-ratio:1}
+.cell{background:#14532d;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;aspect-ratio:1}
+.cell:hover{background:#166534}
+.cell.valid::after{content:'';width:30%;height:30%;border-radius:50%;background:rgba(250,204,21,.3)}
+.piece{width:80%;height:80%;border-radius:50%;transition:all .3s}
+.piece.black{background:radial-gradient(circle at 35% 35%,#475569,#1e293b);border:2px solid #64748b}
+.piece.white{background:radial-gradient(circle at 35% 35%,#fff,#cbd5e1);border:2px solid #94a3b8}
+.piece.flip{animation:flip .4s ease-in-out}
+@keyframes flip{0%{transform:scaleX(1)}50%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+.stats{font-size:.85rem;color:#94a3b8;text-align:center}
+.new-game-btn{background:#3b82f6;color:#e2e8f0;border:none;padding:8px 20px;font-size:.9rem;cursor:pointer;border-radius:4px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Reversi</h1>
+<p>Place pieces to flip your opponent's. You play Black against the AI (White). The player with the most pieces wins!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1 id="resultTitle">Game Over</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="game-area hidden" id="gameArea">
+<div class="hud">
+<div class="score-pill"><div class="dot dot-black"></div><span id="blackCount">2</span></div>
+<div><span class="turn-text" id="turnText">Your turn</span></div>
+<div class="score-pill"><div class="dot dot-white"></div><span id="whiteCount">2</span></div>
+</div>
+<div class="board" id="board"></div>
+<div style="display:flex;gap:12px;align-items:center">
+<button class="new-game-btn" onclick="startGame()">New Game</button>
+<span class="stats">Wins: <span id="winsEl">0</span></span>
+</div>
+</div>
+<script>
+const SLUG='reversi';
+const EMPTY=0,BLACK=1,WHITE=2;
+const DIRS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+let state={highScore:0,wins:0};
+let board,currentPlayer,gameOver,aiThinking;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state={...state,...e.data.state};updateStats();}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+function updateStats(){document.getElementById('winsEl').textContent=state.wins||0;}
+
+function initBoard(){
+  board=Array.from({length:8},()=>Array(8).fill(EMPTY));
+  board[3][3]=WHITE;board[3][4]=BLACK;board[4][3]=BLACK;board[4][4]=WHITE;
+}
+
+function getFlips(b,r,c,player){
+  if(b[r][c]!==EMPTY)return[];
+  const opp=player===BLACK?WHITE:BLACK;
+  const allFlips=[];
+  for(const[dr,dc]of DIRS){
+    const flips=[];
+    let nr=r+dr,nc=c+dc;
+    while(nr>=0&&nr<8&&nc>=0&&nc<8&&b[nr][nc]===opp){
+      flips.push([nr,nc]);nr+=dr;nc+=dc;
+    }
+    if(flips.length>0&&nr>=0&&nr<8&&nc>=0&&nc<8&&b[nr][nc]===player){
+      allFlips.push(...flips);
+    }
+  }
+  return allFlips;
+}
+
+function getValidMoves(b,player){
+  const moves=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    if(getFlips(b,r,c,player).length>0)moves.push([r,c]);
+  }
+  return moves;
+}
+
+function makeMove(r,c,player){
+  const flips=getFlips(board,r,c,player);
+  if(flips.length===0)return false;
+  board[r][c]=player;
+  flips.forEach(([fr,fc])=>board[fr][fc]=player);
+  return true;
+}
+
+function countPieces(){
+  let b=0,w=0;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    if(board[r][c]===BLACK)b++;
+    if(board[r][c]===WHITE)w++;
+  }
+  return{b,w};
+}
+
+function render(){
+  const el=document.getElementById('board');
+  el.innerHTML='';
+  const valid=gameOver?[]:getValidMoves(board,currentPlayer);
+  const validSet=new Set(valid.map(([r,c])=>r+','+c));
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const cell=document.createElement('div');
+    cell.className='cell';
+    if(currentPlayer===BLACK&&validSet.has(r+','+c))cell.classList.add('valid');
+    if(board[r][c]!==EMPTY){
+      const piece=document.createElement('div');
+      piece.className='piece '+(board[r][c]===BLACK?'black':'white');
+      cell.appendChild(piece);
+    }
+    cell.addEventListener('click',()=>playerMove(r,c));
+    el.appendChild(cell);
+  }
+  const{b,w}=countPieces();
+  document.getElementById('blackCount').textContent=b;
+  document.getElementById('whiteCount').textContent=w;
+}
+
+function playerMove(r,c){
+  if(gameOver||currentPlayer!==BLACK||aiThinking)return;
+  const flips=getFlips(board,r,c,BLACK);
+  if(flips.length===0)return;
+  makeMove(r,c,BLACK);
+  render();
+  currentPlayer=WHITE;
+  document.getElementById('turnText').textContent='AI thinking...';
+  checkGameState();
+  if(!gameOver){
+    aiThinking=true;
+    setTimeout(aiMove,500);
+  }
+}
+
+// AI: simple greedy with corner priority
+function aiMove(){
+  const moves=getValidMoves(board,WHITE);
+  if(moves.length===0){
+    currentPlayer=BLACK;
+    document.getElementById('turnText').textContent='Your turn';
+    aiThinking=false;
+    checkGameState();
+    return;
+  }
+  // Score each move
+  const CORNER_BONUS=50;
+  const EDGE_BONUS=5;
+  let best=null,bestScore=-Infinity;
+  for(const[r,c]of moves){
+    let s=getFlips(board,r,c,WHITE).length;
+    if((r===0||r===7)&&(c===0||c===7))s+=CORNER_BONUS;
+    else if(r===0||r===7||c===0||c===7)s+=EDGE_BONUS;
+    // Avoid cells adjacent to corners if corner is empty
+    if((r===0||r===1)&&(c===0||c===1)&&board[0][0]===EMPTY&&!(r===0&&c===0))s-=10;
+    if((r===0||r===1)&&(c===6||c===7)&&board[0][7]===EMPTY&&!(r===0&&c===7))s-=10;
+    if((r===6||r===7)&&(c===0||c===1)&&board[7][0]===EMPTY&&!(r===7&&c===0))s-=10;
+    if((r===6||r===7)&&(c===6||c===7)&&board[7][7]===EMPTY&&!(r===7&&c===7))s-=10;
+    if(s>bestScore){bestScore=s;best=[r,c];}
+  }
+  makeMove(best[0],best[1],WHITE);
+  render();
+  currentPlayer=BLACK;
+  aiThinking=false;
+  document.getElementById('turnText').textContent='Your turn';
+  checkGameState();
+}
+
+function checkGameState(){
+  const bMoves=getValidMoves(board,BLACK);
+  const wMoves=getValidMoves(board,WHITE);
+  if(bMoves.length===0&&wMoves.length===0){
+    endGame();return;
+  }
+  if(currentPlayer===BLACK&&bMoves.length===0){
+    currentPlayer=WHITE;
+    document.getElementById('turnText').textContent='AI thinking...';
+    aiThinking=true;
+    setTimeout(aiMove,500);
+  }else if(currentPlayer===WHITE&&wMoves.length===0){
+    currentPlayer=BLACK;
+    document.getElementById('turnText').textContent='Your turn';
+    render();
+  }
+}
+
+function endGame(){
+  gameOver=true;
+  const{b,w}=countPieces();
+  let result;
+  if(b>w){result='You Win!';state.wins=(state.wins||0)+1;}
+  else if(w>b)result='AI Wins!';
+  else result='Draw!';
+  save();
+  document.getElementById('resultTitle').textContent=result;
+  document.getElementById('finalScore').textContent=`Black: ${b} - White: ${w}`;
+  document.getElementById('highScoreText').textContent='Total Wins: '+(state.wins||0);
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  initBoard();
+  currentPlayer=BLACK;gameOver=false;aiThinking=false;
+  document.getElementById('turnText').textContent='Your turn';
+  updateStats();
+  render();
+}
+</script>
+</body>
+</html>

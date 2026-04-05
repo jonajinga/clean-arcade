@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trivia Quiz</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:16px}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0;max-width:400px;text-align:center}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.game-area{display:flex;flex-direction:column;align-items:center;gap:20px;width:100%;max-width:600px}
+.hud{width:100%;display:flex;justify-content:space-between;font-size:1rem;color:#facc15}
+.progress{width:100%;height:6px;background:#1e293b;border-radius:3px;overflow:hidden}
+.progress-bar{height:100%;background:#6366f1;transition:width .3s}
+.question-card{width:100%;background:#1e293b;border-radius:8px;padding:24px;border:1px solid #334155}
+.question-card h2{font-size:1.2rem;line-height:1.5;margin-bottom:16px;color:#e2e8f0}
+.question-card .category{font-size:.8rem;color:#6366f1;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.answers{display:flex;flex-direction:column;gap:10px;width:100%}
+.answer-btn{width:100%;text-align:left;background:#0f172a;color:#e2e8f0;border:2px solid #334155;padding:14px 18px;font-size:1rem;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .2s;min-height:48px}
+.answer-btn:hover:not(:disabled){border-color:#6366f1;background:#1e293b}
+.answer-btn.correct{border-color:#22c55e;background:#14532d;color:#22c55e}
+.answer-btn.wrong{border-color:#ef4444;background:#450a0a;color:#ef4444}
+.answer-btn:disabled{cursor:default;opacity:.7}
+.feedback{font-size:1rem;min-height:24px;text-align:center}
+.next-btn{background:#3b82f6;color:#e2e8f0;border:none;padding:10px 28px;font-size:1rem;cursor:pointer;border-radius:4px;font-family:inherit}
+.next-btn:hover{background:#60a5fa}
+.stats{font-size:.85rem;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Trivia Quiz</h1>
+<p>Answer 10 multiple choice questions. How much do you know?</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1>Quiz Complete!</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<p id="perfectText" style="color:#22c55e"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="game-area hidden" id="gameArea">
+<div class="hud">
+<span>Question <span id="qNum">1</span>/10</span>
+<span>Score: <span id="scoreEl">0</span></span>
+<span>Hi: <span id="hiEl">0</span></span>
+</div>
+<div class="progress"><div class="progress-bar" id="progressBar" style="width:10%"></div></div>
+<div class="question-card">
+<div class="category" id="catEl"></div>
+<h2 id="questionEl"></h2>
+<div class="answers" id="answersEl"></div>
+</div>
+<div class="feedback" id="feedbackEl"></div>
+<button class="next-btn hidden" id="nextBtn" onclick="nextQuestion()">Next Question</button>
+</div>
+<script>
+const SLUG='trivia-quiz';
+let state={highScore:0};
+let questions,currentQ,score,answered;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state=e.data.state;const h=document.getElementById('hiEl');if(h)h.textContent=state.highScore||0;}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+
+const BANK=[
+  {cat:'Science',q:'What planet is known as the Red Planet?',a:['Mars','Venus','Jupiter','Saturn'],c:0},
+  {cat:'Science',q:'What is the chemical symbol for gold?',a:['Au','Ag','Fe','Cu'],c:0},
+  {cat:'Science',q:'How many bones are in the adult human body?',a:['206','186','216','196'],c:0},
+  {cat:'Science',q:'What gas do plants absorb from the atmosphere?',a:['Carbon dioxide','Oxygen','Nitrogen','Hydrogen'],c:0},
+  {cat:'Science',q:'What is the hardest natural substance on Earth?',a:['Diamond','Titanium','Quartz','Sapphire'],c:0},
+  {cat:'Science',q:'What is the largest organ in the human body?',a:['Skin','Liver','Brain','Heart'],c:0},
+  {cat:'History',q:'In what year did World War II end?',a:['1945','1944','1946','1943'],c:0},
+  {cat:'History',q:'Who was the first President of the United States?',a:['George Washington','John Adams','Thomas Jefferson','James Madison'],c:0},
+  {cat:'History',q:'The Great Wall of China was primarily built to protect against whom?',a:['Mongol invaders','Japanese forces','Korean armies','Tibetan tribes'],c:0},
+  {cat:'History',q:'What ancient civilization built the pyramids at Giza?',a:['Egyptians','Romans','Greeks','Persians'],c:0},
+  {cat:'History',q:'In what year did the Berlin Wall fall?',a:['1989','1987','1991','1985'],c:0},
+  {cat:'Geography',q:'What is the largest ocean on Earth?',a:['Pacific','Atlantic','Indian','Arctic'],c:0},
+  {cat:'Geography',q:'What is the smallest country in the world?',a:['Vatican City','Monaco','San Marino','Liechtenstein'],c:0},
+  {cat:'Geography',q:'What river flows through Paris?',a:['Seine','Rhine','Thames','Danube'],c:0},
+  {cat:'Geography',q:'Mount Everest is located on the border of which two countries?',a:['Nepal and China','India and China','Nepal and India','Pakistan and China'],c:0},
+  {cat:'Geography',q:'What is the capital of Australia?',a:['Canberra','Sydney','Melbourne','Brisbane'],c:0},
+  {cat:'Arts',q:'Who painted the Mona Lisa?',a:['Leonardo da Vinci','Michelangelo','Raphael','Donatello'],c:0},
+  {cat:'Arts',q:'Who wrote "Romeo and Juliet"?',a:['William Shakespeare','Charles Dickens','Jane Austen','Mark Twain'],c:0},
+  {cat:'Arts',q:'What instrument has 88 keys?',a:['Piano','Organ','Harpsichord','Accordion'],c:0},
+  {cat:'Arts',q:'Who composed the "Moonlight Sonata"?',a:['Beethoven','Mozart','Bach','Chopin'],c:0},
+  {cat:'Technology',q:'What does HTML stand for?',a:['HyperText Markup Language','High Tech Modern Language','Hyper Transfer Markup Language','Home Tool Markup Language'],c:0},
+  {cat:'Technology',q:'Who co-founded Apple with Steve Jobs?',a:['Steve Wozniak','Bill Gates','Mark Zuckerberg','Jeff Bezos'],c:0},
+  {cat:'Technology',q:'What year was the first iPhone released?',a:['2007','2005','2008','2006'],c:0},
+  {cat:'Technology',q:'What does CPU stand for?',a:['Central Processing Unit','Computer Personal Unit','Central Program Utility','Core Processing Unit'],c:0},
+  {cat:'Nature',q:'What is the largest mammal on Earth?',a:['Blue whale','African elephant','Giraffe','Hippopotamus'],c:0},
+  {cat:'Nature',q:'How many legs does a spider have?',a:['8','6','10','12'],c:0},
+  {cat:'Nature',q:'What is the tallest type of tree?',a:['Redwood','Oak','Sequoia','Pine'],c:0},
+  {cat:'Nature',q:'What is a group of lions called?',a:['Pride','Pack','Herd','Flock'],c:0},
+  {cat:'Sports',q:'How many players are on a soccer team on the field?',a:['11','9','10','12'],c:0},
+  {cat:'Sports',q:'In what country did the Olympic Games originate?',a:['Greece','Italy','France','Egypt'],c:0},
+  {cat:'Sports',q:'How many points is a touchdown worth in American football?',a:['6','7','3','4'],c:0},
+  {cat:'Food',q:'What fruit is traditionally used in guacamole?',a:['Avocado','Tomato','Mango','Lime'],c:0},
+  {cat:'Food',q:'What country is sushi originally from?',a:['Japan','China','Korea','Thailand'],c:0},
+  {cat:'Food',q:'What is the most consumed beverage in the world after water?',a:['Tea','Coffee','Beer','Milk'],c:0},
+];
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  score=0;currentQ=0;answered=false;
+  questions=shuffle([...BANK]).slice(0,10);
+  // Shuffle answers for each question
+  questions.forEach(q=>{
+    const correct=q.a[q.c];
+    q.a=shuffle([...q.a]);
+    q.c=q.a.indexOf(correct);
+  });
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('hiEl').textContent=state.highScore||0;
+  showQuestion();
+}
+
+function showQuestion(){
+  const q=questions[currentQ];
+  document.getElementById('qNum').textContent=currentQ+1;
+  document.getElementById('progressBar').style.width=((currentQ+1)/10*100)+'%';
+  document.getElementById('catEl').textContent=q.cat;
+  document.getElementById('questionEl').textContent=q.q;
+  document.getElementById('feedbackEl').textContent='';
+  document.getElementById('nextBtn').classList.add('hidden');
+  answered=false;
+  const el=document.getElementById('answersEl');
+  el.innerHTML='';
+  q.a.forEach((a,i)=>{
+    const btn=document.createElement('button');
+    btn.className='answer-btn';
+    btn.textContent=a;
+    btn.onclick=()=>selectAnswer(i);
+    el.appendChild(btn);
+  });
+}
+
+function selectAnswer(idx){
+  if(answered)return;
+  answered=true;
+  const q=questions[currentQ];
+  const btns=document.querySelectorAll('.answer-btn');
+  btns.forEach(b=>b.disabled=true);
+  btns[q.c].classList.add('correct');
+  if(idx===q.c){
+    score++;
+    document.getElementById('scoreEl').textContent=score;
+    document.getElementById('feedbackEl').style.color='#22c55e';
+    document.getElementById('feedbackEl').textContent='Correct!';
+  }else{
+    btns[idx].classList.add('wrong');
+    document.getElementById('feedbackEl').style.color='#ef4444';
+    document.getElementById('feedbackEl').textContent='Wrong! The answer was: '+q.a[q.c];
+  }
+  if(currentQ<9){
+    document.getElementById('nextBtn').classList.remove('hidden');
+  }else{
+    setTimeout(endGame,1500);
+  }
+}
+
+function nextQuestion(){
+  currentQ++;
+  showQuestion();
+}
+
+function endGame(){
+  if(score>state.highScore)state.highScore=score;
+  save();
+  document.getElementById('finalScore').textContent='Score: '+score+'/10';
+  document.getElementById('highScoreText').textContent='High Score: '+state.highScore+'/10';
+  document.getElementById('perfectText').textContent=score===10?'Perfect score!':'';
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+  document.getElementById('gameArea').classList.add('hidden');
+}
+</script>
+</body>
+</html>

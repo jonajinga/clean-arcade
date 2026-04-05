@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Etch a Sketch</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:16px}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0;max-width:400px;text-align:center}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.game-area{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:520px}
+canvas{display:block;border:3px solid #ef4444;border-radius:12px;background:#c4b5a0;max-width:100%;cursor:crosshair;touch-action:none}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
+.tool-btn{background:#1e293b;color:#e2e8f0;border:2px solid #334155;padding:8px 16px;font-size:.9rem;cursor:pointer;border-radius:4px;font-family:inherit;min-height:44px;min-width:44px}
+.tool-btn:hover{border-color:#6366f1}
+.tool-btn.active{border-color:#6366f1;background:#1e3a5f}
+.color-picker{width:44px;height:44px;border:2px solid #334155;border-radius:4px;cursor:pointer;background:#1e293b;padding:2px}
+.color-picker input{width:100%;height:100%;border:none;cursor:pointer}
+.size-slider{display:flex;align-items:center;gap:6px;font-size:.85rem;color:#94a3b8}
+.size-slider input{width:80px}
+.shake-btn{background:#ef4444;color:#e2e8f0;border:none;padding:8px 20px;font-size:1rem;cursor:pointer;border-radius:4px;font-family:inherit;min-height:44px}
+.shake-btn:hover{background:#f87171}
+.info{font-size:.8rem;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Etch a Sketch</h1>
+<p>Draw with arrow keys or touch/drag. Pick colors, change brush size, and shake to clear!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="game-area hidden" id="gameArea">
+<div class="toolbar">
+<div class="color-picker"><input type="color" id="colorInput" value="#1e293b"></div>
+<button class="tool-btn" onclick="setColor('#1e293b')">Dark</button>
+<button class="tool-btn" onclick="setColor('#ef4444')">Red</button>
+<button class="tool-btn" onclick="setColor('#22c55e')">Green</button>
+<button class="tool-btn" onclick="setColor('#3b82f6')">Blue</button>
+<button class="tool-btn" onclick="setColor('#facc15')">Gold</button>
+<button class="tool-btn" onclick="setColor('#6366f1')">Indigo</button>
+</div>
+<div class="toolbar">
+<div class="size-slider">Brush: <input type="range" id="sizeSlider" min="1" max="20" value="3"> <span id="sizeVal">3</span>px</div>
+<button class="tool-btn" id="eraserBtn" onclick="toggleEraser()">Eraser</button>
+<button class="shake-btn" onclick="shakeClear()">Shake! Clear</button>
+</div>
+<canvas id="c" width="480" height="400"></canvas>
+<div class="info">Arrow keys or drag to draw. Your drawing is auto-saved.</div>
+</div>
+<script>
+const SLUG='etch-a-sketch';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=480,H=400;
+let state={highScore:0,imageData:null};
+let color='#1e293b',brushSize=3,eraser=false,drawing=false;
+let curX=W/2,curY=H/2;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    state=e.data.state;
+    if(state.imageData){
+      const img=new Image();
+      img.onload=()=>{ctx.drawImage(img,0,0);};
+      img.src=state.imageData;
+    }
+  }
+});
+function save(){
+  state.imageData=canvas.toDataURL();
+  parent.postMessage({type:'ca-save',slug:SLUG,state},'*');
+}
+
+function resize(){
+  const r=Math.min((window.innerWidth-32)/W,1);
+  canvas.style.width=W*r+'px';
+  canvas.style.height=H*r+'px';
+}
+window.addEventListener('resize',resize);resize();
+
+function clearCanvas(){
+  ctx.fillStyle='#c4b5a0';
+  ctx.fillRect(0,0,W,H);
+}
+
+function setColor(c){
+  color=c;eraser=false;
+  document.getElementById('colorInput').value=c;
+  document.getElementById('eraserBtn').classList.remove('active');
+}
+document.getElementById('colorInput').addEventListener('input',e=>{color=e.target.value;eraser=false;document.getElementById('eraserBtn').classList.remove('active');});
+document.getElementById('sizeSlider').addEventListener('input',e=>{brushSize=parseInt(e.target.value);document.getElementById('sizeVal').textContent=brushSize;});
+
+function toggleEraser(){
+  eraser=!eraser;
+  document.getElementById('eraserBtn').classList.toggle('active',eraser);
+}
+
+function drawLine(x1,y1,x2,y2){
+  ctx.strokeStyle=eraser?'#c4b5a0':color;
+  ctx.lineWidth=brushSize;
+  ctx.lineCap='round';
+  ctx.lineJoin='round';
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+// Keyboard drawing
+const keys={};
+document.addEventListener('keydown',e=>{keys[e.key]=true;e.preventDefault&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)&&e.preventDefault();});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+let kbInterval;
+function startKeyboardDraw(){
+  if(kbInterval)return;
+  kbInterval=setInterval(()=>{
+    const step=brushSize+1;
+    let nx=curX,ny=curY;
+    if(keys['ArrowLeft'])nx=Math.max(0,curX-step);
+    if(keys['ArrowRight'])nx=Math.min(W,curX+step);
+    if(keys['ArrowUp'])ny=Math.max(0,curY-step);
+    if(keys['ArrowDown'])ny=Math.min(H,curY+step);
+    if(nx!==curX||ny!==curY){
+      drawLine(curX,curY,nx,ny);
+      curX=nx;curY=ny;
+    }
+  },16);
+}
+
+// Mouse/touch drawing
+function getPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const sx=W/rect.width,sy=H/rect.height;
+  return{x:(e.clientX-rect.left)*sx,y:(e.clientY-rect.top)*sy};
+}
+
+canvas.addEventListener('mousedown',e=>{drawing=true;const p=getPos(e);curX=p.x;curY=p.y;});
+canvas.addEventListener('mousemove',e=>{
+  if(!drawing)return;
+  const p=getPos(e);
+  drawLine(curX,curY,p.x,p.y);
+  curX=p.x;curY=p.y;
+});
+canvas.addEventListener('mouseup',()=>{drawing=false;save();});
+canvas.addEventListener('mouseleave',()=>{drawing=false;});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();drawing=true;
+  const t=e.touches[0];const p=getPos(t);curX=p.x;curY=p.y;
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();if(!drawing)return;
+  const t=e.touches[0];const p=getPos(t);
+  drawLine(curX,curY,p.x,p.y);curX=p.x;curY=p.y;
+},{passive:false});
+canvas.addEventListener('touchend',()=>{drawing=false;save();});
+
+function shakeClear(){
+  canvas.style.animation='shake .4s';
+  setTimeout(()=>{canvas.style.animation='';clearCanvas();save();},400);
+  const style=document.createElement('style');
+  style.textContent='@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}';
+  document.head.appendChild(style);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  clearCanvas();
+  startKeyboardDraw();
+  // If we have saved data, restore it
+  if(state.imageData){
+    const img=new Image();
+    img.onload=()=>ctx.drawImage(img,0,0);
+    img.src=state.imageData;
+  }
+}
+</script>
+</body>
+</html>

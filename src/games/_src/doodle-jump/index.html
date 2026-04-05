@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Doodle Jump</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
+canvas{display:block;border:1px solid #6366f1;max-width:100%;touch-action:none}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.hud{width:100%;max-width:400px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
+.pause-btn{margin-top:12px;background:#3b82f6;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.5rem;cursor:pointer;font-family:inherit;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Doodle Jump</h1>
+<p>Jump up platforms and climb as high as you can!</p>
+<p style="font-size:.85rem;color:#94a3b8">Arrow keys or tilt touch to move. Wraps around edges.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1>Game Over</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="hud hidden" id="hud">
+<span>Score: <span id="scoreEl">0</span></span>
+<span>Hi: <span id="hiEl">0</span></span>
+</div>
+<canvas id="c" width="400" height="600"></canvas>
+<button class="pause-btn hidden" id="pauseBtn" onclick="togglePause()">⏸</button>
+<script>
+const SLUG='doodle-jump';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=400,H=600;
+let state={highScore:0};
+let player,platforms,score,maxHeight,paused,running,gameOver,animId,lastTime;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state=e.data.state;const h=document.getElementById('hiEl');if(h)h.textContent=state.highScore||0;}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+
+function resize(){const r=Math.min(window.innerWidth/W,1);canvas.style.width=W*r+'px';canvas.style.height=H*r+'px';}
+window.addEventListener('resize',resize);resize();
+
+const keys={};
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+// Touch: tilt left/right based on touch position
+let touchX=null;
+canvas.addEventListener('touchstart',e=>{e.preventDefault();touchX=e.touches[0].clientX;},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();touchX=e.touches[0].clientX;},{passive:false});
+canvas.addEventListener('touchend',()=>touchX=null);
+
+function togglePause(){
+  if(!running||gameOver)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused){save();}else{lastTime=performance.now();loop();}
+}
+
+function generatePlatforms(){
+  platforms=[];
+  for(let i=0;i<20;i++){
+    const y=H-i*35;
+    platforms.push({
+      x:Math.random()*(W-70),
+      y,
+      w:70,
+      h:10,
+      type:i===0?'normal':(Math.random()<.15?'breaking':(Math.random()<.1?'moving':'normal')),
+      movDir:1,
+      broken:false
+    });
+  }
+}
+
+function addPlatform(y){
+  const difficulty=Math.min(score/5000,1);
+  const gap=40+difficulty*30;
+  let type='normal';
+  const r=Math.random();
+  if(r<.1+difficulty*.1)type='breaking';
+  else if(r<.2)type='moving';
+  platforms.push({
+    x:Math.random()*(W-70),
+    y,
+    w:70,
+    h:10,
+    type,
+    movDir:Math.random()<.5?1:-1,
+    broken:false
+  });
+}
+
+function initGame(){
+  player={x:W/2-15,y:H-80,w:30,h:30,vy:0};
+  score=0;maxHeight=0;
+  gameOver=false;paused=false;
+  generatePlatforms();
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('hiEl').textContent=state.highScore||0;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  document.getElementById('pauseBtn').textContent='⏸';
+  initGame();
+  running=true;
+  lastTime=performance.now();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function update(dt){
+  const f=dt*60;
+  // Horizontal movement
+  let moveX=0;
+  if(keys['ArrowLeft'])moveX=-5;
+  if(keys['ArrowRight'])moveX=5;
+  if(touchX!==null){
+    const rect=canvas.getBoundingClientRect();
+    const cx=rect.left+rect.width/2;
+    moveX=(touchX-cx)/(rect.width/2)*7;
+  }
+  player.x+=moveX*f;
+  // Wrap
+  if(player.x+player.w<0)player.x=W;
+  if(player.x>W)player.x=-player.w;
+
+  // Gravity
+  player.vy+=.4*f;
+  player.y+=player.vy*f;
+
+  // Platform collision (only when falling)
+  if(player.vy>0){
+    for(const p of platforms){
+      if(p.broken)continue;
+      if(player.x+player.w>p.x&&player.x<p.x+p.w&&
+         player.y+player.h>=p.y&&player.y+player.h<=p.y+p.h+player.vy*f+5){
+        if(p.type==='breaking'){p.broken=true;continue;}
+        player.vy=-10;
+        player.y=p.y-player.h;
+      }
+    }
+  }
+
+  // Moving platforms
+  platforms.forEach(p=>{
+    if(p.type==='moving'&&!p.broken){
+      p.x+=p.movDir*1.5*f;
+      if(p.x<0||p.x+p.w>W)p.movDir*=-1;
+    }
+  });
+
+  // Scroll camera
+  if(player.y<H/2){
+    const shift=H/2-player.y;
+    player.y=H/2;
+    platforms.forEach(p=>p.y+=shift);
+    maxHeight+=shift;
+    score=Math.floor(maxHeight/10);
+    document.getElementById('scoreEl').textContent=score;
+  }
+
+  // Remove platforms below screen, add new ones above
+  platforms=platforms.filter(p=>p.y<H+20);
+  const topP=platforms.reduce((min,p)=>p.y<min?p.y:min,H);
+  while(topP>-50||platforms.length<15){
+    const newY=platforms.reduce((min,p)=>p.y<min?p.y:min,H)-35-Math.random()*20;
+    addPlatform(newY);
+    if(platforms.length>30)break;
+  }
+
+  // Fall below screen = game over
+  if(player.y>H+50)endGame();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Platforms
+  platforms.forEach(p=>{
+    if(p.broken){
+      ctx.fillStyle='#334155';
+      ctx.fillRect(p.x,p.y+5,p.w/2-5,p.h);
+      ctx.fillRect(p.x+p.w/2+5,p.y+10,p.w/2-5,p.h);
+      return;
+    }
+    const colors={normal:'#22c55e',breaking:'#ef4444',moving:'#3b82f6'};
+    ctx.fillStyle=colors[p.type];
+    ctx.fillRect(p.x,p.y,p.w,p.h);
+    if(p.type==='moving'){
+      ctx.fillStyle='#60a5fa';
+      ctx.fillRect(p.x+p.w/2-8,p.y+2,16,6);
+    }
+  });
+
+  // Player
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(player.x,player.y,player.w,player.h);
+  // Face
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(player.x+6,player.y+8,5,5);
+  ctx.fillRect(player.x+19,player.y+8,5,5);
+  ctx.fillRect(player.x+8,player.y+20,14,3);
+
+  if(paused){
+    ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';ctx.font='bold 36px system-ui';ctx.textAlign='center';
+    ctx.fillText('PAUSED',W/2,H/2);
+  }
+}
+
+function endGame(){
+  gameOver=true;running=false;
+  if(score>state.highScore)state.highScore=score;
+  save();
+  document.getElementById('finalScore').textContent='Score: '+score;
+  document.getElementById('highScoreText').textContent='High Score: '+state.highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.add('hidden');
+}
+
+function loop(){
+  if(!running||paused)return;
+  const now=performance.now();
+  const dt=Math.min((now-lastTime)/1000,.05);
+  lastTime=now;
+  if(!gameOver)update(dt);
+  draw();
+  animId=requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

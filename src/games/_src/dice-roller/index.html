@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dice Roller</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.hidden{display:none}
+.game-area{display:flex;flex-direction:column;align-items:center;gap:20px;width:100%;max-width:500px}
+.controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center}
+.controls label{font-size:1rem}
+.controls select{background:#1e293b;color:#e2e8f0;border:1px solid #334155;padding:8px 12px;font-size:1rem;border-radius:4px;font-family:inherit}
+.roll-btn{background:#22c55e;color:#0f172a;border:none;padding:12px 32px;font-size:1.3rem;cursor:pointer;font-weight:bold;border-radius:4px;font-family:inherit;min-height:48px}
+.roll-btn:hover{background:#4ade80}
+.roll-btn:active{transform:scale(.95)}
+.dice-area{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;min-height:100px;padding:16px}
+.die{width:72px;height:72px;background:#1e293b;border:2px solid #6366f1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:bold;color:#facc15;transition:transform .1s;position:relative}
+.die.rolling{animation:roll .4s ease-out}
+@keyframes roll{0%{transform:rotateX(0) rotateY(0) scale(1)}25%{transform:rotateX(90deg) rotateY(90deg) scale(.8)}50%{transform:rotateX(180deg) rotateY(180deg) scale(1.1)}75%{transform:rotateX(270deg) rotateY(270deg) scale(.9)}100%{transform:rotateX(360deg) rotateY(360deg) scale(1)}}
+.total{font-size:1.5rem;color:#facc15}
+.stats{width:100%;background:#1e293b;border-radius:8px;padding:16px}
+.stats h3{color:#6366f1;margin-bottom:10px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:.9rem}
+.stats-grid .label{color:#94a3b8}
+.stats-grid .value{color:#facc15;font-weight:bold}
+.history{width:100%;background:#1e293b;border-radius:8px;padding:16px;max-height:200px;overflow-y:auto}
+.history h3{color:#6366f1;margin-bottom:10px}
+.history-list{font-size:.85rem;color:#94a3b8;line-height:1.8}
+.clear-btn{background:#ef4444;color:#e2e8f0;border:none;padding:6px 16px;font-size:.85rem;cursor:pointer;border-radius:4px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Dice Roller</h1>
+<p>Roll 1-6 dice with animated 3D dice!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="game-area hidden" id="gameArea">
+<div class="controls">
+<label>Dice: <select id="diceCount"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<button class="roll-btn" onclick="rollDice()">Roll!</button>
+<button class="clear-btn" onclick="clearHistory()">Clear Stats</button>
+</div>
+<div class="dice-area" id="diceArea"></div>
+<div class="total" id="totalEl"></div>
+<div class="stats">
+<h3>Statistics</h3>
+<div class="stats-grid" id="statsGrid"></div>
+</div>
+<div class="history">
+<h3>History</h3>
+<div class="history-list" id="historyList"></div>
+</div>
+</div>
+<script>
+const SLUG='dice-roller';
+let state={highScore:0,totalRolls:0,rolls:[],distribution:{}};
+let rolling=false;
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){state={...state,...e.data.state};updateStats();renderHistory();}
+});
+function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
+
+const DOTS={
+  1:[[50,50]],
+  2:[[25,25],[75,75]],
+  3:[[25,25],[50,50],[75,75]],
+  4:[[25,25],[75,25],[25,75],[75,75]],
+  5:[[25,25],[75,25],[50,50],[25,75],[75,75]],
+  6:[[25,25],[75,25],[25,50],[75,50],[25,75],[75,75]]
+};
+
+function drawDie(val){
+  const div=document.createElement('div');
+  div.className='die rolling';
+  // Draw dots with SVG
+  let svg=`<svg viewBox="0 0 100 100" width="60" height="60">`;
+  DOTS[val].forEach(([x,y])=>{
+    svg+=`<circle cx="${x}" cy="${y}" r="9" fill="#facc15"/>`;
+  });
+  svg+=`</svg>`;
+  div.innerHTML=svg;
+  setTimeout(()=>div.classList.remove('rolling'),400);
+  return div;
+}
+
+function rollDice(){
+  if(rolling)return;
+  rolling=true;
+  const n=parseInt(document.getElementById('diceCount').value);
+  const area=document.getElementById('diceArea');
+  area.innerHTML='';
+  const results=[];
+  for(let i=0;i<n;i++){
+    const val=Math.floor(Math.random()*6)+1;
+    results.push(val);
+    area.appendChild(drawDie(val));
+  }
+  const total=results.reduce((a,b)=>a+b,0);
+  document.getElementById('totalEl').textContent=n>1?'Total: '+total:'';
+
+  // Update state
+  state.totalRolls++;
+  const key=results.join('+')+'='+total;
+  state.rolls.unshift({dice:n,results,total,time:new Date().toLocaleTimeString()});
+  if(state.rolls.length>50)state.rolls.pop();
+  results.forEach(v=>{state.distribution[v]=(state.distribution[v]||0)+1;});
+
+  updateStats();
+  renderHistory();
+  save();
+  setTimeout(()=>rolling=false,400);
+}
+
+function updateStats(){
+  const grid=document.getElementById('statsGrid');
+  const total=Object.values(state.distribution).reduce((a,b)=>a+b,0)||1;
+  let html=`<span class="label">Total Rolls:</span><span class="value" style="grid-column:span 2">${state.totalRolls}</span>`;
+  for(let i=1;i<=6;i++){
+    const count=state.distribution[i]||0;
+    const pct=((count/total)*100).toFixed(1);
+    html+=`<span class="label">Face ${i}:</span><span class="value">${count}</span><span class="value">${pct}%</span>`;
+  }
+  grid.innerHTML=html;
+}
+
+function renderHistory(){
+  const list=document.getElementById('historyList');
+  list.innerHTML=state.rolls.map(r=>`<div>${r.time} - [${r.results.join(', ')}] = ${r.total}</div>`).join('');
+}
+
+function clearHistory(){
+  state={highScore:0,totalRolls:0,rolls:[],distribution:{}};
+  updateStats();renderHistory();save();
+  document.getElementById('diceArea').innerHTML='';
+  document.getElementById('totalEl').textContent='';
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameArea').classList.remove('hidden');
+  updateStats();renderHistory();
+}
+</script>
+</body>
+</html>

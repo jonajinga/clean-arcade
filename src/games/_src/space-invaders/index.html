@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Space Invaders</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;overflow:hidden}
+canvas{display:block;border:1px solid #6366f1;max-width:100%;touch-action:none}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{font-size:1.2rem;margin-bottom:1.5rem;color:#e2e8f0}
+.btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.btn:hover{background:#818cf8}
+.pause-btn{margin-top:12px;background:#3b82f6;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.5rem;cursor:pointer;font-family:inherit;border-radius:4px}
+.pause-btn:hover{background:#60a5fa}
+.hud{width:100%;max-width:480px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
+.hidden{display:none}
+.touch-controls{display:none;margin-top:10px;gap:10px}
+.touch-btn{background:#3b82f6;color:#e2e8f0;border:none;padding:12px 20px;font-size:1.3rem;cursor:pointer;border-radius:4px;min-width:60px;min-height:48px}
+@media(pointer:coarse){.touch-controls{display:flex}}
+</style>
+</head>
+<body>
+<div class="overlay" id="startOverlay">
+<h1>Space Invaders</h1>
+<p>Defend Earth from the alien invasion!</p>
+<p style="font-size:.85rem;color:#94a3b8">Arrow keys to move, Space to shoot</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<h1>Game Over</h1>
+<h2 id="finalScore"></h2>
+<p id="highScoreText"></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<div class="hud hidden" id="hud">
+<span>Score: <span id="scoreEl">0</span></span>
+<span>Level: <span id="levelEl">1</span></span>
+<span>Lives: <span id="livesEl">3</span></span>
+<span>Hi: <span id="hiEl">0</span></span>
+</div>
+<canvas id="c" width="480" height="520"></canvas>
+<button class="pause-btn hidden" id="pauseBtn" onclick="togglePause()">⏸</button>
+<div class="touch-controls" id="touchControls">
+<button class="touch-btn" id="tleft">◀</button>
+<button class="touch-btn" id="tfire">🔥</button>
+<button class="touch-btn" id="tright">▶</button>
+</div>
+<script>
+const SLUG='space-invaders';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W=480,H=520;
+let state={highScore:0};
+let score,lives,level,ship,bullets,aliens,alienBullets,alienDir,alienSpeed,alienTimer,alienDropTimer,gameOver,paused,running,animId;
+
+function resize(){
+  const r=Math.min(window.innerWidth/W,1);
+  canvas.style.width=W*r+'px';
+  canvas.style.height=H*r+'px';
+}
+window.addEventListener('resize',resize);
+resize();
+
+// Save/Load
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    state=e.data.state;
+    document.getElementById('hiEl').textContent=state.highScore||0;
+  }
+});
+function save(){
+  parent.postMessage({type:'ca-save',slug:SLUG,state},'*');
+}
+
+const keys={};
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key===' ')e.preventDefault();
+});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+// Touch controls
+['tleft','tright','tfire'].forEach(id=>{
+  const el=document.getElementById(id);
+  const k=id==='tleft'?'ArrowLeft':id==='tright'?'ArrowRight':' ';
+  el.addEventListener('touchstart',e=>{e.preventDefault();keys[k]=true});
+  el.addEventListener('touchend',e=>{e.preventDefault();keys[k]=false});
+});
+
+function togglePause(){
+  if(!running||gameOver)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(paused){save();}else{loop();}
+}
+
+function createAliens(){
+  aliens=[];
+  const cols=8,rows=4;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    aliens.push({x:40+c*48,y:40+r*36,w:32,h:24,alive:true,type:r});
+  }
+  alienDir=1;
+  alienSpeed=0.3+level*0.15;
+  alienTimer=0;
+  alienDropTimer=0;
+}
+
+function initGame(){
+  score=0;lives=3;level=1;
+  ship={x:W/2-20,y:H-50,w:40,h:20};
+  bullets=[];alienBullets=[];
+  gameOver=false;paused=false;
+  createAliens();
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('levelEl').textContent=1;
+  document.getElementById('livesEl').textContent=3;
+  document.getElementById('hiEl').textContent=state.highScore||0;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  document.getElementById('pauseBtn').textContent='⏸';
+  initGame();
+  running=true;
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+let lastShot=0;
+function update(){
+  // Ship movement
+  if(keys['ArrowLeft'])ship.x=Math.max(0,ship.x-5);
+  if(keys['ArrowRight'])ship.x=Math.min(W-ship.w,ship.x+5);
+  const now=Date.now();
+  if(keys[' ']&&now-lastShot>250){
+    bullets.push({x:ship.x+ship.w/2-2,y:ship.y,w:4,h:10});
+    lastShot=now;
+  }
+
+  // Bullets
+  bullets.forEach(b=>b.y-=6);
+  bullets=bullets.filter(b=>b.y>-10);
+  alienBullets.forEach(b=>b.y+=4);
+  alienBullets=alienBullets.filter(b=>b.y<H+10);
+
+  // Alien movement
+  alienTimer+=alienSpeed;
+  if(alienTimer>=1){
+    alienTimer=0;
+    let edge=false;
+    aliens.forEach(a=>{if(a.alive){a.x+=alienDir*8;if(a.x<4||a.x+a.w>W-4)edge=true;}});
+    if(edge){
+      alienDir*=-1;
+      aliens.forEach(a=>{if(a.alive)a.y+=16;});
+    }
+  }
+
+  // Alien shooting
+  if(Math.random()<0.01+level*0.005){
+    const alive=aliens.filter(a=>a.alive);
+    if(alive.length){
+      const a=alive[Math.floor(Math.random()*alive.length)];
+      alienBullets.push({x:a.x+a.w/2-2,y:a.y+a.h,w:4,h:10});
+    }
+  }
+
+  // Collision: bullets vs aliens
+  bullets.forEach(b=>{
+    aliens.forEach(a=>{
+      if(a.alive&&b.x<a.x+a.w&&b.x+b.w>a.x&&b.y<a.y+a.h&&b.y+b.h>a.y){
+        a.alive=false;b.y=-99;
+        score+=10*(a.type+1);
+        document.getElementById('scoreEl').textContent=score;
+      }
+    });
+  });
+
+  // Collision: alien bullets vs ship
+  alienBullets.forEach(b=>{
+    if(b.x<ship.x+ship.w&&b.x+b.w>ship.x&&b.y<ship.y+ship.h&&b.y+b.h>ship.y){
+      b.y=H+99;lives--;
+      document.getElementById('livesEl').textContent=lives;
+      if(lives<=0)endGame();
+    }
+  });
+
+  // Aliens reach bottom
+  aliens.forEach(a=>{if(a.alive&&a.y+a.h>=ship.y)endGame();});
+
+  // Level clear
+  if(aliens.every(a=>!a.alive)){
+    level++;
+    document.getElementById('levelEl').textContent=level;
+    createAliens();
+    bullets=[];alienBullets=[];
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,0,W,H);
+  // Ship
+  ctx.fillStyle='#22c55e';
+  ctx.fillRect(ship.x,ship.y,ship.w,ship.h);
+  ctx.fillRect(ship.x+ship.w/2-4,ship.y-8,8,8);
+  // Bullets
+  ctx.fillStyle='#facc15';
+  bullets.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
+  ctx.fillStyle='#ef4444';
+  alienBullets.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
+  // Aliens
+  aliens.forEach(a=>{
+    if(!a.alive)return;
+    const colors=['#6366f1','#3b82f6','#ef4444','#facc15'];
+    ctx.fillStyle=colors[a.type]||'#6366f1';
+    ctx.fillRect(a.x,a.y,a.w,a.h);
+    // eyes
+    ctx.fillStyle='#0f172a';
+    ctx.fillRect(a.x+6,a.y+8,6,6);
+    ctx.fillRect(a.x+a.w-12,a.y+8,6,6);
+  });
+  if(paused){
+    ctx.fillStyle='rgba(15,23,42,.7)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';
+    ctx.font='bold 36px system-ui';
+    ctx.textAlign='center';
+    ctx.fillText('PAUSED',W/2,H/2);
+  }
+}
+
+function endGame(){
+  gameOver=true;running=false;
+  if(score>state.highScore)state.highScore=score;
+  save();
+  document.getElementById('finalScore').textContent='Score: '+score;
+  document.getElementById('highScoreText').textContent='High Score: '+state.highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+  document.getElementById('pauseBtn').classList.add('hidden');
+}
+
+function loop(){
+  if(!running||paused)return;
+  if(!gameOver)update();
+  draw();
+  animId=requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
