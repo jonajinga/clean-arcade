@@ -169,6 +169,13 @@ document.addEventListener("click", function(e) {
 
 document.addEventListener("DOMContentLoaded", function () {
   sortAlpha();
+
+  /* Restore view preference */
+  if (localStorage.getItem("ca-view") === "list") {
+    toggleView();
+  }
+
+  /* Restore filters from hash */
   var hash = window.location.hash.slice(1);
   if (!hash) return;
   var params = {};
@@ -178,9 +185,4 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   if (params.letter) filterByLetter(params.letter);
   if (params.category) filterGames(params.category);
-
-  /* Restore view preference */
-  if (localStorage.getItem("ca-view") === "list") {
-    toggleView();
-  }
 });
