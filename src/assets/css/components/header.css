@@ -34,19 +34,27 @@
 /* Hide full site name */
 .logo-text { display: none; }
 
-/* Game count next to icon */
-.logo-count {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-/* Global buttons — always visible, right side */
+/* Global buttons + count — always visible, right side */
 .site-header__global {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.site-header__separator {
+  color: var(--navy-700);
+  font-size: var(--text-xs);
+  margin: 0 2px;
+  user-select: none;
+}
+
+.site-header__count {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 20px;
+  text-align: center;
 }
 
 /* Filter buttons — right-aligned */
