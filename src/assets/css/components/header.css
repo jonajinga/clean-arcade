@@ -51,8 +51,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   color: var(--text-muted);
   background: none;
   border: 1px solid transparent;
@@ -65,21 +65,26 @@
   color: var(--text);
 }
 
+.site-header__filter-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
 .site-header__filter-btn.active {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-/* Mobile: smaller filter icons */
+/* Mobile: slightly smaller filter icons */
 @media (max-width: 639px) {
   .site-header__filter-btn {
-    width: 24px;
-    height: 24px;
+    width: 29px;
+    height: 29px;
   }
 
   .site-header__filter-btn svg {
-    width: 11px;
-    height: 11px;
+    width: 13px;
+    height: 13px;
   }
 }
 

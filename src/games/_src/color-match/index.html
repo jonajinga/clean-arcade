@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Match</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 10px;
+  }
+  #hud {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  #game-area {
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    padding: 2rem 1rem;
+  }
+  #color-word {
+    font-size: 3.5rem;
+    font-weight: 900;
+    margin-bottom: 2rem;
+    min-height: 5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #question {
+    font-size: 1.1rem;
+    color: #94a3b8;
+    margin-bottom: 1.5rem;
+  }
+  #buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .answer-btn {
+    padding: 0.75rem 2rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border: 2px solid;
+    cursor: pointer;
+    min-width: 120px;
+  }
+  .answer-btn.match {
+    background: #22c55e22;
+    color: #22c55e;
+    border-color: #22c55e;
+  }
+  .answer-btn.match:hover { background: #22c55e44; }
+  .answer-btn.no-match {
+    background: #ef444422;
+    color: #ef4444;
+    border-color: #ef4444;
+  }
+  .answer-btn.no-match:hover { background: #ef444444; }
+  #feedback {
+    margin-top: 1rem;
+    font-size: 1.5rem;
+    min-height: 2rem;
+  }
+  #timer-bar {
+    width: 100%;
+    max-width: 400px;
+    height: 6px;
+    background: #1e293b;
+    margin-top: 1rem;
+    overflow: hidden;
+  }
+  #timer-fill {
+    height: 100%;
+    background: #ef4444;
+    width: 100%;
+    transition: width 0.2s linear;
+  }
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(15,23,42,0.92);
+    color: #e2e8f0;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay h1 { font-size: 2rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  SCORE: <span id="scoreEl">0</span> &nbsp; BEST: <span id="hiEl">0</span> &nbsp; TIME: <span id="timeEl">30</span>
+</div>
+<div id="game-area">
+  <div id="color-word">RED</div>
+  <div id="question">Does the word match the ink color?</div>
+  <div id="buttons">
+    <button class="answer-btn match" onclick="window._answer(true)">Match</button>
+    <button class="answer-btn no-match" onclick="window._answer(false)">No Match</button>
+  </div>
+  <div id="feedback"></div>
+</div>
+<div id="timer-bar"><div id="timer-fill"></div></div>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Color Match</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Does the word match its ink color? Click to Play.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const COLORS = [
+    { name: 'RED', hex: '#ef4444' },
+    { name: 'GREEN', hex: '#22c55e' },
+    { name: 'BLUE', hex: '#3b82f6' },
+    { name: 'YELLOW', hex: '#facc15' },
+    { name: 'PURPLE', hex: '#a855f7' },
+    { name: 'ORANGE', hex: '#f97316' },
+    { name: 'PINK', hex: '#ec4899' },
+    { name: 'WHITE', hex: '#e2e8f0' }
+  ];
+
+  const colorWord = document.getElementById('color-word');
+  const feedbackEl = document.getElementById('feedback');
+  const scoreEl = document.getElementById('scoreEl');
+  const hiEl = document.getElementById('hiEl');
+  const timeEl = document.getElementById('timeEl');
+  const timerFill = document.getElementById('timer-fill');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScoreEl = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  const DURATION = 30;
+  let score, total, correct, highScore = 0, isMatch, gameState, paused, startTime, remaining, tickTimer;
+
+  function init() {
+    clearInterval(tickTimer);
+    score = 0; total = 0; correct = 0; remaining = DURATION;
+    paused = false;
+    scoreEl.textContent = '0';
+    timeEl.textContent = DURATION;
+    timerFill.style.width = '100%';
+    feedbackEl.textContent = '';
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Color Match';
+    overlayMsg.textContent = 'Does the word match its ink color? Click to Play.';
+    finalScoreEl.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseBtn.innerHTML = '&#9208;';
+    newRound();
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    startTime = Date.now();
+    tickTimer = setInterval(tick, 100);
+  }
+
+  function newRound() {
+    const wordColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+    // 40% chance match, 60% mismatch for challenge
+    const shouldMatch = Math.random() < 0.4;
+    let inkColor;
+    if (shouldMatch) {
+      inkColor = wordColor;
+    } else {
+      do {
+        inkColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+      } while (inkColor.name === wordColor.name);
+    }
+    isMatch = shouldMatch;
+    colorWord.textContent = wordColor.name;
+    colorWord.style.color = inkColor.hex;
+  }
+
+  function tick() {
+    if (paused) return;
+    const elapsed = (Date.now() - startTime) / 1000;
+    remaining = Math.max(0, DURATION - elapsed);
+    timeEl.textContent = Math.ceil(remaining);
+    timerFill.style.width = (remaining / DURATION * 100) + '%';
+    if (remaining <= 0) gameOver();
+  }
+
+  window._answer = function(playerSaysMatch) {
+    if (gameState === 'ready') startGame();
+    if (gameState !== 'playing' || paused) return;
+    total++;
+    if (playerSaysMatch === isMatch) {
+      correct++;
+      score++;
+      scoreEl.textContent = score;
+      feedbackEl.style.color = '#22c55e';
+      feedbackEl.textContent = '✓ Correct!';
+    } else {
+      feedbackEl.style.color = '#ef4444';
+      feedbackEl.textContent = '✗ Wrong!';
+    }
+    setTimeout(() => { feedbackEl.textContent = ''; }, 400);
+    newRound();
+  };
+
+  function gameOver() {
+    clearInterval(tickTimer);
+    gameState = 'over';
+    if (score > highScore) highScore = score;
+    hiEl.textContent = highScore;
+    const acc = total > 0 ? Math.round(correct / total * 100) : 0;
+    overlayTitle.textContent = 'Time\'s Up!';
+    finalScoreEl.textContent = score + ' points | ' + acc + '% accuracy (' + correct + '/' + total + ')';
+    finalScoreEl.classList.remove('hidden');
+    overlayMsg.textContent = '';
+    playAgainBtn.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+    save();
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'color-match', state: { highScore } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      highScore = e.data.state.highScore || 0;
+      hiEl.textContent = highScore;
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (paused) save();
+    else startTime = Date.now() - (DURATION - remaining) * 1000;
+  };
+
+  window._restart = function() { init(); };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'KeyP' && gameState === 'playing') window._togglePause();
+    if (gameState === 'playing' && !paused) {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyY') window._answer(true);
+      if (e.code === 'ArrowRight' || e.code === 'KeyN') window._answer(false);
+    }
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (gameState === 'ready' && e.target.tagName !== 'BUTTON') startGame();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

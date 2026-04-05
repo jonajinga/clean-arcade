@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hangman</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 10px;
+  }
+  #hud {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  canvas {
+    display: block;
+    max-width: 300px;
+    width: 100%;
+  }
+  #word-display {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 0.5rem;
+    margin: 1rem 0;
+    text-align: center;
+    color: #6366f1;
+  }
+  #keyboard {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+    max-width: 400px;
+    padding: 0 10px;
+  }
+  .key-btn {
+    width: 36px; height: 40px;
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .key-btn:hover { background: #334155; }
+  .key-btn.correct { background: #22c55e33; border-color: #22c55e; color: #22c55e; }
+  .key-btn.wrong { background: #ef444422; border-color: #ef4444; color: #ef4444; opacity: 0.5; }
+  .key-btn:disabled { cursor: default; }
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(15,23,42,0.92);
+    color: #e2e8f0;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay h1 { font-size: 2rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  WINS: <span id="winsEl">0</span> &nbsp; LOSSES: <span id="lossEl">0</span> &nbsp; LEFT: <span id="leftEl">6</span>
+</div>
+<canvas id="c" width="300" height="250"></canvas>
+<div id="word-display"></div>
+<div id="keyboard"></div>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Hangman</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Guess the word. Click to Play.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const WORDS = [
+    'JAVASCRIPT','PYTHON','KEYBOARD','MONITOR','ELEPHANT','GIRAFFE','BICYCLE','MOUNTAIN',
+    'AIRPLANE','UNIVERSE','CALENDAR','DINOSAUR','FOOTBALL','UMBRELLA','SANDWICH','TREASURE',
+    'LANTERN','COMPASS','MYSTERY','PHANTOM','GLACIER','PHOENIX','KINGDOM','VOLCANO',
+    'DOLPHIN','PENGUIN','LIBRARY','CRYSTAL','BLANKET','MONSTER','CAPTAIN','JOURNEY',
+    'RAINBOW','WHISTLE','EXPLORE','PROBLEM','SCIENCE','HISTORY','BATTERY','CACTUS'
+  ];
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const wordDisplay = document.getElementById('word-display');
+  const keyboardEl = document.getElementById('keyboard');
+  const winsEl = document.getElementById('winsEl');
+  const lossEl = document.getElementById('lossEl');
+  const leftEl = document.getElementById('leftEl');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScoreEl = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  const MAX_WRONG = 6;
+  let word, guessed, wrongCount, wins = 0, losses = 0, gameState, paused;
+
+  function init() {
+    word = WORDS[Math.floor(Math.random() * WORDS.length)];
+    guessed = new Set();
+    wrongCount = 0;
+    paused = false;
+    leftEl.textContent = MAX_WRONG;
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Hangman';
+    overlayMsg.textContent = 'Guess the word. Click to Play.';
+    finalScoreEl.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseBtn.innerHTML = '&#9208;';
+    drawHangman();
+    updateWord();
+    buildKeyboard();
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+  }
+
+  function buildKeyboard() {
+    keyboardEl.innerHTML = '';
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(letter => {
+      const btn = document.createElement('button');
+      btn.className = 'key-btn';
+      btn.textContent = letter;
+      btn.addEventListener('click', function() { guess(letter, btn); });
+      keyboardEl.appendChild(btn);
+    });
+  }
+
+  function guess(letter, btn) {
+    if (gameState === 'ready') startGame();
+    if (gameState !== 'playing' || paused) return;
+    if (guessed.has(letter)) return;
+    guessed.add(letter);
+    btn.disabled = true;
+
+    if (word.includes(letter)) {
+      btn.classList.add('correct');
+    } else {
+      btn.classList.add('wrong');
+      wrongCount++;
+      leftEl.textContent = MAX_WRONG - wrongCount;
+    }
+    drawHangman();
+    updateWord();
+    checkEnd();
+  }
+
+  function updateWord() {
+    wordDisplay.textContent = word.split('').map(l => guessed.has(l) ? l : '_').join(' ');
+  }
+
+  function checkEnd() {
+    const won = word.split('').every(l => guessed.has(l));
+    const lost = wrongCount >= MAX_WRONG;
+    if (won) {
+      wins++;
+      winsEl.textContent = wins;
+      gameState = 'over';
+      overlayTitle.textContent = 'You Win!';
+      finalScoreEl.textContent = 'The word was: ' + word;
+      finalScoreEl.classList.remove('hidden');
+      overlayMsg.textContent = '';
+      playAgainBtn.classList.remove('hidden');
+      overlay.classList.remove('hidden');
+      save();
+    } else if (lost) {
+      losses++;
+      lossEl.textContent = losses;
+      gameState = 'over';
+      wordDisplay.textContent = word.split('').join(' ');
+      overlayTitle.textContent = 'Game Over';
+      finalScoreEl.textContent = 'The word was: ' + word;
+      finalScoreEl.classList.remove('hidden');
+      overlayMsg.textContent = '';
+      playAgainBtn.classList.remove('hidden');
+      overlay.classList.remove('hidden');
+      save();
+    }
+  }
+
+  function drawHangman() {
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    // base
+    ctx.beginPath(); ctx.moveTo(30, h - 20); ctx.lineTo(170, h - 20); ctx.stroke();
+    // pole
+    ctx.beginPath(); ctx.moveTo(70, h - 20); ctx.lineTo(70, 30); ctx.stroke();
+    // top
+    ctx.beginPath(); ctx.moveTo(70, 30); ctx.lineTo(180, 30); ctx.stroke();
+    // rope
+    ctx.beginPath(); ctx.moveTo(180, 30); ctx.lineTo(180, 60); ctx.stroke();
+
+    ctx.strokeStyle = '#facc15';
+    if (wrongCount >= 1) { // head
+      ctx.beginPath(); ctx.arc(180, 78, 18, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (wrongCount >= 2) { // body
+      ctx.beginPath(); ctx.moveTo(180, 96); ctx.lineTo(180, 160); ctx.stroke();
+    }
+    if (wrongCount >= 3) { // left arm
+      ctx.beginPath(); ctx.moveTo(180, 115); ctx.lineTo(150, 140); ctx.stroke();
+    }
+    if (wrongCount >= 4) { // right arm
+      ctx.beginPath(); ctx.moveTo(180, 115); ctx.lineTo(210, 140); ctx.stroke();
+    }
+    if (wrongCount >= 5) { // left leg
+      ctx.beginPath(); ctx.moveTo(180, 160); ctx.lineTo(155, 200); ctx.stroke();
+    }
+    if (wrongCount >= 6) { // right leg
+      ctx.beginPath(); ctx.moveTo(180, 160); ctx.lineTo(205, 200); ctx.stroke();
+      // face
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(173, 73); ctx.lineTo(177, 77); ctx.moveTo(177, 73); ctx.lineTo(173, 77); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(183, 73); ctx.lineTo(187, 77); ctx.moveTo(187, 73); ctx.lineTo(183, 77); ctx.stroke();
+      ctx.beginPath(); ctx.arc(180, 88, 5, 0, Math.PI, false); ctx.stroke();
+    }
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'hangman', state: { wins, losses } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      wins = e.data.state.wins || 0;
+      losses = e.data.state.losses || 0;
+      winsEl.textContent = wins;
+      lossEl.textContent = losses;
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (paused) save();
+  };
+
+  window._restart = function() { init(); };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'KeyP' && gameState === 'playing') { window._togglePause(); return; }
+    if (gameState === 'playing' && !paused) {
+      const letter = e.key.toUpperCase();
+      if (/^[A-Z]$/.test(letter)) {
+        const btns = keyboardEl.querySelectorAll('.key-btn');
+        for (const btn of btns) {
+          if (btn.textContent === letter && !btn.disabled) {
+            guess(letter, btn);
+            break;
+          }
+        }
+      }
+    }
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (gameState === 'ready' && e.target.tagName !== 'BUTTON') startGame();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

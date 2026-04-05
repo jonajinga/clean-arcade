@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Bird</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #hud {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  canvas {
+    display: block;
+    border: 2px solid #1e293b;
+    background: #0f172a;
+  }
+  #overlay {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    pointer-events: none;
+    color: #e2e8f0;
+    text-align: center;
+  }
+  #overlay h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { display: none; text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    pointer-events: auto;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  SCORE: <span id="scoreEl">0</span> &nbsp;&nbsp; BEST: <span id="hiEl">0</span>
+</div>
+<canvas id="c"></canvas>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Flappy Bird</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Tap or Press Space to Play</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('scoreEl');
+  const hiEl = document.getElementById('hiEl');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScore = document.getElementById('finalScore');
+  const playAgain = document.getElementById('playAgain');
+  const pauseWrap = document.getElementById('pause-wrap');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  let W, H, scale;
+  const GW = 400, GH = 600;
+
+  function resize() {
+    const maxW = window.innerWidth - 16;
+    const maxH = window.innerHeight - 80;
+    scale = Math.min(maxW / GW, maxH / GH, 1);
+    W = Math.floor(GW * scale);
+    H = Math.floor(GH * scale);
+    canvas.width = W;
+    canvas.height = H;
+    overlay.style.width = W + 'px';
+    overlay.style.height = H + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const GRAVITY = 0.5;
+  const FLAP = -8;
+  const PIPE_WIDTH = 52;
+  const PIPE_GAP = 140;
+  const PIPE_SPEED = 2.5;
+  const BIRD_SIZE = 20;
+
+  let bird, pipes, score, highScore = 0, gameState, paused, animId;
+
+  function init() {
+    bird = { x: GW * 0.25, y: GH / 2, vy: 0 };
+    pipes = [];
+    score = 0;
+    paused = false;
+    scoreEl.textContent = '0';
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Flappy Bird';
+    overlayMsg.textContent = 'Tap or Press Space to Play';
+    finalScore.classList.add('hidden');
+    playAgain.classList.add('hidden');
+    pauseWrap.style.display = 'none';
+    pauseBtn.innerHTML = '&#9208;';
+    draw();
+  }
+
+  function start() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    pauseWrap.style.display = 'block';
+    bird.vy = FLAP;
+    loop();
+  }
+
+  function flap() {
+    if (gameState === 'ready') { start(); return; }
+    if (gameState === 'playing' && !paused) bird.vy = FLAP;
+  }
+
+  function gameOver() {
+    gameState = 'over';
+    if (score > highScore) highScore = score;
+    hiEl.textContent = highScore;
+    overlayTitle.textContent = 'Game Over';
+    finalScore.textContent = 'Score: ' + score;
+    finalScore.classList.remove('hidden');
+    overlayMsg.textContent = '';
+    playAgain.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+    pauseWrap.style.display = 'none';
+    save();
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'flappy-bird', state: { highScore } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      highScore = e.data.state.highScore || 0;
+      hiEl.textContent = highScore;
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (!paused) loop();
+    else save();
+  };
+
+  window._restart = function() {
+    cancelAnimationFrame(animId);
+    init();
+  };
+
+  function spawnPipe() {
+    const minY = 80;
+    const maxY = GH - PIPE_GAP - 80;
+    const topH = minY + Math.random() * (maxY - minY);
+    pipes.push({ x: GW, topH, scored: false });
+  }
+
+  function update() {
+    bird.vy += GRAVITY;
+    bird.y += bird.vy;
+
+    if (pipes.length === 0 || pipes[pipes.length - 1].x < GW - 200) {
+      spawnPipe();
+    }
+
+    for (let i = pipes.length - 1; i >= 0; i--) {
+      const p = pipes[i];
+      p.x -= PIPE_SPEED;
+
+      if (p.x + PIPE_WIDTH < 0) { pipes.splice(i, 1); continue; }
+
+      if (!p.scored && p.x + PIPE_WIDTH < bird.x) {
+        p.scored = true;
+        score++;
+        scoreEl.textContent = score;
+      }
+
+      // collision
+      const bx = bird.x, by = bird.y, br = BIRD_SIZE / 2;
+      if (bx + br > p.x && bx - br < p.x + PIPE_WIDTH) {
+        if (by - br < p.topH || by + br > p.topH + PIPE_GAP) {
+          gameOver(); return;
+        }
+      }
+    }
+
+    if (bird.y > GH || bird.y < 0) { gameOver(); }
+  }
+
+  function draw() {
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.clearRect(0, 0, GW, GH);
+
+    // pipes
+    ctx.fillStyle = '#22c55e';
+    for (const p of pipes) {
+      ctx.fillRect(p.x, 0, PIPE_WIDTH, p.topH);
+      ctx.fillRect(p.x, p.topH + PIPE_GAP, PIPE_WIDTH, GH - p.topH - PIPE_GAP);
+      // pipe caps
+      ctx.fillStyle = '#16a34a';
+      ctx.fillRect(p.x - 4, p.topH - 20, PIPE_WIDTH + 8, 20);
+      ctx.fillRect(p.x - 4, p.topH + PIPE_GAP, PIPE_WIDTH + 8, 20);
+      ctx.fillStyle = '#22c55e';
+    }
+
+    // bird
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.arc(bird.x, bird.y, BIRD_SIZE / 2, 0, Math.PI * 2);
+    ctx.fill();
+    // eye
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(bird.x + 5, bird.y - 3, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // beak
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.moveTo(bird.x + BIRD_SIZE / 2, bird.y);
+    ctx.lineTo(bird.x + BIRD_SIZE / 2 + 8, bird.y + 3);
+    ctx.lineTo(bird.x + BIRD_SIZE / 2, bird.y + 6);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function loop() {
+    if (gameState !== 'playing' || paused) return;
+    update();
+    if (gameState === 'playing') {
+      draw();
+      animId = requestAnimationFrame(loop);
+    } else {
+      draw();
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); flap(); }
+    if (e.code === 'KeyP' && gameState === 'playing') { window._togglePause(); }
+  });
+  canvas.addEventListener('click', flap);
+  canvas.addEventListener('touchstart', function(e) { e.preventDefault(); flap(); }, { passive: false });
+
+  init();
+})();
+</script>
+</body>
+</html>

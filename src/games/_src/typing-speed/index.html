@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Typing Speed</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 10px;
+  }
+  #hud {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  #game-area {
+    max-width: 500px;
+    width: 100%;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  #word-display {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #6366f1;
+    margin-bottom: 1.5rem;
+    min-height: 3rem;
+    letter-spacing: 0.05em;
+  }
+  #input-field {
+    width: 100%;
+    max-width: 300px;
+    padding: 0.75rem 1rem;
+    font-size: 1.25rem;
+    background: #1e293b;
+    border: 2px solid #334155;
+    color: #e2e8f0;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+  }
+  #input-field:focus { border-color: #6366f1; }
+  #input-field.correct { border-color: #22c55e; }
+  #input-field.wrong { border-color: #ef4444; }
+  #timer-bar {
+    width: 100%;
+    max-width: 300px;
+    height: 6px;
+    background: #1e293b;
+    margin: 1rem auto 0;
+    overflow: hidden;
+  }
+  #timer-fill {
+    height: 100%;
+    background: #3b82f6;
+    width: 100%;
+    transition: width 0.2s linear;
+  }
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(15,23,42,0.92);
+    color: #e2e8f0;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay h1 { font-size: 2rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  WPM: <span id="wpmEl">0</span> &nbsp; ACCURACY: <span id="accEl">100%</span> &nbsp; TIME: <span id="timeEl">60</span>
+</div>
+<div id="game-area">
+  <div id="word-display"></div>
+  <input type="text" id="input-field" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <div id="timer-bar"><div id="timer-fill"></div></div>
+</div>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Typing Speed</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Type words as fast as you can. Click to start.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const WORDS = [
+    'the','be','to','of','and','a','in','that','have','it','for','not','on','with','he',
+    'as','you','do','at','this','but','his','by','from','they','we','say','her','she','or',
+    'an','will','my','one','all','would','there','their','what','so','up','out','if','about',
+    'who','get','which','go','me','when','make','can','like','time','no','just','him','know',
+    'take','people','into','year','your','good','some','could','them','see','other','than',
+    'then','now','look','only','come','its','over','think','also','back','after','use','two',
+    'how','our','work','first','well','way','even','new','want','because','any','these',
+    'give','day','most','us','great','between','need','large','often','around','each',
+    'program','system','computer','language','follow','change','world','every','point',
+    'question','answer','letter','before','never','always','different','small','another',
+    'school','house','number','water','called','place','found','under','story','light',
+    'example','begin','paper','group','table','music','start','close','mountain','river'
+  ];
+
+  const wordDisplay = document.getElementById('word-display');
+  const inputField = document.getElementById('input-field');
+  const wpmEl = document.getElementById('wpmEl');
+  const accEl = document.getElementById('accEl');
+  const timeEl = document.getElementById('timeEl');
+  const timerFill = document.getElementById('timer-fill');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScoreEl = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  const DURATION = 60;
+  let currentWord, correct, total, gameState, paused, startTime, remaining, timerInterval, bestWpm = 0;
+
+  function randomWord() {
+    return WORDS[Math.floor(Math.random() * WORDS.length)];
+  }
+
+  function init() {
+    clearInterval(timerInterval);
+    correct = 0; total = 0; remaining = DURATION;
+    paused = false;
+    gameState = 'ready';
+    wpmEl.textContent = '0';
+    accEl.textContent = '100%';
+    timeEl.textContent = DURATION;
+    timerFill.style.width = '100%';
+    inputField.value = '';
+    inputField.className = '';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Typing Speed';
+    overlayMsg.textContent = 'Type words as fast as you can. Click to start.';
+    finalScoreEl.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseBtn.innerHTML = '&#9208;';
+    currentWord = randomWord();
+    wordDisplay.textContent = currentWord;
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    inputField.focus();
+    startTime = Date.now();
+    timerInterval = setInterval(tick, 200);
+  }
+
+  function tick() {
+    if (paused) return;
+    const elapsed = (Date.now() - startTime) / 1000;
+    remaining = Math.max(0, DURATION - elapsed);
+    timeEl.textContent = Math.ceil(remaining);
+    timerFill.style.width = (remaining / DURATION * 100) + '%';
+
+    // WPM calculation
+    const minutes = elapsed / 60;
+    if (minutes > 0) wpmEl.textContent = Math.round(correct / minutes);
+
+    if (remaining <= 0) gameOver();
+  }
+
+  function gameOver() {
+    clearInterval(timerInterval);
+    gameState = 'over';
+    const elapsed = DURATION;
+    const wpm = Math.round(correct / (elapsed / 60));
+    const acc = total > 0 ? Math.round(correct / total * 100) : 0;
+    if (wpm > bestWpm) bestWpm = wpm;
+    overlayTitle.textContent = 'Time\'s Up!';
+    finalScoreEl.textContent = wpm + ' WPM | ' + acc + '% accuracy | ' + correct + '/' + total + ' words';
+    finalScoreEl.classList.remove('hidden');
+    overlayMsg.textContent = '';
+    playAgainBtn.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+    save();
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'typing-speed', state: { bestWpm } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      bestWpm = e.data.state.bestWpm || 0;
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (paused) {
+      save();
+    } else {
+      startTime = Date.now() - (DURATION - remaining) * 1000;
+      inputField.focus();
+    }
+  };
+
+  window._restart = function() { init(); };
+
+  inputField.addEventListener('input', function() {
+    if (gameState === 'ready') startGame();
+    if (gameState !== 'playing' || paused) return;
+    const val = inputField.value.trim();
+    if (val === currentWord) {
+      correct++;
+      total++;
+      accEl.textContent = Math.round(correct / total * 100) + '%';
+      inputField.value = '';
+      inputField.className = 'correct';
+      currentWord = randomWord();
+      wordDisplay.textContent = currentWord;
+      setTimeout(() => inputField.className = '', 200);
+    }
+  });
+
+  inputField.addEventListener('keydown', function(e) {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (gameState !== 'playing' || paused) return;
+      const val = inputField.value.trim();
+      if (val && val !== currentWord) {
+        total++;
+        accEl.textContent = Math.round(correct / total * 100) + '%';
+        inputField.value = '';
+        inputField.className = 'wrong';
+        currentWord = randomWord();
+        wordDisplay.textContent = currentWord;
+        setTimeout(() => inputField.className = '', 200);
+      }
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'KeyP' && e.ctrlKey && gameState === 'playing') {
+      e.preventDefault();
+      window._togglePause();
+    }
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (gameState === 'ready' && e.target.tagName !== 'BUTTON') startGame();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

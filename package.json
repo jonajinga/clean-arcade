@@ -24,8 +24,5 @@
     "@sardine/eleventy-plugin-tinyhtml": "^0.2.0",
     "luxon": "^3.7.2",
     "pagefind": "^1.4.0"
-  },
-  "dependencies": {
-    "trystero": "^0.18.0"
   }
 }

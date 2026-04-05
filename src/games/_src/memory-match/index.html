@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Match</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 10px;
+  }
+  #hud {
+    display: flex;
+    gap: 1.25rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    max-width: 400px;
+    width: 100%;
+    padding: 8px;
+  }
+  .card {
+    aspect-ratio: 1;
+    background: #1e293b;
+    border: 2px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    cursor: pointer;
+    transition: transform 0.3s, background 0.3s;
+  }
+  .card.flipped, .card.matched {
+    background: #334155;
+    transform: rotateY(0deg);
+  }
+  .card.matched {
+    border-color: #22c55e;
+    opacity: 0.7;
+  }
+  .card .face { display: none; }
+  .card.flipped .face, .card.matched .face { display: block; }
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(15,23,42,0.9);
+    color: #e2e8f0;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay h1 { font-size: 2rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  MOVES: <span id="movesEl">0</span> &nbsp;&nbsp; PAIRS: <span id="pairsEl">0</span>/8 &nbsp;&nbsp; TIME: <span id="timeEl">0s</span>
+</div>
+<div id="board"></div>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Memory Match</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Match all pairs. Click to Play.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const board = document.getElementById('board');
+  const movesEl = document.getElementById('movesEl');
+  const pairsEl = document.getElementById('pairsEl');
+  const timeEl = document.getElementById('timeEl');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScore = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseWrap = document.getElementById('pause-wrap');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  const EMOJIS = ['🎮','🚀','⭐','🎯','🔥','💎','🎲','🏆'];
+  let cards, flipped, matched, moves, pairs, gameState, paused, startTime, elapsed, timerInterval;
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function init() {
+    cancelTimer();
+    const symbols = shuffle([...EMOJIS, ...EMOJIS]);
+    cards = symbols.map((s, i) => ({ id: i, symbol: s }));
+    flipped = [];
+    matched = new Set();
+    moves = 0; pairs = 0; elapsed = 0;
+    paused = false;
+    movesEl.textContent = '0';
+    pairsEl.textContent = '0';
+    timeEl.textContent = '0s';
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Memory Match';
+    overlayMsg.textContent = 'Match all pairs. Click to Play.';
+    finalScore.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseBtn.innerHTML = '&#9208;';
+    renderBoard();
+  }
+
+  function renderBoard() {
+    board.innerHTML = '';
+    cards.forEach((card, i) => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.index = i;
+      if (matched.has(i)) el.classList.add('matched');
+      const face = document.createElement('span');
+      face.className = 'face';
+      face.textContent = card.symbol;
+      el.appendChild(face);
+      el.addEventListener('click', function() { onCardClick(i, el); });
+      board.appendChild(el);
+    });
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    startTime = Date.now();
+    timerInterval = setInterval(updateTimer, 200);
+  }
+
+  function updateTimer() {
+    if (paused || gameState !== 'playing') return;
+    elapsed = Math.floor((Date.now() - startTime) / 1000);
+    timeEl.textContent = elapsed + 's';
+  }
+
+  function cancelTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+  }
+
+  function onCardClick(index, el) {
+    if (gameState === 'ready') { startGame(); }
+    if (gameState !== 'playing' || paused) return;
+    if (flipped.length >= 2) return;
+    if (matched.has(index)) return;
+    if (flipped.find(f => f.index === index)) return;
+
+    el.classList.add('flipped');
+    flipped.push({ index, el });
+
+    if (flipped.length === 2) {
+      moves++;
+      movesEl.textContent = moves;
+      const [a, b] = flipped;
+      if (cards[a.index].symbol === cards[b.index].symbol) {
+        matched.add(a.index);
+        matched.add(b.index);
+        a.el.classList.add('matched');
+        b.el.classList.add('matched');
+        pairs++;
+        pairsEl.textContent = pairs;
+        flipped = [];
+        if (pairs === 8) gameOver();
+      } else {
+        setTimeout(() => {
+          a.el.classList.remove('flipped');
+          b.el.classList.remove('flipped');
+          flipped = [];
+        }, 800);
+      }
+    }
+  }
+
+  function gameOver() {
+    cancelTimer();
+    gameState = 'over';
+    overlayTitle.textContent = 'You Win!';
+    finalScore.textContent = moves + ' moves in ' + elapsed + 's';
+    finalScore.classList.remove('hidden');
+    overlayMsg.textContent = '';
+    playAgainBtn.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+    save();
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'memory-match', state: { bestMoves: moves, bestTime: elapsed } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      // could display best scores
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (paused) {
+      save();
+    } else {
+      startTime = Date.now() - elapsed * 1000;
+    }
+  };
+
+  window._restart = function() {
+    init();
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'KeyP' && gameState === 'playing') window._togglePause();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

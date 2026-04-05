@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pong</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #hud {
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    justify-content: center;
+  }
+  #hud .player { color: #3b82f6; }
+  #hud .cpu { color: #ef4444; }
+  canvas {
+    display: block;
+    border: 2px solid #1e293b;
+    background: #0f172a;
+  }
+  #overlay {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    pointer-events: none;
+    color: #e2e8f0;
+    text-align: center;
+  }
+  #overlay h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { display: none; text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    pointer-events: auto;
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+  #touch-controls {
+    display: none;
+    gap: 1rem;
+    padding: 8px 0;
+    justify-content: center;
+  }
+  .touch-btn {
+    width: 60px; height: 44px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 20px; cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    #touch-controls { display: flex; }
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span class="player" id="pScoreEl">0</span> &ndash; <span class="cpu" id="cScoreEl">0</span>
+</div>
+<canvas id="c"></canvas>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="touch-controls">
+  <button class="touch-btn" id="btnUp" onclick="void(0)">&#9650;</button>
+  <button class="touch-btn" id="btnDown" onclick="void(0)">&#9660;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Pong</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">First to 5 wins. Click to Play.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const pScoreEl = document.getElementById('pScoreEl');
+  const cScoreEl = document.getElementById('cScoreEl');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScore = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseWrap = document.getElementById('pause-wrap');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  let W, H, sc;
+  const GW = 600, GH = 400;
+  const PADDLE_W = 12, PADDLE_H = 80, BALL_R = 8;
+  const WIN_SCORE = 5;
+
+  function resize() {
+    const maxW = window.innerWidth - 16;
+    const maxH = window.innerHeight - 120;
+    sc = Math.min(maxW / GW, maxH / GH, 1);
+    W = Math.floor(GW * sc);
+    H = Math.floor(GH * sc);
+    canvas.width = W;
+    canvas.height = H;
+    overlay.style.width = W + 'px';
+    overlay.style.height = H + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  let player, cpu, ball, pScore, cScore, gameState, paused, animId;
+  let keys = {};
+  let touchDir = 0;
+
+  function resetBall(dir) {
+    ball = {
+      x: GW / 2, y: GH / 2,
+      vx: 4 * dir, vy: (Math.random() * 4 - 2)
+    };
+  }
+
+  function init() {
+    player = { y: GH / 2 - PADDLE_H / 2 };
+    cpu = { y: GH / 2 - PADDLE_H / 2 };
+    pScore = 0; cScore = 0;
+    paused = false;
+    pScoreEl.textContent = '0';
+    cScoreEl.textContent = '0';
+    resetBall(1);
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Pong';
+    overlayMsg.textContent = 'First to 5 wins. Click to Play.';
+    finalScore.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseWrap.style.display = 'none';
+    pauseBtn.innerHTML = '&#9208;';
+    draw();
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    pauseWrap.style.display = 'block';
+    loop();
+  }
+
+  function scored(who) {
+    if (who === 'player') { pScore++; pScoreEl.textContent = pScore; }
+    else { cScore++; cScoreEl.textContent = cScore; }
+    if (pScore >= WIN_SCORE || cScore >= WIN_SCORE) {
+      gameState = 'over';
+      const won = pScore >= WIN_SCORE;
+      overlayTitle.textContent = won ? 'You Win!' : 'CPU Wins!';
+      finalScore.textContent = pScore + ' - ' + cScore;
+      finalScore.classList.remove('hidden');
+      overlayMsg.textContent = '';
+      playAgainBtn.classList.remove('hidden');
+      overlay.classList.remove('hidden');
+      pauseWrap.style.display = 'none';
+      save();
+      return;
+    }
+    resetBall(who === 'player' ? 1 : -1);
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'pong', state: { wins: pScore >= WIN_SCORE ? 1 : 0 } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      // nothing critical to restore for pong
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (!paused) loop();
+    else save();
+  };
+
+  window._restart = function() {
+    cancelAnimationFrame(animId);
+    init();
+  };
+
+  function update() {
+    // Player movement
+    const pSpeed = 5;
+    if (keys['ArrowUp'] || keys['KeyW'] || touchDir < 0) player.y -= pSpeed;
+    if (keys['ArrowDown'] || keys['KeyS'] || touchDir > 0) player.y += pSpeed;
+    player.y = Math.max(0, Math.min(GH - PADDLE_H, player.y));
+
+    // CPU AI
+    const cpuCenter = cpu.y + PADDLE_H / 2;
+    const diff = ball.y - cpuCenter;
+    const cpuSpeed = 3.5;
+    if (Math.abs(diff) > 10) cpu.y += Math.sign(diff) * cpuSpeed;
+    cpu.y = Math.max(0, Math.min(GH - PADDLE_H, cpu.y));
+
+    // Ball
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // Top/bottom bounce
+    if (ball.y - BALL_R <= 0 || ball.y + BALL_R >= GH) {
+      ball.vy *= -1;
+      ball.y = ball.y - BALL_R <= 0 ? BALL_R : GH - BALL_R;
+    }
+
+    // Player paddle collision
+    if (ball.vx < 0 && ball.x - BALL_R <= PADDLE_W + 10 && ball.x - BALL_R >= 10) {
+      if (ball.y >= player.y && ball.y <= player.y + PADDLE_H) {
+        ball.vx = Math.abs(ball.vx) * 1.05;
+        ball.vy += (ball.y - (player.y + PADDLE_H / 2)) * 0.15;
+        ball.x = PADDLE_W + 10 + BALL_R;
+      }
+    }
+
+    // CPU paddle collision
+    if (ball.vx > 0 && ball.x + BALL_R >= GW - PADDLE_W - 10 && ball.x + BALL_R <= GW - 10) {
+      if (ball.y >= cpu.y && ball.y <= cpu.y + PADDLE_H) {
+        ball.vx = -Math.abs(ball.vx) * 1.05;
+        ball.vy += (ball.y - (cpu.y + PADDLE_H / 2)) * 0.15;
+        ball.x = GW - PADDLE_W - 10 - BALL_R;
+      }
+    }
+
+    // Scoring
+    if (ball.x < 0) scored('cpu');
+    if (ball.x > GW) scored('player');
+
+    // Cap speed
+    const maxV = 10;
+    ball.vx = Math.max(-maxV, Math.min(maxV, ball.vx));
+    ball.vy = Math.max(-maxV, Math.min(maxV, ball.vy));
+  }
+
+  function draw() {
+    ctx.save();
+    ctx.scale(sc, sc);
+    ctx.clearRect(0, 0, GW, GH);
+
+    // Center line
+    ctx.setLineDash([8, 8]);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(GW / 2, 0);
+    ctx.lineTo(GW / 2, GH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Player paddle
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(10, player.y, PADDLE_W, PADDLE_H);
+
+    // CPU paddle
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(GW - PADDLE_W - 10, cpu.y, PADDLE_W, PADDLE_H);
+
+    // Ball
+    ctx.fillStyle = '#e2e8f0';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function loop() {
+    if (gameState !== 'playing' || paused) return;
+    update();
+    if (gameState === 'playing') {
+      draw();
+      animId = requestAnimationFrame(loop);
+    } else {
+      draw();
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.code] = true;
+    if (e.code === 'KeyP' && gameState === 'playing') window._togglePause();
+  });
+  document.addEventListener('keyup', function(e) { keys[e.code] = false; });
+
+  canvas.addEventListener('click', function() {
+    if (gameState === 'ready') startGame();
+  });
+  overlay.addEventListener('click', function(e) {
+    if (gameState === 'ready') startGame();
+  });
+
+  // Touch controls
+  const btnUp = document.getElementById('btnUp');
+  const btnDown = document.getElementById('btnDown');
+  function touchStart(dir) { return function(e) { e.preventDefault(); touchDir = dir; }; }
+  function touchEnd(e) { e.preventDefault(); touchDir = 0; }
+  btnUp.addEventListener('touchstart', touchStart(-1), { passive: false });
+  btnUp.addEventListener('touchend', touchEnd, { passive: false });
+  btnDown.addEventListener('touchstart', touchStart(1), { passive: false });
+  btnDown.addEventListener('touchend', touchEnd, { passive: false });
+
+  // Also allow touch on canvas to start
+  canvas.addEventListener('touchstart', function(e) {
+    if (gameState === 'ready') { e.preventDefault(); startGame(); }
+  }, { passive: false });
+
+  init();
+})();
+</script>
+</body>
+</html>

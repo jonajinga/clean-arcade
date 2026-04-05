@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simon Says</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0f172a;
+    overflow-x: hidden;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 10px;
+  }
+  #hud {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #hud span { color: #e2e8f0; font-weight: 700; }
+  #board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    max-width: 320px;
+    width: 100%;
+    padding: 10px;
+  }
+  .simon-btn {
+    aspect-ratio: 1;
+    border: 3px solid transparent;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .simon-btn.lit {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  .simon-btn:active { transform: scale(0.95); }
+  .simon-btn[data-color="green"] { background: #22c55e; }
+  .simon-btn[data-color="red"] { background: #ef4444; }
+  .simon-btn[data-color="blue"] { background: #3b82f6; }
+  .simon-btn[data-color="yellow"] { background: #facc15; }
+  #status {
+    margin-top: 0.5rem;
+    font-size: 1rem;
+    color: #94a3b8;
+    text-align: center;
+    min-height: 1.5rem;
+  }
+  #overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    background: rgba(15,23,42,0.92);
+    color: #e2e8f0;
+    text-align: center;
+    z-index: 10;
+  }
+  #overlay h1 { font-size: 2rem; }
+  #overlay p { font-size: 1rem; color: #94a3b8; }
+  .final-score { font-size: 1.25rem; color: #6366f1; }
+  .hidden { display: none !important; }
+  .pause-wrap { text-align: center; padding: 6px 0; }
+  #pauseBtn {
+    width: 40px; height: 40px;
+    background: #1e293b; color: #e2e8f0;
+    border: 1px solid #475569;
+    font-size: 16px; cursor: pointer;
+  }
+  #pauseBtn:hover { background: #334155; }
+  .play-again {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1.5rem;
+    background: #6366f1;
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .play-again:hover { background: #4f46e5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  ROUND: <span id="roundEl">0</span> &nbsp; BEST: <span id="hiEl">0</span>
+</div>
+<div id="board">
+  <div class="simon-btn" data-color="green" data-index="0" onclick="window._press(0)"></div>
+  <div class="simon-btn" data-color="red" data-index="1" onclick="window._press(1)"></div>
+  <div class="simon-btn" data-color="blue" data-index="2" onclick="window._press(2)"></div>
+  <div class="simon-btn" data-color="yellow" data-index="3" onclick="window._press(3)"></div>
+</div>
+<div id="status"></div>
+<div class="pause-wrap" id="pause-wrap">
+  <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
+</div>
+<div id="overlay">
+  <h1 id="overlayTitle">Simon Says</h1>
+  <p class="final-score hidden" id="finalScore"></p>
+  <p id="overlayMsg">Watch the sequence, repeat it. Click to Play.</p>
+  <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
+</div>
+<script>
+(function(){
+  const COLORS = ['green','red','blue','yellow'];
+  const buttons = document.querySelectorAll('.simon-btn');
+  const roundEl = document.getElementById('roundEl');
+  const hiEl = document.getElementById('hiEl');
+  const statusEl = document.getElementById('status');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+  const finalScoreEl = document.getElementById('finalScore');
+  const playAgainBtn = document.getElementById('playAgain');
+  const pauseBtn = document.getElementById('pauseBtn');
+
+  let sequence, playerIndex, round, highScore = 0, gameState, paused, showingSequence;
+
+  // Audio context for sounds
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const FREQS = [329.63, 261.63, 220.00, 164.81];
+  function playTone(index, duration) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = FREQS[index];
+    osc.type = 'sine';
+    gain.gain.value = 0.15;
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration / 1000);
+  }
+
+  function init() {
+    sequence = [];
+    playerIndex = 0;
+    round = 0;
+    paused = false;
+    showingSequence = false;
+    roundEl.textContent = '0';
+    statusEl.textContent = '';
+    gameState = 'ready';
+    overlay.classList.remove('hidden');
+    overlayTitle.textContent = 'Simon Says';
+    overlayMsg.textContent = 'Watch the sequence, repeat it. Click to Play.';
+    finalScoreEl.classList.add('hidden');
+    playAgainBtn.classList.add('hidden');
+    pauseBtn.innerHTML = '&#9208;';
+  }
+
+  function startGame() {
+    gameState = 'playing';
+    overlay.classList.add('hidden');
+    nextRound();
+  }
+
+  function nextRound() {
+    round++;
+    roundEl.textContent = round;
+    sequence.push(Math.floor(Math.random() * 4));
+    playerIndex = 0;
+    statusEl.textContent = 'Watch...';
+    showSequence();
+  }
+
+  function showSequence() {
+    showingSequence = true;
+    let i = 0;
+    function showNext() {
+      if (paused) { setTimeout(showNext, 100); return; }
+      if (i > 0) buttons[sequence[i - 1]].classList.remove('lit');
+      if (i < sequence.length) {
+        buttons[sequence[i]].classList.add('lit');
+        playTone(sequence[i], 300);
+        i++;
+        setTimeout(showNext, 600);
+      } else {
+        showingSequence = false;
+        statusEl.textContent = 'Your turn!';
+      }
+    }
+    setTimeout(showNext, 500);
+  }
+
+  function lightButton(index) {
+    buttons[index].classList.add('lit');
+    playTone(index, 200);
+    setTimeout(() => buttons[index].classList.remove('lit'), 250);
+  }
+
+  window._press = function(index) {
+    if (gameState === 'ready') { startGame(); return; }
+    if (gameState !== 'playing' || paused || showingSequence) return;
+
+    lightButton(index);
+
+    if (sequence[playerIndex] === index) {
+      playerIndex++;
+      if (playerIndex === sequence.length) {
+        statusEl.textContent = 'Correct!';
+        setTimeout(nextRound, 800);
+      }
+    } else {
+      gameOver();
+    }
+  };
+
+  function gameOver() {
+    gameState = 'over';
+    if (round - 1 > highScore) highScore = round - 1;
+    hiEl.textContent = highScore;
+    overlayTitle.textContent = 'Wrong!';
+    finalScoreEl.textContent = 'You reached round ' + (round - 1);
+    finalScoreEl.classList.remove('hidden');
+    overlayMsg.textContent = '';
+    playAgainBtn.classList.remove('hidden');
+    overlay.classList.remove('hidden');
+    statusEl.textContent = '';
+    save();
+  }
+
+  function save() {
+    parent.postMessage({ type: 'ca-save', slug: 'simon-says', state: { highScore } }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'ca-load' && e.data.state) {
+      highScore = e.data.state.highScore || 0;
+      hiEl.textContent = highScore;
+    }
+  });
+
+  window._togglePause = function() {
+    if (gameState !== 'playing') return;
+    paused = !paused;
+    pauseBtn.innerHTML = paused ? '&#9654;' : '&#9208;';
+    if (paused) save();
+  };
+
+  window._restart = function() { init(); };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'KeyP' && gameState === 'playing') window._togglePause();
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (gameState === 'ready' && e.target.tagName !== 'BUTTON') startGame();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
