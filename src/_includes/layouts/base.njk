@@ -103,10 +103,21 @@
     })();
   </script>
 
-  {# Service Worker #}
+  {# Service Worker — force update and clear old caches #}
   <script>
     if("serviceWorker" in navigator){
-      navigator.serviceWorker.register("/sw.js");
+      navigator.serviceWorker.register("/sw.js").then(function(reg){
+        reg.update();
+      });
+      /* Clear all old caches on page load to fix stale content */
+      if(window.caches){
+        caches.keys().then(function(names){
+          var current = "clean-arcade-{{ "" | buildHash }}";
+          names.forEach(function(n){
+            if(n !== current) caches.delete(n);
+          });
+        });
+      }
     }
   </script>
 </body>
