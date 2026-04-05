@@ -7,7 +7,7 @@
 .game-overlay {
   display: none;
   position: absolute;
-  inset: 36px 0 0 0;
+  inset: 0;
   z-index: 20;
   background: rgba(15, 23, 42, 0.95);
   align-items: center;

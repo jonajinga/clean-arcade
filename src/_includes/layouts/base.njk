@@ -44,8 +44,6 @@
     })();
   </script>
 
-  {# RSS #}
-  <link rel="alternate" type="application/atom+xml" title="{{ meta.title }}" href="{{ meta.url }}/feed.xml">
 
   {# JSON-LD #}
   {% include "partials/schema-org.njk" %}
@@ -87,18 +85,8 @@
   <script>
     (function(){
       var btn = document.querySelector(".back-to-top");
-      var header = document.getElementById("site-header");
-      var isGame = document.body.classList.contains("game-active");
-      var lastY = 0;
       window.addEventListener("scroll", function(){
-        var y = window.scrollY;
-        if(btn) btn.classList.toggle("visible", y > 400);
-        if(isGame && header){
-          if(y < lastY) header.classList.add("header--show");
-          else header.classList.remove("header--show");
-          if(y <= 0) header.classList.remove("header--show");
-        }
-        lastY = y;
+        if(btn) btn.classList.toggle("visible", window.scrollY > 400);
       });
     })();
   </script>

@@ -144,11 +144,6 @@ export default function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "src/games/_src": "games/_src" });
   eleventyConfig.addPassthroughCopy({ "src/manifest.json": "manifest.json" });
 
-  // --- Collections ---
-  eleventyConfig.addCollection("posts", (collectionApi) => {
-    return collectionApi.getFilteredByGlob("src/blog/posts/**/*.md").reverse();
-  });
-
   // --- Watch targets ---
   eleventyConfig.addWatchTarget("src/assets/css/");
 

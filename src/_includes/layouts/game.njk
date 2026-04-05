@@ -4,23 +4,6 @@ bodyClass: game-active
 ---
 <section class="game-page" data-pagefind-body>
   <div class="game-embed" id="game-embed">
-    <div class="game-embed__bar" id="game-bar">
-      <div class="game-embed__bar-left">
-        <a href="/" class="game-embed__back" title="Back">&larr;</a>
-      </div>
-      <div class="game-embed__bar-right">
-        <button class="icon-btn" id="fav-btn" title="Favorite" onclick="toggleFavorite(GAME_SLUG)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path id="heart-path" d="M8 14s-5.5-3.5-5.5-7A3 3 0 018 4.5 3 3 0 0113.5 7C13.5 10.5 8 14 8 14z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
-        </button>
-        <button class="icon-btn" id="info-toggle" title="Info &amp; controls">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v5M8 4.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </button>
-        <button class="icon-btn" id="share-btn" title="Share">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M6 7l4-2M6 9l4 2" stroke="currentColor" stroke-width="1.2"/></svg>
-        </button>
-      </div>
-    </div>
-
     {# Info overlay #}
     <div class="game-overlay" id="game-overlay">
       <div class="game-overlay__content">

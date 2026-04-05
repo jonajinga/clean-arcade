@@ -6,7 +6,6 @@
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   height: var(--header-height);
-  transition: height 0.15s;
 }
 
 .site-header__inner {
@@ -39,7 +38,7 @@
   .logo-text { display: inline; }
 }
 
-/* Filter buttons in header — right-aligned */
+/* Filter buttons — right-aligned */
 .site-header__filters {
   display: flex;
   align-items: center;
@@ -47,6 +46,25 @@
   margin-left: auto;
 }
 
+/* Game controls — right-aligned, hidden by default */
+.site-header__game-controls {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Show game controls only on game pages */
+.game-active .site-header__game-controls {
+  display: flex;
+}
+
+/* Hide filters on game pages and non-home pages */
+.game-active .site-header__filters {
+  display: none;
+}
+
+/* Shared button style */
 .site-header__filter-btn {
   display: flex;
   align-items: center;
@@ -75,7 +93,7 @@
   border-color: var(--accent);
 }
 
-/* Mobile: slightly smaller filter icons */
+/* Mobile: slightly smaller icons */
 @media (max-width: 639px) {
   .site-header__filter-btn {
     width: 29px;
@@ -110,17 +128,8 @@
 [data-mode="light"] .theme-icon__moon { display: none; }
 [data-mode="dark"] .theme-icon__sun { display: none; }
 
-/* Game pages: header hidden by default, revealed on scroll-up */
+/* Game pages: header always visible, dark background */
 .game-active .site-header {
-  transform: translateY(-100%);
-  transition: transform 0.2s;
-}
-
-.game-active .site-header.header--show {
-  transform: translateY(0);
-}
-
-/* Hide filter buttons on game pages */
-.game-active .site-header__filters {
-  display: none;
+  background: var(--navy-950);
+  border-bottom-color: var(--navy-700);
 }
