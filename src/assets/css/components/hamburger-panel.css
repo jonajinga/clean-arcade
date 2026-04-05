@@ -60,36 +60,6 @@
   color: var(--slate-600);
 }
 
-.hamburger-panel__divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: var(--space-md) 0;
-}
-
-/* Main nav — text links */
-.hamburger-panel__nav {
-  display: flex;
-  flex-direction: column;
-}
-
-.hamburger-panel__nav li:last-child a {
-  border-bottom: none;
-}
-
-.hamburger-panel__nav a {
-  display: block;
-  padding: 10px 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text);
-  border-bottom: 1px solid var(--border);
-}
-
-.hamburger-panel__nav a:hover,
-.hamburger-panel__nav a[aria-current="page"] {
-  color: var(--accent);
-}
-
 /* Unified button grid — 3 per row */
 .hamburger-panel__btn-grid {
   display: grid;
