@@ -23,7 +23,12 @@ var PRECACHE = [
 self.addEventListener("install", function (e) {
   e.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(PRECACHE);
+      /* Cache each file individually — don't fail install if one is missing */
+      return Promise.all(
+        PRECACHE.map(function (url) {
+          return cache.add(url).catch(function () {});
+        })
+      );
     })
   );
   self.skipWaiting();
