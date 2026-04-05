@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>War</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:1rem}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay-box{background:#1e293b;border:2px solid #6366f1;border-radius:12px;padding:2rem;text-align:center;max-width:420px;width:90%}
+.overlay-box h2{font-size:1.8rem;margin-bottom:.8rem;color:#facc15}
+.overlay-box p{margin-bottom:.5rem;color:#94a3b8;font-size:.95rem}
+.overlay-box .score{font-size:1.4rem;color:#22c55e;margin:.8rem 0}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:.6rem 1.2rem;font-size:1rem;font-weight:600;transition:transform .1s}
+button:active{transform:scale(.96)}
+.btn-play{background:#6366f1;color:#fff;font-size:1.2rem;padding:.8rem 2rem;margin-top:1rem}
+.btn-play:hover{background:#818cf8}
+#game{max-width:460px;width:100%;display:none;text-align:center}
+.counts{display:flex;justify-content:space-between;margin-bottom:1rem;font-size:.95rem;color:#94a3b8}
+.counts .you{color:#22c55e;font-weight:700}
+.counts .cpu{color:#ef4444;font-weight:700}
+.battlefield{display:flex;justify-content:center;align-items:center;gap:1.5rem;margin:1.5rem 0;min-height:160px;flex-wrap:wrap}
+.pile{text-align:center}
+.pile-label{font-size:.85rem;color:#94a3b8;margin-bottom:.4rem}
+.card{width:70px;height:100px;border-radius:8px;background:#fff;color:#1e293b;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;box-shadow:0 2px 8px rgba(0,0,0,.3);margin:0 auto}
+.card.red{color:#ef4444}
+.card.face-down{background:linear-gradient(135deg,#6366f1,#3b82f6);color:transparent}
+.card .suit{font-size:1.5rem}
+.vs{font-size:1.5rem;font-weight:800;color:#facc15}
+.msg{font-size:1.1rem;font-weight:700;min-height:1.5rem;margin:.8rem 0}
+.msg.win{color:#22c55e}
+.msg.lose{color:#ef4444}
+.msg.war{color:#facc15}
+.btn-flip{background:#3b82f6;color:#fff;padding:.7rem 2rem;font-size:1.1rem;margin:.5rem}
+.war-cards{display:flex;gap:.3rem;justify-content:center;margin:.4rem 0}
+.war-cards .card{width:45px;height:65px;font-size:.8rem}
+.war-cards .card .suit{font-size:1rem}
+.stats{color:#94a3b8;font-size:.85rem;margin-top:1rem}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>War</h2>
+<p>Flip cards against the computer. Higher card wins both. On a tie, it's WAR: 3 face-down, 1 face-up!</p>
+<button class="btn-play" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay" id="endOverlay" style="display:none">
+<div class="overlay-box">
+<h2 id="endTitle">Game Over!</h2>
+<div class="score" id="endScore"></div>
+<div id="endHigh" style="color:#facc15;margin:.5rem 0"></div>
+<button class="btn-play" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<div id="game">
+<div class="counts">
+<span>You: <span class="you" id="yourCount">26</span></span>
+<span>Rounds: <span id="rounds">0</span></span>
+<span>CPU: <span class="cpu" id="cpuCount">26</span></span>
+</div>
+
+<div class="battlefield" id="battlefield">
+<div class="pile">
+<div class="pile-label">Your Card</div>
+<div id="yourCard"></div>
+<div class="war-cards" id="yourWar"></div>
+</div>
+<div class="vs" id="vsText">VS</div>
+<div class="pile">
+<div class="pile-label">CPU Card</div>
+<div id="cpuCard"></div>
+<div class="war-cards" id="cpuWar"></div>
+</div>
+</div>
+
+<div class="msg" id="msg"></div>
+<button class="btn-flip" id="flipBtn" onclick="flipCards()">Flip!</button>
+<div class="stats" id="stats"></div>
+</div>
+
+<script>
+const SLUG='war';
+const SUITS=['♠','♥','♦','♣'],RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+let yourDeck,cpuDeck,roundNum,wins=0,highWins=0;
+
+function save(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:highWins}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highWins=e.data.state.highScore||0;}});
+
+function rankVal(r){return RANKS.indexOf(r);}
+function isRed(c){return c.suit==='♥'||c.suit==='♦';}
+function renderCard(c,fd){
+  if(!c)return '';
+  if(fd)return `<div class="card face-down"><span>?</span><span class="suit">?</span></div>`;
+  return `<div class="card${isRed(c)?' red':''}"><span>${c.rank}</span><span class="suit">${c.suit}</span></div>`;
+}
+
+function makeDeck(){
+  let d=[];
+  for(let s of SUITS)for(let r of RANKS)d.push({rank:r,suit:s});
+  for(let i=d.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('endOverlay').style.display='none';
+  document.getElementById('game').style.display='block';
+  let d=makeDeck();
+  yourDeck=d.slice(0,26);cpuDeck=d.slice(26);
+  roundNum=0;wins=0;
+  updateCounts();
+  clearBattlefield();
+  document.getElementById('flipBtn').style.display='inline-block';
+}
+
+function updateCounts(){
+  document.getElementById('yourCount').textContent=yourDeck.length;
+  document.getElementById('cpuCount').textContent=cpuDeck.length;
+  document.getElementById('rounds').textContent=roundNum;
+}
+
+function clearBattlefield(){
+  document.getElementById('yourCard').innerHTML='';
+  document.getElementById('cpuCard').innerHTML='';
+  document.getElementById('yourWar').innerHTML='';
+  document.getElementById('cpuWar').innerHTML='';
+  document.getElementById('msg').textContent='';
+  document.getElementById('msg').className='msg';
+}
+
+function flipCards(){
+  clearBattlefield();
+  if(yourDeck.length===0||cpuDeck.length===0){endGame();return;}
+  roundNum++;
+  let pot=[];
+  resolve(pot);
+}
+
+function resolve(pot){
+  if(yourDeck.length===0||cpuDeck.length===0){
+    // give pot to whoever has cards
+    if(yourDeck.length>0)yourDeck.push(...pot);
+    else cpuDeck.push(...pot);
+    updateCounts();endGame();return;
+  }
+  let yc=yourDeck.shift(),cc=cpuDeck.shift();
+  pot.push(yc,cc);
+  document.getElementById('yourCard').innerHTML=renderCard(yc);
+  document.getElementById('cpuCard').innerHTML=renderCard(cc);
+  updateCounts();
+
+  let yv=rankVal(yc.rank),cv=rankVal(cc.rank);
+  let m=document.getElementById('msg');
+  if(yv>cv){
+    m.textContent='You win this round! +'+pot.length+' cards';m.className='msg win';
+    yourDeck.push(...shuffle(pot));
+  } else if(cv>yv){
+    m.textContent='CPU wins this round. +'+pot.length+' cards';m.className='msg lose';
+    cpuDeck.push(...shuffle(pot));
+  } else {
+    m.textContent='WAR!';m.className='msg war';
+    // war: 3 face down + 1 face up
+    let yw='',cw='';
+    for(let i=0;i<3;i++){
+      if(yourDeck.length>0){let c=yourDeck.shift();pot.push(c);yw+=renderCard(c,true);}
+      if(cpuDeck.length>0){let c=cpuDeck.shift();pot.push(c);cw+=renderCard(c,true);}
+    }
+    document.getElementById('yourWar').innerHTML=yw;
+    document.getElementById('cpuWar').innerHTML=cw;
+    updateCounts();
+    // flip war card after delay
+    document.getElementById('flipBtn').style.display='none';
+    setTimeout(()=>{
+      document.getElementById('flipBtn').style.display='inline-block';
+      resolve(pot);
+    },1000);
+    return;
+  }
+  updateCounts();
+  checkEnd();
+}
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+function checkEnd(){
+  if(yourDeck.length===0||cpuDeck.length===0){
+    setTimeout(endGame,800);
+  }
+}
+
+function endGame(){
+  let won=yourDeck.length>cpuDeck.length;
+  if(won)wins++;
+  if(wins>highWins){highWins=wins;save();}
+  document.getElementById('endTitle').textContent=won?'You Won!':'You Lost!';
+  document.getElementById('endScore').textContent=won?'You collected all 52 cards in '+roundNum+' rounds!':'CPU collected all the cards after '+roundNum+' rounds.';
+  document.getElementById('endHigh').textContent='Total wins: '+wins+' | Best streak: '+highWins;
+  document.getElementById('endOverlay').style.display='flex';
+  document.getElementById('game').style.display='none';
+  save();
+}
+</script>
+</body>
+</html>

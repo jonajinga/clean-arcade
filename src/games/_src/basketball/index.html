@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basketball Free Throw</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+h1{font-size:1.4rem;margin:12px 0 4px}
+#hud{display:flex;gap:24px;font-size:1.1rem;margin-bottom:6px}
+#hud span{color:#facc15}
+canvas{display:block;background:#1e293b;border-radius:8px;max-width:100%;touch-action:none}
+#pauseBtn{margin:12px auto;padding:10px 28px;font-size:1.3rem;background:#6366f1;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer}
+#pauseBtn:hover{background:#818cf8}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:2rem;margin-bottom:12px;color:#facc15}
+.overlay p{font-size:1.2rem;margin-bottom:8px}
+.overlay button{padding:14px 40px;font-size:1.2rem;background:#6366f1;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;margin-top:12px}
+.overlay button:hover{background:#818cf8}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Basketball Free Throw</h1>
+<div id="hud"><span>Score: <b id="scoreEl">0</b></span><span>Time: <b id="timeEl">60</b>s</span><span>Best: <b id="hiEl">0</b></span></div>
+<canvas id="c"></canvas>
+<button id="pauseBtn">⏸</button>
+
+<div class="overlay" id="startOverlay">
+<h2>Basketball Free Throw</h2>
+<p>Aim with mouse/touch, hold to charge power, release to shoot!</p>
+<p>Score as many baskets as you can in 60 seconds.</p>
+<button id="playBtn">Play</button>
+</div>
+
+<div class="overlay hidden" id="endOverlay">
+<h2>Time's Up!</h2>
+<p>Score: <b id="finalScore">0</b></p>
+<p>High Score: <b id="finalHi">0</b></p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const SLUG='basketball';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H;
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,600);
+  W=canvas.width=maxW;H=canvas.height=Math.round(maxW*1.2);
+}
+resize();window.addEventListener('resize',resize);
+
+let score=0,timeLeft=60,highScore=0,paused=false,running=false,gameOver=false;
+let angle=0,power=0,charging=false,powerDir=1;
+let ball=null,shooting=false;
+const gravity=0.4;
+
+// Hoop position
+function hoopX(){return W*0.5}
+function hoopY(){return H*0.22}
+function hoopR(){return W*0.08}
+function ballR(){return W*0.03}
+function shooterX(){return W*0.5}
+function shooterY(){return H*0.85}
+
+// Ball object
+function resetBall(){ball=null;shooting=false;charging=false;power=0;}
+
+function drawCourt(){
+  // Backboard
+  ctx.fillStyle='#94a3b8';
+  ctx.fillRect(hoopX()-W*0.06,hoopY()-H*0.1,W*0.12,H*0.12);
+  // Rim
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=4;
+  ctx.beginPath();ctx.arc(hoopX(),hoopY(),hoopR(),0,Math.PI*2);ctx.stroke();
+  // Net lines
+  ctx.strokeStyle='rgba(226,232,240,0.3)';ctx.lineWidth=1;
+  for(let i=-3;i<=3;i++){
+    ctx.beginPath();ctx.moveTo(hoopX()+i*(hoopR()/3),hoopY());
+    ctx.lineTo(hoopX()+i*(hoopR()/4),hoopY()+H*0.07);ctx.stroke();
+  }
+}
+
+function drawShooter(){
+  const sx=shooterX(),sy=shooterY();
+  // Body
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(sx-W*0.025,sy-H*0.06,W*0.05,H*0.06);
+  // Head
+  ctx.fillStyle='#e2e8f0';
+  ctx.beginPath();ctx.arc(sx,sy-H*0.075,W*0.02,0,Math.PI*2);ctx.fill();
+  // Aim line
+  if(!shooting){
+    ctx.strokeStyle='rgba(250,204,21,0.5)';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.beginPath();ctx.moveTo(sx,sy-H*0.08);
+    const len=H*0.3*Math.max(power/100,0.1);
+    ctx.lineTo(sx+Math.cos(angle)*len,sy-H*0.08+Math.sin(angle)*len);
+    ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
+function drawPowerBar(){
+  if(!shooting&&!gameOver){
+    const bw=W*0.06,bh=H*0.2;
+    const bx=W*0.05,by=H*0.5;
+    ctx.fillStyle='#334155';ctx.fillRect(bx,by,bw,bh);
+    const fill=bh*(power/100);
+    ctx.fillStyle=power<40?'#22c55e':power<70?'#facc15':'#ef4444';
+    ctx.fillRect(bx,by+bh-fill,bw,fill);
+    ctx.strokeStyle='#e2e8f0';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);
+    ctx.fillStyle='#e2e8f0';ctx.font=`${W*0.025}px system-ui`;ctx.textAlign='center';
+    ctx.fillText('PWR',bx+bw/2,by+bh+18);
+  }
+}
+
+function drawBall(){
+  if(!ball)return;
+  ctx.fillStyle='#f97316';
+  ctx.beginPath();ctx.arc(ball.x,ball.y,ballR(),0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#451a03';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(ball.x,ball.y,ballR(),0,Math.PI*2);ctx.stroke();
+  // Lines on ball
+  ctx.beginPath();ctx.moveTo(ball.x-ballR(),ball.y);ctx.lineTo(ball.x+ballR(),ball.y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(ball.x,ball.y-ballR());ctx.lineTo(ball.x,ball.y+ballR());ctx.stroke();
+}
+
+function shoot(){
+  if(shooting||gameOver)return;
+  const spd=power*0.12+4;
+  ball={x:shooterX(),y:shooterY()-H*0.08,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd};
+  shooting=true;
+}
+
+function updateBall(){
+  if(!ball||!shooting)return;
+  ball.x+=ball.vx;ball.y+=ball.vy;ball.vy+=gravity;
+  // Check if ball goes through hoop
+  const dx=ball.x-hoopX(),dy=ball.y-hoopY();
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<hoopR()*0.7&&ball.vy>0){
+    score++;document.getElementById('scoreEl').textContent=score;
+    resetBall();return;
+  }
+  // Bounce off rim
+  if(Math.abs(dist-hoopR())<ballR()+3&&ball.y<hoopY()+hoopR()){
+    ball.vx*=-0.5;ball.vy*=-0.3;
+  }
+  // Off screen
+  if(ball.y>H+50||ball.x<-50||ball.x>W+50){resetBall();}
+}
+
+// Aiming
+let pointerDown=false;
+function getAngle(px,py){
+  const sx=shooterX(),sy=shooterY()-H*0.08;
+  return Math.atan2(py-sy,px-sx);
+}
+function ptrPos(e){
+  const r=canvas.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return{x:t.clientX-r.left,y:t.clientY-r.top};
+}
+canvas.addEventListener('pointerdown',e=>{
+  if(!running||paused||shooting||gameOver)return;
+  pointerDown=true;charging=true;power=0;powerDir=1;
+  const p=ptrPos(e);angle=getAngle(p.x,p.y);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!pointerDown||shooting)return;
+  const p=ptrPos(e);angle=getAngle(p.x,p.y);
+});
+canvas.addEventListener('pointerup',()=>{
+  if(!charging)return;pointerDown=false;charging=false;shoot();
+});
+
+let timer=null;
+function startTimer(){
+  timer=setInterval(()=>{
+    if(paused||gameOver)return;
+    timeLeft--;document.getElementById('timeEl').textContent=timeLeft;
+    if(timeLeft<=0){gameOver=true;clearInterval(timer);endGame();}
+  },1000);
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;}
+  document.getElementById('hiEl').textContent=highScore;
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('finalHi').textContent=highScore;
+  document.getElementById('endOverlay').classList.remove('hidden');
+  save();
+}
+
+function save(){
+  window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    highScore=e.data.state.highScore||0;
+    document.getElementById('hiEl').textContent=highScore;
+  }
+});
+
+function gameLoop(){
+  if(!running)return;
+  ctx.clearRect(0,0,W,H);
+  if(!paused&&!gameOver){
+    if(charging){power+=powerDir*1.5;if(power>=100)powerDir=-1;if(power<=0)powerDir=1;}
+    updateBall();
+  }
+  drawCourt();drawShooter();drawBall();drawPowerBar();
+  // Made text
+  ctx.fillStyle='#e2e8f0';ctx.font=`bold ${W*0.04}px system-ui`;ctx.textAlign='center';
+  requestAnimationFrame(gameLoop);
+}
+
+document.getElementById('playBtn').addEventListener('click',()=>{
+  document.getElementById('startOverlay').classList.add('hidden');
+  score=0;timeLeft=60;gameOver=false;running=true;
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('timeEl').textContent=60;
+  resetBall();startTimer();gameLoop();
+});
+document.getElementById('againBtn').addEventListener('click',()=>{
+  document.getElementById('endOverlay').classList.add('hidden');
+  score=0;timeLeft=60;gameOver=false;
+  document.getElementById('scoreEl').textContent=0;
+  document.getElementById('timeEl').textContent=60;
+  resetBall();startTimer();
+});
+
+const pauseBtn=document.getElementById('pauseBtn');
+pauseBtn.addEventListener('click',()=>{paused=!paused;pauseBtn.textContent=paused?'▶':'⏸';if(paused)save();});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P'){paused=!paused;pauseBtn.textContent=paused?'▶':'⏸';if(paused)save();}});
+</script>
+</body>
+</html>

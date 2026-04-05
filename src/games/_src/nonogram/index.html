@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nonogram</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:1rem}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay-box{background:#1e293b;border:2px solid #6366f1;border-radius:12px;padding:2rem;text-align:center;max-width:420px;width:90%}
+.overlay-box h2{font-size:1.8rem;margin-bottom:.8rem;color:#facc15}
+.overlay-box p{margin-bottom:.5rem;color:#94a3b8;font-size:.95rem}
+.overlay-box .score{font-size:1.4rem;color:#22c55e;margin:.8rem 0}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:.6rem 1.2rem;font-size:1rem;font-weight:600;transition:transform .1s}
+button:active{transform:scale(.96)}
+.btn-play{background:#6366f1;color:#fff;font-size:1.2rem;padding:.8rem 2rem;margin-top:1rem}
+.btn-play:hover{background:#818cf8}
+#game{display:none;text-align:center}
+.puzzle-wrap{display:inline-block;margin:1rem auto}
+table{border-collapse:collapse}
+.clue-cell{padding:2px 5px;font-size:.85rem;color:#94a3b8;text-align:center;min-width:28px}
+.clue-row{text-align:right;white-space:nowrap}
+.clue-row span{margin-left:4px}
+.clue-col{vertical-align:bottom}
+.clue-col div{display:flex;flex-direction:column;align-items:center}
+.cell{width:44px;height:44px;background:#1e293b;border:1px solid #334155;cursor:pointer;transition:background .1s}
+.cell:hover{background:#334155}
+.cell.filled{background:#6366f1}
+.cell.marked{background:#1e293b;position:relative}
+.cell.marked::after{content:'X';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:700;font-size:.9rem}
+.controls{margin:1rem 0;display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap}
+.btn-check{background:#22c55e;color:#0f172a}
+.btn-clear{background:#ef4444;color:#fff}
+.btn-new{background:#3b82f6;color:#fff}
+.mode-toggle{background:#334155;color:#e2e8f0;font-size:.9rem;padding:.5rem 1rem}
+.mode-toggle.active{background:#facc15;color:#0f172a}
+.msg{font-size:1.1rem;font-weight:700;min-height:1.5rem;margin:.5rem 0}
+.stats{color:#94a3b8;font-size:.85rem;margin-top:.5rem}
+@media(max-width:400px){
+  .cell{width:36px;height:36px}
+  .clue-cell{font-size:.75rem;padding:1px 3px}
+}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startOverlay">
+<div class="overlay-box">
+<h2>Nonogram</h2>
+<p>Fill cells to match the number clues. Each number tells you how many consecutive cells to fill in that row or column.</p>
+<p style="color:#facc15">Left-click to fill. Right-click (or toggle mode) to mark X.</p>
+<button class="btn-play" onclick="startGame()">Play</button>
+</div>
+</div>
+
+<div class="overlay" id="winOverlay" style="display:none">
+<div class="overlay-box">
+<h2 style="color:#22c55e">Solved!</h2>
+<div class="score" id="winScore"></div>
+<div id="winHigh" style="color:#facc15;margin:.5rem 0"></div>
+<button class="btn-play" onclick="startGame()">Play Again</button>
+</div>
+</div>
+
+<div id="game">
+<div class="msg" id="msg"></div>
+<div class="puzzle-wrap">
+<table id="grid"></table>
+</div>
+<div style="margin:.5rem 0">
+<button class="mode-toggle" id="modeBtn" onclick="toggleMode()">Mode: Fill</button>
+</div>
+<div class="controls">
+<button class="btn-check" onclick="checkSolution()">Check</button>
+<button class="btn-clear" onclick="clearGrid()">Clear</button>
+<button class="btn-new" onclick="startGame()">New Puzzle</button>
+</div>
+<div class="stats" id="stats"></div>
+</div>
+
+<script>
+const SLUG='nonogram',SIZE=5;
+let solution,userGrid,markMode=false,solved=0,highSolved=0;
+
+function save(){try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:highSolved}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highSolved=e.data.state.highScore||0;}});
+
+function getClues(line){
+  let clues=[],count=0;
+  for(let v of line){if(v)count++;else if(count>0){clues.push(count);count=0;}}
+  if(count>0)clues.push(count);
+  return clues.length?clues:[0];
+}
+
+function generatePuzzle(){
+  // Generate random solution with decent density
+  let s=[];
+  for(let r=0;r<SIZE;r++){
+    s[r]=[];
+    for(let c=0;c<SIZE;c++){
+      s[r][c]=Math.random()>0.45?1:0;
+    }
+  }
+  // Ensure no empty rows/cols
+  for(let r=0;r<SIZE;r++){if(s[r].every(v=>v===0))s[r][Math.floor(Math.random()*SIZE)]=1;}
+  for(let c=0;c<SIZE;c++){if(s.every(row=>row[c]===0))s[Math.floor(Math.random()*SIZE)][c]=1;}
+  return s;
+}
+
+function buildGrid(){
+  let rowClues=[],colClues=[];
+  for(let r=0;r<SIZE;r++)rowClues.push(getClues(solution[r]));
+  for(let c=0;c<SIZE;c++){
+    let col=[];for(let r=0;r<SIZE;r++)col.push(solution[r][c]);
+    colClues.push(getClues(col));
+  }
+  let maxRowClues=Math.max(...rowClues.map(c=>c.length));
+  let maxColClues=Math.max(...colClues.map(c=>c.length));
+
+  let html='';
+  // Column clues
+  for(let ci=0;ci<maxColClues;ci++){
+    html+='<tr>';
+    for(let i=0;i<maxRowClues;i++)html+='<td class="clue-cell"></td>';
+    for(let c=0;c<SIZE;c++){
+      let clue=colClues[c];
+      let offset=maxColClues-clue.length;
+      html+='<td class="clue-cell clue-col">'+(ci>=offset?clue[ci-offset]:'')+'</td>';
+    }
+    html+='</tr>';
+  }
+  // Grid rows
+  for(let r=0;r<SIZE;r++){
+    html+='<tr>';
+    let clue=rowClues[r];
+    let offset=maxRowClues-clue.length;
+    for(let i=0;i<maxRowClues;i++){
+      html+='<td class="clue-cell clue-row">'+(i>=offset?clue[i-offset]:'')+'</td>';
+    }
+    for(let c=0;c<SIZE;c++){
+      html+=`<td class="cell" data-r="${r}" data-c="${c}" onclick="clickCell(this,event)" oncontextmenu="rightClickCell(this,event)"></td>`;
+    }
+    html+='</tr>';
+  }
+  document.getElementById('grid').innerHTML=html;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('winOverlay').style.display='none';
+  document.getElementById('game').style.display='block';
+  document.getElementById('msg').textContent='';
+  markMode=false;
+  document.getElementById('modeBtn').textContent='Mode: Fill';
+  document.getElementById('modeBtn').classList.remove('active');
+  solution=generatePuzzle();
+  userGrid=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  buildGrid();
+  document.getElementById('stats').textContent='Puzzles solved: '+solved+(highSolved?' | Best session: '+highSolved:'');
+}
+
+function toggleMode(){
+  markMode=!markMode;
+  let btn=document.getElementById('modeBtn');
+  btn.textContent=markMode?'Mode: Mark X':'Mode: Fill';
+  btn.classList.toggle('active',markMode);
+}
+
+function clickCell(td,e){
+  e.preventDefault();
+  let r=+td.dataset.r,c=+td.dataset.c;
+  if(markMode){
+    if(userGrid[r][c]===2){userGrid[r][c]=0;td.className='cell';}
+    else{userGrid[r][c]=2;td.className='cell marked';}
+  } else {
+    if(userGrid[r][c]===1){userGrid[r][c]=0;td.className='cell';}
+    else{userGrid[r][c]=1;td.className='cell filled';}
+  }
+}
+
+function rightClickCell(td,e){
+  e.preventDefault();
+  let r=+td.dataset.r,c=+td.dataset.c;
+  if(userGrid[r][c]===2){userGrid[r][c]=0;td.className='cell';}
+  else{userGrid[r][c]=2;td.className='cell marked';}
+}
+
+function clearGrid(){
+  userGrid=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  document.querySelectorAll('.cell').forEach(td=>{td.className='cell';});
+  document.getElementById('msg').textContent='';
+}
+
+function checkSolution(){
+  let correct=true;
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    let filled=userGrid[r][c]===1?1:0;
+    if(filled!==solution[r][c]){correct=false;break;}
+  }
+  let m=document.getElementById('msg');
+  if(correct){
+    solved++;
+    if(solved>highSolved){highSolved=solved;save();}
+    document.getElementById('winScore').textContent='Puzzles solved this session: '+solved;
+    document.getElementById('winHigh').textContent='Best session: '+highSolved;
+    document.getElementById('winOverlay').style.display='flex';
+    save();
+  } else {
+    m.textContent='Not quite right. Keep trying!';
+    m.style.color='#ef4444';
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bike Lane</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.4rem;margin:12px 0 4px}
+#hud{display:flex;gap:20px;font-size:1.05rem;margin-bottom:6px;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+canvas{display:block;background:#1e293b;border-radius:8px;max-width:100%;touch-action:none}
+#pauseBtn{margin:12px auto;padding:10px 28px;font-size:1.3rem;background:#6366f1;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:2rem;margin-bottom:12px;color:#facc15}
+.overlay p{font-size:1.15rem;margin-bottom:6px}
+.overlay button{padding:14px 40px;font-size:1.2rem;background:#6366f1;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;margin-top:12px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Bike Lane</h1>
+<div id="hud">
+  <span>Distance: <b id="distEl">0</b>m</span>
+  <span>Speed: <b id="spdEl">1.0</b>x</span>
+  <span>Best: <b id="hiEl">0</b>m</span>
+</div>
+<canvas id="c"></canvas>
+<button id="pauseBtn">⏸</button>
+
+<div class="overlay" id="startOverlay">
+  <h2>Bike Lane</h2>
+  <p>Tap or press Space to jump over obstacles.</p>
+  <p>Speed increases over time. Go as far as you can!</p>
+  <button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+  <h2>Crash!</h2>
+  <p>Distance: <b id="finalDist">0</b>m</p>
+  <p>Best: <b id="finalHi">0</b>m</p>
+  <button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const SLUG='bike-lane';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H,ground;
+function resize(){
+  W=canvas.width=Math.min(window.innerWidth-20,600);
+  H=canvas.height=Math.round(W*0.5);
+  ground=H*0.78;
+}
+resize();window.addEventListener('resize',resize);
+
+let running=false,paused=false,gameOver=false;
+let dist=0,speed=3,highScore=0;
+let bikeX,bikeY,bikeW=40,bikeH=30,vy=0,jumping=false,onGround=true;
+const GRAVITY=0.6,JUMP_VEL=-11;
+let obstacles=[],nextObs=0,frame=0;
+let roadOffset=0;
+
+const obsTypes=[
+  {name:'pothole',w:40,h:10,color:'#334155',y:0},
+  {name:'cone',w:20,h:30,color:'#f97316',y:-20},
+  {name:'barrier',w:50,h:35,color:'#ef4444',y:-25}
+];
+
+function spawnObstacle(){
+  const t=obsTypes[Math.floor(Math.random()*obsTypes.length)];
+  obstacles.push({x:W+20,y:ground+t.y,w:t.w,h:t.h,color:t.color,name:t.name});
+}
+
+function drawRoad(){
+  // Road
+  ctx.fillStyle='#334155';ctx.fillRect(0,ground,W,H-ground);
+  // Lane dashes
+  ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.setLineDash([20,15]);
+  ctx.beginPath();ctx.moveTo(-roadOffset%35,ground+5);ctx.lineTo(W,ground+5);ctx.stroke();
+  ctx.setLineDash([]);
+  // Sky gradient
+  const grd=ctx.createLinearGradient(0,0,0,ground);
+  grd.addColorStop(0,'#0f172a');grd.addColorStop(1,'#1e3a5f');
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,ground);
+}
+
+function drawBike(x,y){
+  // Wheels
+  ctx.fillStyle='#e2e8f0';
+  ctx.beginPath();ctx.arc(x+8,y+bikeH,8,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(x+bikeW-8,y+bikeH,8,0,Math.PI*2);ctx.fill();
+  // Frame
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(x+8,y+bikeH);ctx.lineTo(x+20,y+5);ctx.lineTo(x+bikeW-8,y+bikeH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+20,y+5);ctx.lineTo(x+bikeW-5,y+5);ctx.stroke();
+  // Handlebars
+  ctx.strokeStyle='#6366f1';ctx.beginPath();ctx.moveTo(x+bikeW-8,y);ctx.lineTo(x+bikeW-5,y+5);ctx.stroke();
+  // Rider body
+  ctx.fillStyle='#6366f1';ctx.fillRect(x+15,y-20,12,20);
+  // Rider head
+  ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(x+21,y-25,6,0,Math.PI*2);ctx.fill();
+}
+
+function drawObstacles(){
+  obstacles.forEach(o=>{
+    ctx.fillStyle=o.color;
+    if(o.name==='pothole'){
+      ctx.fillRect(o.x,o.y,o.w,o.h);
+    }else if(o.name==='cone'){
+      ctx.beginPath();ctx.moveTo(o.x+o.w/2,o.y);ctx.lineTo(o.x+o.w,o.y+o.h);ctx.lineTo(o.x,o.y+o.h);ctx.fill();
+    }else{
+      ctx.fillRect(o.x,o.y,o.w,o.h);
+      ctx.fillStyle='#e2e8f0';
+      for(let i=0;i<3;i++)ctx.fillRect(o.x+5+i*16,o.y+5,10,4);
+    }
+  });
+}
+
+function jump(){
+  if(onGround&&!gameOver&&!paused){
+    vy=JUMP_VEL;jumping=true;onGround=false;
+  }
+}
+
+function checkCollision(){
+  const bx=bikeX,by=bikeY,bw=bikeW,bh=bikeH+8;
+  for(const o of obstacles){
+    if(bx+bw>o.x+5&&bx<o.x+o.w-5&&by+bh>o.y+5&&by+bh<o.y+o.h+bh){
+      return true;
+    }
+  }
+  return false;
+}
+
+function update(){
+  if(paused||gameOver)return;
+  frame++;
+  speed=3+frame*0.002;
+  dist+=speed*0.3;
+  roadOffset+=speed;
+
+  // Bike physics
+  vy+=GRAVITY;
+  bikeY+=vy;
+  if(bikeY>=ground-bikeH){bikeY=ground-bikeH;vy=0;onGround=true;jumping=false;}
+
+  // Obstacles
+  nextObs-=speed;
+  if(nextObs<=0){spawnObstacle();nextObs=150+Math.random()*200-frame*0.1;if(nextObs<80)nextObs=80;}
+  obstacles.forEach(o=>o.x-=speed);
+  obstacles=obstacles.filter(o=>o.x>-60);
+
+  if(checkCollision()){
+    gameOver=true;
+    if(Math.floor(dist)>highScore)highScore=Math.floor(dist);
+    document.getElementById('finalDist').textContent=Math.floor(dist);
+    document.getElementById('finalHi').textContent=highScore;
+    document.getElementById('hiEl').textContent=highScore;
+    document.getElementById('endOverlay').classList.remove('hidden');
+    save();
+  }
+
+  document.getElementById('distEl').textContent=Math.floor(dist);
+  document.getElementById('spdEl').textContent=speed.toFixed(1);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawRoad();
+  drawObstacles();
+  drawBike(bikeX,bikeY);
+}
+
+function loop(){
+  if(!running)return;
+  update();draw();
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  dist=0;speed=3;frame=0;gameOver=false;paused=false;
+  bikeX=W*0.15;bikeY=ground-bikeH;vy=0;onGround=true;jumping=false;
+  obstacles=[];nextObs=200;
+  document.getElementById('distEl').textContent=0;
+  document.getElementById('spdEl').textContent='3.0';
+  if(!running){running=true;loop();}
+}
+
+// Controls
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();jump();}
+  if(e.key==='p'||e.key==='P'){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(paused)save();}
+});
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();jump();});
+document.getElementById('pauseBtn').addEventListener('click',()=>{paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(paused)save();});
+
+function save(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    highScore=e.data.state.highScore||0;
+    document.getElementById('hiEl').textContent=highScore;
+  }
+});
+</script>
+</body>
+</html>

@@ -57,6 +57,10 @@
   text-align: center;
 }
 
+.site-header__count:hover {
+  color: var(--accent);
+}
+
 /* Filter buttons — right-aligned */
 .site-header__filters {
   display: flex;

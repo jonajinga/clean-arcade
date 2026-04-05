@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drag Race</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.4rem;margin:12px 0 4px}
+#hud{display:flex;gap:18px;font-size:1.05rem;margin-bottom:8px;flex-wrap:wrap;justify-content:center}
+#hud span{color:#facc15}
+canvas{display:block;background:#1e293b;border-radius:8px;max-width:100%;touch-action:none}
+#controls{margin:12px 0;text-align:center}
+#shiftBtn{padding:14px 36px;font-size:1.2rem;background:#ef4444;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;display:none}
+#shiftBtn:hover{background:#dc2626}
+#shiftBtn.go{background:#22c55e}
+#info{font-size:0.95rem;color:#94a3b8;margin-top:6px;min-height:1.5rem;text-align:center}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:2rem;margin-bottom:12px;color:#facc15}
+.overlay p{font-size:1.15rem;margin-bottom:6px}
+.overlay button{padding:14px 40px;font-size:1.2rem;background:#6366f1;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;margin-top:12px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Drag Race</h1>
+<div id="hud">
+  <span>Race: <b id="raceEl">1</b>/3</span>
+  <span>Gear: <b id="gearEl">-</b></span>
+  <span>RPM: <b id="rpmEl">0</b></span>
+  <span>Best: <b id="hiEl">--</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="controls">
+  <button id="shiftBtn">LAUNCH (Shift/Tap)</button>
+</div>
+<div id="info">Wait for the green light, then launch!</div>
+
+<div class="overlay" id="startOverlay">
+  <h2>Drag Race</h2>
+  <p>Watch the lights: Red - Red - Red - GREEN</p>
+  <p>Press Shift or tap to launch at green, then shift through 4 gears at the right RPM.</p>
+  <p>Best of 3 races. Fastest quarter-mile wins!</p>
+  <button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="endOverlay">
+  <h2>Race Over!</h2>
+  <p>Best Time: <b id="finalTime">--</b>s</p>
+  <p id="endTimes"></p>
+  <button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const SLUG='drag-race';
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H;
+function resize(){W=canvas.width=Math.min(window.innerWidth-20,600);H=canvas.height=Math.round(W*0.45);}
+resize();window.addEventListener('resize',resize);
+
+let running=false,raceNum=0,bestTime=Infinity;
+let phase='idle',gear=0,rpm=0,speed=0,distance=0,raceTime=0,startTs=0;
+let lightState=0,lightTimer=0,falsed=false;
+let times=[];
+const QUARTER_MILE=1320; // feet
+const GEAR_MAX=4;
+const OPTIMAL_RPM_MIN=6500,OPTIMAL_RPM_MAX=8000,REDLINE=9500;
+const shiftBtn=document.getElementById('shiftBtn');
+const infoEl=document.getElementById('info');
+
+function drawTrack(){
+  ctx.clearRect(0,0,W,H);
+  // Road
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,H*0.45,W,H*0.35);
+  // Lane lines
+  ctx.setLineDash([15,10]);ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,H*0.45);ctx.lineTo(W,H*0.45);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,H*0.8);ctx.lineTo(W,H*0.8);ctx.stroke();
+  ctx.setLineDash([]);
+  // Finish line
+  const finishX=W*0.9;
+  ctx.fillStyle='#e2e8f0';
+  for(let i=0;i<8;i++){
+    for(let j=0;j<2;j++){
+      if((i+j)%2===0)ctx.fillRect(finishX+j*6,H*0.45+i*(H*0.35/8),6,H*0.35/8);
+    }
+  }
+  // Car
+  const carX=W*0.05+((distance/QUARTER_MILE)*W*0.82);
+  const carY=H*0.55;
+  ctx.fillStyle='#ef4444';ctx.fillRect(carX,carY,W*0.08,H*0.15);
+  ctx.fillStyle='#0f172a';ctx.fillRect(carX+W*0.015,carY+2,W*0.02,H*0.06);
+  ctx.fillStyle='#facc15';ctx.fillRect(carX+W*0.065,carY+H*0.02,W*0.015,H*0.04);
+  // Wheels
+  ctx.fillStyle='#1e293b';
+  ctx.fillRect(carX+W*0.005,carY+H*0.13,W*0.015,H*0.05);
+  ctx.fillRect(carX+W*0.055,carY+H*0.13,W*0.015,H*0.05);
+  // Lights (top)
+  const lx=W*0.35,ly=H*0.05,lr=H*0.06;
+  for(let i=0;i<4;i++){
+    ctx.fillStyle='#334155';
+    ctx.beginPath();ctx.arc(lx+i*(lr*2.5),ly+lr,lr,0,Math.PI*2);ctx.fill();
+    let c='#334155';
+    if(i<3&&lightState>i)c='#ef4444';
+    if(i===3&&lightState>3)c='#22c55e';
+    ctx.fillStyle=c;
+    ctx.beginPath();ctx.arc(lx+i*(lr*2.5),ly+lr,lr*0.7,0,Math.PI*2);ctx.fill();
+  }
+  // RPM bar
+  const barX=W*0.05,barY=H*0.88,barW=W*0.5,barH=H*0.08;
+  ctx.fillStyle='#334155';ctx.fillRect(barX,barY,barW,barH);
+  const rpmPct=rpm/REDLINE;
+  let rpmColor='#22c55e';
+  if(rpm>=OPTIMAL_RPM_MIN&&rpm<=OPTIMAL_RPM_MAX)rpmColor='#22c55e';
+  else if(rpm>OPTIMAL_RPM_MAX)rpmColor='#ef4444';
+  else rpmColor='#facc15';
+  ctx.fillStyle=rpmColor;ctx.fillRect(barX,barY,barW*rpmPct,barH);
+  // Optimal zone marker
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=2;
+  ctx.strokeRect(barX+barW*(OPTIMAL_RPM_MIN/REDLINE),barY,barW*((OPTIMAL_RPM_MAX-OPTIMAL_RPM_MIN)/REDLINE),barH);
+  ctx.fillStyle='#e2e8f0';ctx.font=`${12*W/600}px system-ui`;ctx.textAlign='left';
+  ctx.fillText(`RPM: ${Math.floor(rpm)}`,barX+barW+10,barY+barH*0.7);
+  // Speed
+  ctx.textAlign='right';ctx.fillText(`${Math.floor(speed)} mph`,W-10,barY+barH*0.7);
+}
+
+let lastFrame=0;
+function loop(ts){
+  if(!running)return;
+  const dt=Math.min((ts-lastFrame)/1000,0.05);lastFrame=ts;
+  if(phase==='countdown'){
+    lightTimer+=dt;
+    if(lightTimer>1&&lightState<1){lightState=1;}
+    if(lightTimer>2&&lightState<2){lightState=2;}
+    if(lightTimer>3&&lightState<3){lightState=3;}
+    if(lightTimer>3.5+Math.random()*0.5&&lightState<4){lightState=4;phase='launch';infoEl.textContent='GO! Press Shift/Tap to launch!';shiftBtn.classList.add('go');shiftBtn.textContent='LAUNCH!';}
+  }
+  if(phase==='racing'){
+    rpm+=dt*3000;
+    if(rpm>REDLINE){rpm=REDLINE;speed*=0.98;}// Over-rev penalty
+    const gearMultiplier=[0,0.6,0.8,0.95,1.0];
+    const accel=gearMultiplier[gear]*(rpm/REDLINE)*180;
+    speed+=(accel-speed*0.5)*dt;
+    distance+=speed*1.467*dt;// mph to ft/s
+    raceTime=(performance.now()-startTs)/1000;
+    if(distance>=QUARTER_MILE){
+      times.push(raceTime);
+      phase='finished';
+      infoEl.textContent=`Time: ${raceTime.toFixed(3)}s | ${raceNum<3?'Next race...':'Done!'}`;
+      shiftBtn.style.display='none';
+      if(raceTime<bestTime)bestTime=raceTime;
+      document.getElementById('hiEl').textContent=bestTime===Infinity?'--':bestTime.toFixed(3);
+      setTimeout(()=>{
+        if(raceNum<3)initRace();
+        else endGame();
+      },2000);
+    }
+  }
+  document.getElementById('gearEl').textContent=gear||'-';
+  document.getElementById('rpmEl').textContent=Math.floor(rpm);
+  drawTrack();
+  requestAnimationFrame(loop);
+}
+
+function shiftGear(){
+  if(phase==='countdown'&&lightState<4){
+    falsed=true;phase='false_start';
+    infoEl.textContent='FALSE START! Penalty: +2s';
+    times.push(99);
+    setTimeout(()=>{if(raceNum<3)initRace();else endGame();},2000);
+    return;
+  }
+  if(phase==='launch'){
+    phase='racing';gear=1;rpm=2000;speed=0;startTs=performance.now();
+    infoEl.textContent='Shift when RPM is in the green zone!';
+    shiftBtn.textContent='SHIFT UP';shiftBtn.classList.remove('go');
+    return;
+  }
+  if(phase==='racing'&&gear<GEAR_MAX){
+    const inOptimal=rpm>=OPTIMAL_RPM_MIN&&rpm<=OPTIMAL_RPM_MAX;
+    gear++;
+    if(inOptimal){rpm=3000;}
+    else if(rpm>OPTIMAL_RPM_MAX){rpm=4500;speed*=0.9;}// Bad shift penalty
+    else{rpm=2000;speed*=0.95;}// Early shift
+    if(gear>=GEAR_MAX){shiftBtn.textContent='MAX GEAR';shiftBtn.style.opacity='0.5';}
+    else{shiftBtn.textContent=`SHIFT TO ${gear+1}`;}
+  }
+}
+
+function initRace(){
+  raceNum++;
+  document.getElementById('raceEl').textContent=raceNum;
+  phase='countdown';lightState=0;lightTimer=0;falsed=false;
+  gear=0;rpm=0;speed=0;distance=0;raceTime=0;
+  shiftBtn.style.display='inline-block';shiftBtn.style.opacity='1';
+  shiftBtn.textContent='WAIT...';shiftBtn.classList.remove('go');
+  infoEl.textContent='Watch the lights...';
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('endOverlay').classList.add('hidden');
+  raceNum=0;times=[];
+  running=true;lastFrame=performance.now();
+  initRace();requestAnimationFrame(loop);
+}
+
+function endGame(){
+  shiftBtn.style.display='none';
+  const valid=times.filter(t=>t<90);
+  const best=valid.length?Math.min(...valid):null;
+  if(best&&best<bestTime)bestTime=best;
+  document.getElementById('finalTime').textContent=best?best.toFixed(3):'DNF';
+  document.getElementById('endTimes').textContent='Times: '+times.map((t,i)=>`R${i+1}: ${t<90?t.toFixed(3)+'s':'FALSE START'}`).join(' | ');
+  document.getElementById('endOverlay').classList.remove('hidden');
+  save();
+}
+
+shiftBtn.addEventListener('click',shiftGear);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Shift')shiftGear();
+});
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();shiftGear();});
+
+function save(){window.parent.postMessage({type:'ca-save',slug:SLUG,state:{bestTime:bestTime===Infinity?null:bestTime}},'*');}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    bestTime=e.data.state.bestTime||Infinity;
+    document.getElementById('hiEl').textContent=bestTime===Infinity?'--':bestTime.toFixed(3);
+  }
+});
+</script>
+</body>
+</html>
