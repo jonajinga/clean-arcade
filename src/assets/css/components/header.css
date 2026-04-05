@@ -30,6 +30,12 @@
 .site-header__logo:hover { color: var(--accent); }
 .site-header__logo svg { flex-shrink: 0; }
 
+.site-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* Icon buttons — used globally */
 .icon-btn {
   display: inline-flex;

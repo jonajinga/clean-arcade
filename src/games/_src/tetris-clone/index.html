@@ -159,6 +159,8 @@ canvas {
   <button class="touch-btn" id="pause-btn" onclick="togglePause()" style="display:none;" title="Pause">&#10074;&#10074;</button>
 </div>
 
+<button id="desktop-pause" onclick="togglePause()" title="Pause (P)" style="display:none;position:fixed;bottom:16px;left:16px;width:36px;height:36px;background:#1e293b;border:1px solid #475569;color:#e2e8f0;font-size:14px;cursor:pointer;z-index:5;">&#10074;&#10074;</button>
+
 <script>
 (function() {
   var COLS = 10, ROWS = 20;
@@ -374,6 +376,8 @@ canvas {
     document.getElementById('final-score-text').textContent = txt;
     document.getElementById('gameover-overlay').classList.remove('hidden');
     document.getElementById('pause-btn').style.display = 'none';
+    var dp = document.getElementById('desktop-pause');
+    if (dp) dp.style.display = 'none';
     saveState();
   }
 
@@ -400,6 +404,8 @@ canvas {
     document.getElementById('gameover-overlay').classList.add('hidden');
     document.getElementById('pause-overlay').classList.add('hidden');
     document.getElementById('pause-btn').style.display = 'block';
+    var dp = document.getElementById('desktop-pause');
+    if (dp) dp.style.display = 'block';
     board = createBoard();
     score = 0; level = 1; lines = 0;
     dropTime = 1000; gameOver = false; paused = false;
@@ -531,6 +537,8 @@ canvas {
         document.getElementById('gameover-overlay').classList.add('hidden');
         document.getElementById('pause-overlay').classList.remove('hidden');
         document.getElementById('pause-btn').style.display = 'block';
+        var dp2 = document.getElementById('desktop-pause');
+        if (dp2) dp2.style.display = 'block';
         updateUI();
         resize();
         drawNext();
