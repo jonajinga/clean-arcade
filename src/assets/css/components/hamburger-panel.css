@@ -55,6 +55,11 @@
   color: var(--text-muted);
 }
 
+.hamburger-panel__count {
+  font-weight: 400;
+  color: var(--slate-600);
+}
+
 .hamburger-panel__divider {
   border: none;
   border-top: 1px solid var(--border);

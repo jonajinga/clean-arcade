@@ -15,7 +15,6 @@ permalink: /blog/
           <p class="blog-card__excerpt">{{ post.data.description }}</p>
         {% endif %}
         <div class="blog-card__meta">
-          <time datetime="{{ post.date | htmlDateString }}">{{ post.date | readableDate }}</time>
           <span>{{ post.content | readingTime }}</span>
         </div>
       </a>

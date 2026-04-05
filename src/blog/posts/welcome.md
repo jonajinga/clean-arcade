@@ -10,7 +10,7 @@ No ads interrupting your game. No pop-ups begging for your email. No tracking sc
 
 ## What you'll find here
 
-We're building a library of 200 HTML5 games across categories like puzzle, arcade, card, board, word, strategy, sports, and racing. Every game runs right in your browser — nothing to download or install.
+We're building a library of HTML5 games across categories like puzzle, arcade, card, board, word, strategy, sports, and racing. Every game runs right in your browser — nothing to download or install.
 
 ## Your data stays with you
 
