@@ -404,8 +404,9 @@ canvas {
     document.getElementById('gameover-overlay').classList.add('hidden');
     document.getElementById('pause-overlay').classList.add('hidden');
     document.getElementById('pause-btn').style.display = 'block';
+    document.getElementById('pause-btn').innerHTML = '\u23F8';
     var dp = document.getElementById('desktop-pause');
-    if (dp) dp.style.display = 'block';
+    if (dp) { dp.style.display = 'block'; dp.innerHTML = '\u23F8'; }
     board = createBoard();
     score = 0; level = 1; lines = 0;
     dropTime = 1000; gameOver = false; paused = false;
@@ -421,6 +422,12 @@ canvas {
   window.togglePause = function() {
     if (gameOver) return;
     paused = !paused;
+    var pb = document.getElementById('pause-btn');
+    var dpb = document.getElementById('desktop-pause');
+    var icon = paused ? "\u25B6" : "\u23F8";
+    var label = paused ? "Resume" : "Pause";
+    if (pb) { pb.innerHTML = icon; pb.title = label; }
+    if (dpb) { dpb.innerHTML = icon; dpb.title = label; }
     document.getElementById('pause-overlay').classList.toggle('hidden', !paused);
     if (paused) {
       // Save full state when pausing

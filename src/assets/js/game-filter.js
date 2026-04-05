@@ -17,6 +17,15 @@ function filterByLetter(letter) {
 }
 
 function applyFilters() {
+  /* Clear special filter when using normal filters */
+  if (activeSpecial) {
+    activeSpecial = null;
+    var fb = document.getElementById("filter-favorites");
+    var rb = document.getElementById("filter-recent");
+    if (fb) fb.classList.remove("active");
+    if (rb) rb.classList.remove("active");
+  }
+
   var cards = document.querySelectorAll(".game-card");
   var visible = 0;
   var searchVal = document.getElementById("game-search")
@@ -63,6 +72,68 @@ function updateHash() {
   }
 }
 
+/* Favorites / Recently played filters */
+var activeSpecial = null;
+
+function filterFavorites() {
+  var btn = document.getElementById("filter-favorites");
+  if (activeSpecial === "favorites") {
+    activeSpecial = null;
+    btn.classList.remove("active");
+    applyFilters();
+    return;
+  }
+  activeSpecial = "favorites";
+  btn.classList.add("active");
+  var rb = document.getElementById("filter-recent");
+  if (rb) rb.classList.remove("active");
+
+  var favs = [];
+  try { favs = JSON.parse(localStorage.getItem("ca-favorites") || "[]"); } catch(e) {}
+  filterBySlugList(favs);
+}
+
+function filterRecent() {
+  var btn = document.getElementById("filter-recent");
+  if (activeSpecial === "recent") {
+    activeSpecial = null;
+    btn.classList.remove("active");
+    applyFilters();
+    return;
+  }
+  activeSpecial = "recent";
+  btn.classList.add("active");
+  var fb = document.getElementById("filter-favorites");
+  if (fb) fb.classList.remove("active");
+
+  var recent = [];
+  try { recent = JSON.parse(localStorage.getItem("ca-recent") || "[]").map(function(r) { return r.slug; }); } catch(e) {}
+  filterBySlugList(recent);
+}
+
+function filterBySlugList(slugs) {
+  var cards = document.querySelectorAll(".game-card");
+  var visible = 0;
+  cards.forEach(function(card) {
+    var slug = card.getAttribute("href").replace("/games/", "").replace("/", "");
+    var show = slugs.indexOf(slug) !== -1;
+    card.style.display = show ? "" : "none";
+    if (show) visible++;
+  });
+  var noResults = document.getElementById("no-results");
+  if (noResults) noResults.hidden = visible > 0;
+}
+
+/* View toggle — grid vs list */
+function toggleView() {
+  var grid = document.getElementById("game-grid");
+  if (!grid) return;
+  var isList = grid.classList.toggle("game-grid--list");
+  document.getElementById("view-icon-list").style.display = isList ? "none" : "";
+  document.getElementById("view-icon-grid").style.display = isList ? "" : "none";
+  localStorage.setItem("ca-view", isList ? "list" : "grid");
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   var hash = window.location.hash.slice(1);
   if (!hash) return;
@@ -73,4 +144,9 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   if (params.letter) filterByLetter(params.letter);
   if (params.category) filterGames(params.category);
+
+  /* Restore view preference */
+  if (localStorage.getItem("ca-view") === "list") {
+    toggleView();
+  }
 });

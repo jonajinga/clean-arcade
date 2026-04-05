@@ -255,6 +255,8 @@
   function togglePause() {
     if (!running || gameOver) return;
     paused = !paused;
+    pauseBtn.innerHTML = paused ? "\u25B6" : "\u23F8";
+    pauseBtn.title = paused ? "Resume" : "Pause";
     if (paused) {
       saveFullState();
       draw();

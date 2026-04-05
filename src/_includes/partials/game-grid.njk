@@ -1,5 +1,15 @@
 <div class="game-filter" id="game-filter">
   <div class="game-filter__options">
+    <button class="game-filter__icon-btn" id="filter-favorites" aria-label="Favorites" title="Favorites" onclick="filterFavorites()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+    </button>
+    <button class="game-filter__icon-btn" id="filter-recent" aria-label="Recently played" title="Recently played" onclick="filterRecent()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="game-filter__icon-btn" id="view-toggle" aria-label="Toggle list view" title="Toggle view" onclick="toggleView()">
+      <svg id="view-icon-list" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <svg id="view-icon-grid" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="display:none"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
     <label class="sr-only" for="category-select">Category</label>
     <select id="category-select" class="game-filter__sort" onchange="filterGames(this.value)">
       <option value="all">All Categories</option>

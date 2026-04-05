@@ -7,6 +7,27 @@
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.game-filter__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.game-filter__icon-btn:hover,
+.game-filter__icon-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .game-filter__sort,

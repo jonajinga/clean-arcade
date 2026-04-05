@@ -1,7 +1,8 @@
 <a href="/games/{{ g.slug }}/" class="game-card" data-category="{{ g.category }}" data-tags="{{ g.tags | join(',') }}" data-difficulty="{{ g.difficulty }}" data-date="{{ g.dateAdded }}" data-title="{{ g.title }}">
   <div class="game-card__thumb">
     <div class="game-card__thumb-placeholder" style="background: var(--cat-{{ g.category }})">
-      <span class="game-card__title">{{ g.title }}</span>
+      <span>{{ g.title }}</span>
     </div>
   </div>
+  <span class="game-card__list-title">{{ g.title }}</span>
 </a>
