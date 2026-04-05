@@ -131,11 +131,3 @@
   appearance: auto;
 }
 
-/* Copyright */
-.hamburger-panel__copyright {
-  margin-top: auto;
-  padding-top: var(--space-md);
-  font-size: 0.6rem;
-  color: var(--slate-600);
-  text-align: center;
-}
