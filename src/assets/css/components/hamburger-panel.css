@@ -84,14 +84,14 @@
   border-color: var(--accent);
 }
 
-/* GTranslate */
+/* GTranslate — visible by default, toggled off */
 .gt-select-wrap {
-  display: none;
+  display: block;
   margin-top: var(--space-sm);
 }
 
-.gt-select-wrap.visible {
-  display: block;
+.gt-select-wrap.hidden {
+  display: none;
 }
 
 .gtranslate_wrapper select {

@@ -10,20 +10,31 @@
       <svg id="view-icon-list" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <svg id="view-icon-grid" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="display:none"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/></svg>
     </button>
-    <label class="sr-only" for="category-select">Category</label>
-    <select id="category-select" class="game-filter__sort" onchange="filterGames(this.value)">
-      <option value="all">All Categories</option>
-      {% for cat in categories %}
-        <option value="{{ cat.slug }}">{{ cat.label }}</option>
-      {% endfor %}
-    </select>
-    <label class="sr-only" for="letter-select">Letter</label>
-    <select id="letter-select" class="game-filter__sort" onchange="filterByLetter(this.value)">
-      <option value="all">A-Z</option>
-      {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<option value="{{ letter }}">{{ letter }}</option>{% endfor %}
-    </select>
-    <input type="search" id="game-search" class="game-filter__search" placeholder="Search games..." oninput="searchGames(this.value)" aria-label="Search games">
+    <div class="game-filter__dropdown-wrap">
+      <button class="game-filter__icon-btn" id="cat-toggle" aria-label="Filter by category" title="Category" onclick="document.getElementById('cat-dropdown').classList.toggle('open')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+      <div class="game-filter__dropdown" id="cat-dropdown">
+        <button onclick="filterGames('all');this.parentElement.classList.remove('open')" class="game-filter__dropdown-item active" data-filter="all">All</button>
+        {% for cat in categories %}
+          <button onclick="filterGames('{{ cat.slug }}');this.parentElement.classList.remove('open')" class="game-filter__dropdown-item" data-filter="{{ cat.slug }}">{{ cat.label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="game-filter__dropdown-wrap">
+      <button class="game-filter__icon-btn" id="az-toggle" aria-label="Filter by letter" title="A-Z" onclick="document.getElementById('az-dropdown').classList.toggle('open')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 18h7l-3.5-12L3 18zM5.5 14h3M15 6v12M15 18l3-3M15 18l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="game-filter__dropdown" id="az-dropdown">
+        <button onclick="filterByLetter('all');this.parentElement.classList.remove('open')" class="game-filter__dropdown-item active" data-letter="all">All</button>
+        {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<button onclick="filterByLetter('{{ letter }}');this.parentElement.classList.remove('open')" class="game-filter__dropdown-item" data-letter="{{ letter }}">{{ letter }}</button>{% endfor %}
+      </div>
+    </div>
+    <button class="game-filter__icon-btn" id="search-toggle" aria-label="Search" title="Search" onclick="toggleSearch()">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
   </div>
+  <input type="search" id="game-search" class="game-filter__search game-filter__search--hidden" placeholder="Search games..." oninput="searchGames(this.value)" aria-label="Search games">
 </div>
 
 <div class="game-grid" id="game-grid">

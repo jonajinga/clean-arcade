@@ -4,16 +4,40 @@ var activeLetter = "all";
 
 function filterGames(category) {
   activeCategory = category;
-  var catSelect = document.getElementById("category-select");
-  if (catSelect && catSelect.value !== category) catSelect.value = category;
+  /* Highlight active item in dropdown */
+  var items = document.querySelectorAll("#cat-dropdown .game-filter__dropdown-item");
+  items.forEach(function(item) {
+    item.classList.toggle("active", item.getAttribute("data-filter") === category);
+  });
+  /* Highlight icon if filtered */
+  var btn = document.getElementById("cat-toggle");
+  if (btn) btn.classList.toggle("active", category !== "all");
   applyFilters();
 }
 
 function filterByLetter(letter) {
   activeLetter = letter;
-  var letterSelect = document.getElementById("letter-select");
-  if (letterSelect && letterSelect.value !== letter) letterSelect.value = letter;
+  var items = document.querySelectorAll("#az-dropdown .game-filter__dropdown-item");
+  items.forEach(function(item) {
+    item.classList.toggle("active", item.getAttribute("data-letter") === letter);
+  });
+  var btn = document.getElementById("az-toggle");
+  if (btn) btn.classList.toggle("active", letter !== "all");
   applyFilters();
+}
+
+function toggleSearch() {
+  var input = document.getElementById("game-search");
+  if (!input) return;
+  input.classList.toggle("game-filter__search--hidden");
+  if (!input.classList.contains("game-filter__search--hidden")) {
+    input.focus();
+  } else {
+    input.value = "";
+    searchGames("");
+  }
+  var btn = document.getElementById("search-toggle");
+  if (btn) btn.classList.toggle("active", !input.classList.contains("game-filter__search--hidden"));
 }
 
 function applyFilters() {
@@ -134,6 +158,14 @@ function toggleView() {
   document.getElementById("view-icon-grid").style.display = isList ? "" : "none";
   localStorage.setItem("ca-view", isList ? "list" : "grid");
 }
+
+/* Close dropdowns when clicking outside */
+document.addEventListener("click", function(e) {
+  if (!e.target.closest(".game-filter__dropdown-wrap")) {
+    var drops = document.querySelectorAll(".game-filter__dropdown");
+    drops.forEach(function(d) { d.classList.remove("open"); });
+  }
+});
 
 document.addEventListener("DOMContentLoaded", function () {
   sortAlpha();

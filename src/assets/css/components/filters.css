@@ -5,11 +5,12 @@
 
 .game-filter__options {
   display: flex;
-  gap: var(--space-sm);
+  gap: 4px;
   flex-wrap: wrap;
   align-items: center;
 }
 
+/* Icon buttons */
 .game-filter__icon-btn {
   display: flex;
   align-items: center;
@@ -30,21 +31,67 @@
   border-color: var(--accent);
 }
 
-.game-filter__sort,
+/* Dropdown wrap */
+.game-filter__dropdown-wrap {
+  position: relative;
+}
+
+.game-filter__dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  min-width: 120px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.game-filter__dropdown.open {
+  display: flex;
+  flex-direction: column;
+}
+
+.game-filter__dropdown-item {
+  padding: 6px 12px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.game-filter__dropdown-item:hover {
+  background: var(--bg-alt);
+  color: var(--accent);
+}
+
+.game-filter__dropdown-item.active {
+  color: var(--accent);
+}
+
+/* Search — hidden by default, shown on toggle */
 .game-filter__search {
   padding: 6px 10px;
   font-size: var(--text-xs);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+  width: 100%;
+  margin-top: 4px;
 }
 
-.game-filter__search {
-  flex: 1;
-  min-width: 160px;
+.game-filter__search--hidden {
+  display: none;
 }
 
-.game-filter__sort:focus,
 .game-filter__search:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
