@@ -7,15 +7,12 @@
         <option value="{{ cat.slug }}">{{ cat.label }}</option>
       {% endfor %}
     </select>
-    <label class="sr-only" for="sort-select">Sort by</label>
-    <select id="sort-select" class="game-filter__sort" onchange="sortGames(this.value)">
-      <option value="title">A-Z</option>
+    <label class="sr-only" for="letter-select">Letter</label>
+    <select id="letter-select" class="game-filter__sort" onchange="filterByLetter(this.value)">
+      <option value="all">A-Z</option>
+      {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<option value="{{ letter }}">{{ letter }}</option>{% endfor %}
     </select>
     <input type="search" id="game-search" class="game-filter__search" placeholder="Search games..." oninput="searchGames(this.value)" aria-label="Search games">
-  </div>
-  <div class="game-filter__az" id="az-filter">
-    <button class="game-filter__letter active" onclick="filterByLetter('all')" data-letter="all">All</button>
-    {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<button class="game-filter__letter" onclick="filterByLetter('{{ letter }}')" data-letter="{{ letter }}">{{ letter }}</button>{% endfor %}
   </div>
 </div>
 

@@ -4,31 +4,21 @@ var activeLetter = "all";
 
 function filterGames(category) {
   activeCategory = category;
-
-  /* Sync dropdown if called programmatically */
   var catSelect = document.getElementById("category-select");
-  if (catSelect && catSelect.value !== category) {
-    catSelect.value = category;
-  }
-
+  if (catSelect && catSelect.value !== category) catSelect.value = category;
   applyFilters();
 }
 
 function filterByLetter(letter) {
   activeLetter = letter;
-
-  var btns = document.querySelectorAll(".game-filter__letter");
-  btns.forEach(function (btn) {
-    btn.classList.toggle("active", btn.getAttribute("data-letter") === letter);
-  });
-
+  var letterSelect = document.getElementById("letter-select");
+  if (letterSelect && letterSelect.value !== letter) letterSelect.value = letter;
   applyFilters();
 }
 
 function applyFilters() {
   var cards = document.querySelectorAll(".game-card");
   var visible = 0;
-
   var searchVal = document.getElementById("game-search")
     ? document.getElementById("game-search").value.toLowerCase()
     : "";
@@ -44,7 +34,6 @@ function applyFilters() {
 
   var noResults = document.getElementById("no-results");
   if (noResults) noResults.hidden = visible > 0;
-
   updateHash();
 }
 
@@ -56,24 +45,17 @@ function sortGames(sortBy) {
   var grid = document.getElementById("game-grid");
   if (!grid) return;
   var cards = Array.from(grid.querySelectorAll(".game-card"));
-
   cards.sort(function (a, b) {
     return a.getAttribute("data-title").localeCompare(b.getAttribute("data-title"));
   });
-
-  cards.forEach(function (card) {
-    grid.appendChild(card);
-  });
-
+  cards.forEach(function (card) { grid.appendChild(card); });
   updateHash();
 }
 
 function updateHash() {
   var hash = "";
   if (activeCategory !== "all") hash += "category=" + activeCategory;
-  if (activeLetter !== "all") {
-    hash += (hash ? "&" : "") + "letter=" + activeLetter;
-  }
+  if (activeLetter !== "all") hash += (hash ? "&" : "") + "letter=" + activeLetter;
   if (hash) {
     history.replaceState(null, "", "#" + hash);
   } else {
@@ -81,7 +63,6 @@ function updateHash() {
   }
 }
 
-/* Restore from hash on load */
 document.addEventListener("DOMContentLoaded", function () {
   var hash = window.location.hash.slice(1);
   if (!hash) return;
@@ -90,10 +71,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var parts = pair.split("=");
     params[parts[0]] = parts[1];
   });
-  if (params.letter) {
-    filterByLetter(params.letter);
-  }
-  if (params.category) {
-    filterGames(params.category);
-  }
+  if (params.letter) filterByLetter(params.letter);
+  if (params.category) filterGames(params.category);
 });

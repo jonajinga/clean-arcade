@@ -22,14 +22,14 @@
       </button>
     </div>
 
-    {# GTranslate dropdown — hidden until translate icon tapped #}
+    {# GTranslate dropdown #}
     <div class="gt-select-wrap" id="gt-select">
       <div class="gtranslate_wrapper"></div>
     </div>
 
     <hr class="hamburger-panel__divider">
 
-    {# Main navigation #}
+    {# Main navigation — text links #}
     <nav aria-label="Navigation">
       <ul class="hamburger-panel__nav">
         {% for item in navigation %}
@@ -44,31 +44,58 @@
 
     <hr class="hamburger-panel__divider">
 
-    {# Resources #}
-    <nav aria-label="Resources">
-      <ul class="hamburger-panel__nav hamburger-panel__nav--secondary">
-        <li><a href="/about/" onclick="closeHamburger()">About</a></li>
-        <li><a href="/blog/" onclick="closeHamburger()">Blog</a></li>
-        <li><a href="/changelog/" onclick="closeHamburger()">Changelog</a></li>
-        <li><a href="/sitemap.xml" onclick="closeHamburger()">Sitemap</a></li>
-        <li><a href="/style-guide/" onclick="closeHamburger()">Style Guide</a></li>
-      </ul>
-    </nav>
-
-    <hr class="hamburger-panel__divider">
-
-    {# Legal #}
-    <nav aria-label="Legal">
-      <ul class="hamburger-panel__nav hamburger-panel__nav--secondary">
-        <li><a href="/privacy-policy/" onclick="closeHamburger()">Privacy Policy</a></li>
-        <li><a href="/feed.xml" onclick="closeHamburger()">RSS</a></li>
+    {# Secondary links — icon + label #}
+    <nav aria-label="More">
+      <ul class="hamburger-panel__icon-nav">
+        <li>
+          <a href="/about/" onclick="closeHamburger()" title="About">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>About</span>
+          </a>
+        </li>
+        <li>
+          <a href="/blog/" onclick="closeHamburger()" title="Blog">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v16H4z" stroke="currentColor" stroke-width="1.5"/><path d="M8 8h8M8 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>Blog</span>
+          </a>
+        </li>
+        <li>
+          <a href="/changelog/" onclick="closeHamburger()" title="Changelog">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Changelog</span>
+          </a>
+        </li>
+        <li>
+          <a href="/privacy-policy/" onclick="closeHamburger()" title="Privacy Policy">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 4v6c0 5.25-3.5 9.75-8 11-4.5-1.25-8-5.75-8-11V6l8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            <span>Privacy</span>
+          </a>
+        </li>
+        <li>
+          <a href="/style-guide/" onclick="closeHamburger()" title="Style Guide">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a5 5 0 015 5v1h1a2 2 0 012 2v1a2 2 0 01-2 2h-1v4a5 5 0 01-10 0v-4H6a2 2 0 01-2-2v-1a2 2 0 012-2h1V7a5 5 0 015-5z" stroke="currentColor" stroke-width="1.5"/></svg>
+            <span>Style Guide</span>
+          </a>
+        </li>
+        <li>
+          <a href="/sitemap.xml" onclick="closeHamburger()" title="Sitemap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" stroke="currentColor" stroke-width="1.5"/></svg>
+            <span>Sitemap</span>
+          </a>
+        </li>
+        <li>
+          <a href="/feed.xml" onclick="closeHamburger()" title="RSS Feed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="18" r="2" fill="currentColor"/><path d="M4 4a16 16 0 0116 16M4 11a9 9 0 019 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>RSS</span>
+          </a>
+        </li>
       </ul>
     </nav>
 
     <div class="hamburger-panel__footer">
-      <span>&copy; {{ "" | year }} {{ meta.title }}</span>
-      <span>Contact: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></span>
-      <span>Website by <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a></span>
+      <a href="mailto:{{ meta.email }}">{{ meta.email }}</a>
+      <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a>
+      <span class="hamburger-panel__copyright">&copy; {{ "" | year }} {{ meta.title }}</span>
     </div>
   </div>
 </div>
