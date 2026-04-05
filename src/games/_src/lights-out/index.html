@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lights Out</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+#game{text-align:center}
+#game h2{color:#6366f1;margin-bottom:.75rem}
+.grid{display:inline-grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:1rem 0}
+.cell{width:min(60px,15vw);height:min(60px,15vw);border:2px solid #334155;border-radius:.25rem;cursor:pointer;transition:background .15s,transform .1s}
+.cell:active{transform:scale(.9)}
+.cell.on{background:#facc15;border-color:#facc15;box-shadow:0 0 12px rgba(250,204,21,.5)}
+.cell.off{background:#1e293b;border-color:#334155}
+.info{margin:.5rem 0;font-size:1rem}
+.info span{font-weight:700;color:#facc15}
+.win-msg{font-size:1.3rem;color:#22c55e;font-weight:700;margin:.5rem 0;min-height:2rem}
+.new-puzzle{padding:.5rem 1rem;font-size:1rem;border:none;border-radius:.25rem;cursor:pointer;background:#22c55e;color:#fff;font-family:inherit;margin-top:.5rem}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Lights Out</h1>
+<p>Click a light to toggle it and its neighbors.<br>Turn all lights OFF to win!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="win-overlay" class="overlay hidden">
+<h2>You Win!</h2>
+<p>Solved in <span id="final-moves">0</span> moves</p>
+<p>Level <span id="final-level">1</span> complete</p>
+<button class="btn" onclick="nextLevel()">Next Level</button>
+</div>
+
+<div id="game">
+<h2>Lights Out</h2>
+<div class="info">Level: <span id="level">1</span> | Moves: <span id="moves">0</span></div>
+<div class="grid" id="grid"></div>
+<div class="win-msg" id="win-msg"></div>
+<button class="new-puzzle" onclick="newPuzzle()">New Puzzle</button>
+</div>
+
+<script>
+const SIZE=5;
+let grid,moves,level=1,totalMoves=0;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  level=1;totalMoves=0;
+  newPuzzle();
+}
+
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  level++;
+  newPuzzle();
+}
+
+function newPuzzle(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  grid=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  // Generate solvable puzzle by making random moves
+  const numMoves=3+level*2;
+  for(let i=0;i<numMoves;i++){
+    const r=Math.floor(Math.random()*SIZE),c=Math.floor(Math.random()*SIZE);
+    toggleAt(r,c);
+  }
+  // Ensure at least some lights are on
+  if(grid.flat().every(v=>!v)){
+    toggleAt(2,2);toggleAt(0,0);toggleAt(4,4);
+  }
+  moves=0;
+  document.getElementById('level').textContent=level;
+  document.getElementById('moves').textContent=0;
+  document.getElementById('win-msg').textContent='';
+  render();
+}
+
+function toggleAt(r,c){
+  const dirs=[[0,0],[-1,0],[1,0],[0,-1],[0,1]];
+  dirs.forEach(([dr,dc])=>{
+    const nr=r+dr,nc=c+dc;
+    if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE)grid[nr][nc]=!grid[nr][nc];
+  });
+}
+
+function handleClick(r,c){
+  toggleAt(r,c);
+  moves++;
+  document.getElementById('moves').textContent=moves;
+  render();
+  if(grid.flat().every(v=>!v)){
+    totalMoves+=moves;
+    document.getElementById('win-msg').textContent='Solved!';
+    document.getElementById('final-moves').textContent=moves;
+    document.getElementById('final-level').textContent=level;
+    setTimeout(()=>{
+      document.getElementById('win-overlay').classList.remove('hidden');
+      window.parent.postMessage({type:'ca-save',slug:'lights-out',state:{level,totalMoves}},'*');
+    },500);
+  }
+}
+
+function render(){
+  const el=document.getElementById('grid');
+  el.innerHTML='';
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const cell=document.createElement('div');
+    cell.className='cell '+(grid[r][c]?'on':'off');
+    cell.onclick=()=>handleClick(r,c);
+    el.appendChild(cell);
+  }
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    level=e.data.state.level||1;totalMoves=e.data.state.totalMoves||0;
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brick Builder</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;cursor:crosshair;touch-action:none}
+.toolbar{display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;justify-content:center;align-items:center}
+.color-btn{width:36px;height:36px;border:3px solid transparent;border-radius:.25rem;cursor:pointer}
+.color-btn.active{border-color:#fff;transform:scale(1.15)}
+.tool-btn{padding:.4rem 1rem;font-size:.9rem;border:none;border-radius:.25rem;cursor:pointer;background:#ef4444;color:#fff;font-family:inherit}
+.tool-btn:hover{background:#dc2626}
+.tool-btn.eraser{background:#facc15;color:#0f172a}
+.tool-btn.eraser.active{border:3px solid #fff}
+#brick-count{font-size:.9rem;margin-top:.5rem;color:#facc15}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Brick Builder</h1>
+<p>Click to place colored bricks on the grid.<br>Choose colors from the palette. Build anything!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+
+<canvas id="c"></canvas>
+<div class="toolbar" id="toolbar"></div>
+<div id="brick-count">Bricks: 0</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const COLS=20,ROWS=16,CELL=20;
+const W=COLS*CELL,H=ROWS*CELL;
+canvas.width=W;canvas.height=H;
+
+const PALETTE=['#6366f1','#ef4444','#22c55e','#facc15','#3b82f6','#e2e8f0','#f97316','#a855f7','#ec4899','#1e293b'];
+let grid,selectedColor=PALETTE[0],erasing=false,brickCount=0;
+
+function init(){
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  brickCount=0;
+  updateCount();
+  draw();
+}
+
+function buildToolbar(){
+  const tb=document.getElementById('toolbar');
+  tb.innerHTML='';
+  PALETTE.forEach((c,i)=>{
+    const btn=document.createElement('button');
+    btn.className='color-btn'+(i===0?' active':'');
+    btn.style.background=c;
+    btn.onclick=()=>{
+      erasing=false;
+      document.querySelectorAll('.color-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelector('.eraser')?.classList.remove('active');
+      selectedColor=c;
+    };
+    tb.appendChild(btn);
+  });
+  const eraserBtn=document.createElement('button');
+  eraserBtn.className='tool-btn eraser';eraserBtn.textContent='Eraser';
+  eraserBtn.onclick=()=>{erasing=!erasing;eraserBtn.classList.toggle('active');
+    document.querySelectorAll('.color-btn').forEach(b=>b.classList.remove('active'));};
+  tb.appendChild(eraserBtn);
+  const clearBtn=document.createElement('button');
+  clearBtn.className='tool-btn';clearBtn.textContent='Clear All';
+  clearBtn.onclick=()=>{init();};
+  tb.appendChild(clearBtn);
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#334155';ctx.lineWidth=0.5;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(grid[r][c]){
+      ctx.fillStyle=grid[r][c];
+      ctx.fillRect(c*CELL,r*CELL,CELL,CELL);
+      ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.strokeRect(c*CELL,r*CELL,CELL,CELL);
+    } else {
+      ctx.strokeStyle='#334155';ctx.strokeRect(c*CELL,r*CELL,CELL,CELL);
+    }
+  }
+}
+
+function place(x,y){
+  const c=Math.floor(x/CELL),r=Math.floor(y/CELL);
+  if(r<0||r>=ROWS||c<0||c>=COLS)return;
+  if(erasing){
+    if(grid[r][c]){brickCount--;grid[r][c]=null;}
+  } else {
+    if(!grid[r][c])brickCount++;
+    grid[r][c]=selectedColor;
+  }
+  updateCount();draw();
+}
+
+function updateCount(){document.getElementById('brick-count').textContent='Bricks: '+brickCount;}
+
+let painting=false;
+function getPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=W/rect.width,scaleY=H/rect.height;
+  return e.touches?
+    {x:(e.touches[0].clientX-rect.left)*scaleX,y:(e.touches[0].clientY-rect.top)*scaleY}:
+    {x:(e.clientX-rect.left)*scaleX,y:(e.clientY-rect.top)*scaleY};
+}
+
+canvas.addEventListener('mousedown',e=>{painting=true;const p=getPos(e);place(p.x,p.y);});
+canvas.addEventListener('mousemove',e=>{if(painting){const p=getPos(e);place(p.x,p.y);}});
+canvas.addEventListener('mouseup',()=>{painting=false;sendSave();});
+canvas.addEventListener('mouseleave',()=>{painting=false;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();painting=true;const p=getPos(e);place(p.x,p.y);},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();if(painting){const p=getPos(e);place(p.x,p.y);}},{passive:false});
+canvas.addEventListener('touchend',()=>{painting=false;sendSave();});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  init();
+}
+
+function sendSave(){
+  window.parent.postMessage({type:'ca-save',slug:'brick-builder',state:{grid,brickCount}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    grid=e.data.state.grid||Array.from({length:ROWS},()=>Array(COLS).fill(null));
+    brickCount=e.data.state.brickCount||0;
+    updateCount();draw();
+  }
+});
+
+buildToolbar();
+init();
+</script>
+</body>
+</html>

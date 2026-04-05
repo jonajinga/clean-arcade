@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sliding Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+#game{text-align:center}
+.grid{display:inline-grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:1rem 0}
+.tile{width:min(70px,18vw);height:min(70px,18vw);display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:700;border-radius:.25rem;cursor:pointer;transition:background .15s,transform .1s;user-select:none}
+.tile:active{transform:scale(.92)}
+.tile.num{background:#6366f1;color:#fff;border:2px solid #818cf8}
+.tile.num.correct{background:#22c55e;border-color:#16a34a}
+.tile.empty{background:transparent;cursor:default}
+.info{display:flex;gap:1.5rem;justify-content:center;margin:.5rem 0;font-size:1rem}
+.info span{color:#facc15;font-weight:700}
+.pause-btn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;border:none;border-radius:.5rem;cursor:pointer;background:#3b82f6;color:#fff;font-family:inherit}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Sliding Puzzle</h1>
+<p>Slide tiles to arrange numbers 1-15 in order.<br>Click a tile next to the empty space to move it.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="win-overlay" class="overlay hidden">
+<h2>Puzzle Solved!</h2>
+<p>Moves: <span id="final-moves">0</span></p>
+<p>Time: <span id="final-time">0:00</span></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+
+<div id="game">
+<h2 style="color:#6366f1;margin-bottom:.5rem">Sliding Puzzle</h2>
+<div class="info">
+<div>Moves: <span id="moves">0</span></div>
+<div>Time: <span id="timer">0:00</span></div>
+</div>
+<div class="grid" id="grid"></div>
+</div>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+
+<script>
+const SIZE=4,TOTAL=SIZE*SIZE;
+let board,emptyIdx,moves,startTime,timerInterval,paused,solved;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('win-overlay').classList.add('hidden');
+  board=[];moves=0;paused=false;solved=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  for(let i=1;i<TOTAL;i++)board.push(i);
+  board.push(0);emptyIdx=TOTAL-1;
+  shuffle();
+  document.getElementById('moves').textContent=0;
+  clearInterval(timerInterval);
+  startTime=Date.now();
+  timerInterval=setInterval(updateTimer,500);
+  render();
+}
+
+function shuffle(){
+  // Make random valid moves to ensure solvability
+  for(let i=0;i<200;i++){
+    const neighbors=getNeighbors(emptyIdx);
+    const pick=neighbors[Math.floor(Math.random()*neighbors.length)];
+    board[emptyIdx]=board[pick];board[pick]=0;emptyIdx=pick;
+  }
+}
+
+function getNeighbors(idx){
+  const r=Math.floor(idx/SIZE),c=idx%SIZE,n=[];
+  if(r>0)n.push(idx-SIZE);
+  if(r<SIZE-1)n.push(idx+SIZE);
+  if(c>0)n.push(idx-1);
+  if(c<SIZE-1)n.push(idx+1);
+  return n;
+}
+
+function clickTile(idx){
+  if(paused||solved||board[idx]===0)return;
+  const neighbors=getNeighbors(emptyIdx);
+  if(!neighbors.includes(idx))return;
+  board[emptyIdx]=board[idx];board[idx]=0;emptyIdx=idx;
+  moves++;
+  document.getElementById('moves').textContent=moves;
+  render();
+  checkWin();
+}
+
+function checkWin(){
+  for(let i=0;i<TOTAL-1;i++){if(board[i]!==i+1)return;}
+  solved=true;clearInterval(timerInterval);
+  const elapsed=formatTime(Date.now()-startTime);
+  document.getElementById('final-moves').textContent=moves;
+  document.getElementById('final-time').textContent=elapsed;
+  setTimeout(()=>{
+    document.getElementById('win-overlay').classList.remove('hidden');
+    window.parent.postMessage({type:'ca-save',slug:'sliding-puzzle',state:{moves,time:elapsed}},'*');
+  },300);
+}
+
+function render(){
+  const el=document.getElementById('grid');
+  el.innerHTML='';
+  board.forEach((v,i)=>{
+    const tile=document.createElement('div');
+    if(v===0){
+      tile.className='tile empty';
+    } else {
+      tile.className='tile num'+(v===i+1?' correct':'');
+      tile.textContent=v;
+      tile.onclick=()=>clickTile(i);
+    }
+    el.appendChild(tile);
+  });
+}
+
+function updateTimer(){
+  if(paused||solved)return;
+  document.getElementById('timer').textContent=formatTime(Date.now()-startTime);
+}
+
+function formatTime(ms){
+  const s=Math.floor(ms/1000);
+  return Math.floor(s/60)+':'+(s%60<10?'0':'')+s%60;
+}
+
+function togglePause(){
+  if(solved)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(paused)window.parent.postMessage({type:'ca-save',slug:'sliding-puzzle',state:{board,moves}},'*');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(paused||solved)return;
+  let target=-1;
+  if(e.key==='ArrowUp'&&emptyIdx+SIZE<TOTAL)target=emptyIdx+SIZE;
+  if(e.key==='ArrowDown'&&emptyIdx-SIZE>=0)target=emptyIdx-SIZE;
+  if(e.key==='ArrowLeft'&&emptyIdx%SIZE<SIZE-1)target=emptyIdx+1;
+  if(e.key==='ArrowRight'&&emptyIdx%SIZE>0)target=emptyIdx-1;
+  if(target>=0)clickTile(target);
+});
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    if(e.data.state.board){board=e.data.state.board;moves=e.data.state.moves||0;emptyIdx=board.indexOf(0);render();}
+  }
+});
+</script>
+</body>
+</html>

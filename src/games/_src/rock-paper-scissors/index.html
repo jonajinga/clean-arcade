@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rock Paper Scissors</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+#game{max-width:420px;width:100%;text-align:center}
+.scoreboard{display:flex;justify-content:center;gap:2rem;margin:1rem 0;font-size:1.1rem}
+.scoreboard div{text-align:center}
+.scoreboard .num{font-size:2rem;font-weight:700}
+.arena{display:flex;justify-content:center;align-items:center;gap:1.5rem;margin:1.5rem 0;min-height:120px}
+.arena .pick{font-size:4rem;line-height:1;transition:transform .3s}
+.arena .pick.reveal{animation:popIn .4s ease}
+@keyframes popIn{0%{transform:scale(0) rotate(-180deg)}100%{transform:scale(1) rotate(0)}}
+.vs{font-size:1.5rem;color:#facc15;font-weight:700}
+#result-text{font-size:1.3rem;font-weight:700;min-height:2rem;margin-bottom:1rem}
+.choices{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+.choice-btn{font-size:2.5rem;padding:.75rem 1.25rem;border:2px solid #6366f1;border-radius:.5rem;cursor:pointer;background:#1e293b;transition:transform .15s,border-color .15s}
+.choice-btn:hover{transform:scale(1.1);border-color:#facc15}
+.choice-btn:disabled{opacity:.5;cursor:default;transform:none}
+.round-info{margin-top:1rem;color:#94a3b8;font-size:.9rem}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Rock Paper Scissors</h1>
+<p>Best of 5 rounds.<br>Choose your weapon!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="gameover-overlay" class="overlay hidden">
+<h2 id="final-result">You Win!</h2>
+<p>Final Score</p>
+<p style="font-size:1.5rem"><span id="final-player" style="color:#22c55e">0</span> - <span id="final-cpu" style="color:#ef4444">0</span></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+
+<div id="game">
+<h2 style="color:#6366f1;margin-bottom:.5rem">Rock Paper Scissors</h2>
+<div class="scoreboard">
+<div><div>You</div><div class="num" id="p-score" style="color:#22c55e">0</div></div>
+<div><div>Draws</div><div class="num" id="d-score" style="color:#facc15">0</div></div>
+<div><div>CPU</div><div class="num" id="c-score" style="color:#ef4444">0</div></div>
+</div>
+<div class="arena">
+<div class="pick" id="p-pick">?</div>
+<div class="vs">VS</div>
+<div class="pick" id="c-pick">?</div>
+</div>
+<div id="result-text"></div>
+<div class="choices">
+<button class="choice-btn" onclick="play('rock')">&#x270A;</button>
+<button class="choice-btn" onclick="play('paper')">&#x270B;</button>
+<button class="choice-btn" onclick="play('scissors')">&#x270C;</button>
+</div>
+<div class="round-info">Round <span id="round-num">1</span>/5</div>
+</div>
+
+<script>
+const EMOJIS={rock:'\u270A',paper:'\u270B',scissors:'\u270C\uFE0F'};
+const MOVES=['rock','paper','scissors'];
+let pScore,cScore,draws,round,locked;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  pScore=0;cScore=0;draws=0;round=0;locked=false;
+  updateUI();
+  document.getElementById('p-pick').textContent='?';
+  document.getElementById('c-pick').textContent='?';
+  document.getElementById('result-text').textContent='Choose your move!';
+  enableBtns(true);
+}
+
+function play(pMove){
+  if(locked)return;
+  locked=true;
+  enableBtns(false);
+  const cMove=MOVES[Math.floor(Math.random()*3)];
+  // Animate
+  const pp=document.getElementById('p-pick');
+  const cp=document.getElementById('c-pick');
+  pp.textContent='?';cp.textContent='?';
+  let flick=0;
+  const flickInterval=setInterval(()=>{
+    pp.textContent=EMOJIS[MOVES[flick%3]];
+    cp.textContent=EMOJIS[MOVES[(flick+1)%3]];
+    flick++;
+  },100);
+
+  setTimeout(()=>{
+    clearInterval(flickInterval);
+    pp.textContent=EMOJIS[pMove];cp.textContent=EMOJIS[cMove];
+    pp.classList.remove('reveal');cp.classList.remove('reveal');
+    void pp.offsetWidth;
+    pp.classList.add('reveal');cp.classList.add('reveal');
+    const result=getResult(pMove,cMove);
+    round++;
+    if(result==='win'){pScore++;document.getElementById('result-text').textContent='You win this round!';document.getElementById('result-text').style.color='#22c55e';}
+    else if(result==='lose'){cScore++;document.getElementById('result-text').textContent='CPU wins this round!';document.getElementById('result-text').style.color='#ef4444';}
+    else{draws++;document.getElementById('result-text').textContent='Draw!';document.getElementById('result-text').style.color='#facc15';}
+    updateUI();
+    if(round>=5){setTimeout(endGame,1000);}
+    else{setTimeout(()=>{locked=false;enableBtns(true);},800);}
+  },600);
+}
+
+function getResult(p,c){
+  if(p===c)return'draw';
+  if((p==='rock'&&c==='scissors')||(p==='paper'&&c==='rock')||(p==='scissors'&&c==='paper'))return'win';
+  return'lose';
+}
+
+function updateUI(){
+  document.getElementById('p-score').textContent=pScore;
+  document.getElementById('c-score').textContent=cScore;
+  document.getElementById('d-score').textContent=draws;
+  document.getElementById('round-num').textContent=Math.min(round+1,5);
+}
+
+function enableBtns(on){document.querySelectorAll('.choice-btn').forEach(b=>b.disabled=!on);}
+
+function endGame(){
+  const fr=document.getElementById('final-result');
+  if(pScore>cScore){fr.textContent='You Win!';fr.style.color='#22c55e';}
+  else if(cScore>pScore){fr.textContent='You Lose!';fr.style.color='#ef4444';}
+  else{fr.textContent='It\'s a Draw!';fr.style.color='#facc15';}
+  document.getElementById('final-player').textContent=pScore;
+  document.getElementById('final-cpu').textContent=cScore;
+  document.getElementById('gameover-overlay').classList.remove('hidden');
+  window.parent.postMessage({type:'ca-save',slug:'rock-paper-scissors',state:{pScore,cScore,draws}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){}
+});
+</script>
+</body>
+</html>

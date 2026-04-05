@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower Stack</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.pause-btn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;border:none;border-radius:.5rem;cursor:pointer;background:#3b82f6;color:#fff;font-family:inherit}
+.pause-btn:hover{background:#2563eb}
+.hidden{display:none}
+#score-display{font-size:1rem;margin-top:.5rem;color:#facc15}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Tower Stack</h1>
+<p>Click or tap to drop the block.<br>Stack them perfectly to keep building!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="gameover-overlay" class="overlay hidden">
+<h2>Game Over</h2>
+<p>Blocks stacked: <span id="final-score">0</span></p>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+<canvas id="c"></canvas>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+<div id="score-display">Blocks: 0</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=360,H=500;
+canvas.width=W;canvas.height=H;
+const COLORS=['#6366f1','#ef4444','#22c55e','#facc15','#3b82f6'];
+const BLOCK_H=25;
+
+let stack,current,speed,dir,score,paused,running,animId,cameraY;
+
+function init(){
+  stack=[{x:W/2-75,y:H-BLOCK_H,w:150}];
+  speed=2;dir=1;score=0;paused=false;running=true;cameraY=0;
+  current={x:0,y:stack[stack.length-1].y-BLOCK_H,w:stack[stack.length-1].w};
+  document.getElementById('pause-btn').textContent='⏸';
+  document.getElementById('score-display').textContent='Blocks: 0';
+}
+
+function dropBlock(){
+  if(paused||!running)return;
+  const top=stack[stack.length-1];
+  const overlapStart=Math.max(current.x,top.x);
+  const overlapEnd=Math.min(current.x+current.w,top.x+top.w);
+  const overlapW=overlapEnd-overlapStart;
+  if(overlapW<=0){gameOver();return;}
+  stack.push({x:overlapStart,y:current.y,w:overlapW});
+  score++;
+  speed=Math.min(8,2+score*0.15);
+  document.getElementById('score-display').textContent='Blocks: '+score;
+  if(current.y<H/2)cameraY+=BLOCK_H;
+  current={x:0,y:current.y-BLOCK_H,w:overlapW};
+  dir=1;
+}
+
+function update(){
+  current.x+=speed*dir;
+  if(current.x+current.w>=W){dir=-1;current.x=W-current.w;}
+  if(current.x<=0){dir=1;current.x=0;}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.translate(0,cameraY);
+  stack.forEach((b,i)=>{
+    ctx.fillStyle=COLORS[i%COLORS.length];
+    ctx.fillRect(b.x,b.y,b.w,BLOCK_H-1);
+  });
+  ctx.fillStyle=COLORS[stack.length%COLORS.length];
+  ctx.fillRect(current.x,current.y,current.w,BLOCK_H-1);
+  ctx.restore();
+  ctx.fillStyle='#facc15';ctx.font='bold 18px system-ui';
+  ctx.fillText('Blocks: '+score,10,25);
+}
+
+function loop(){
+  if(!running)return;
+  if(!paused){update();draw();}
+  animId=requestAnimationFrame(loop);
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  init();cancelAnimationFrame(animId);loop();
+}
+
+function gameOver(){
+  running=false;
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('gameover-overlay').classList.remove('hidden');
+  sendSave();
+}
+
+function togglePause(){
+  if(!running)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(paused)sendSave();
+}
+
+function sendSave(){
+  window.parent.postMessage({type:'ca-save',slug:'tower-stack',state:{score}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){score=e.data.state.score||0;}
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' '||e.key==='Enter'){e.preventDefault();dropBlock();}
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+canvas.addEventListener('click',dropBlock);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();dropBlock();},{passive:false});
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Number Guess</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+#game{max-width:400px;width:100%;text-align:center}
+#game h2{color:#6366f1;margin-bottom:1rem;font-size:1.5rem}
+.input-row{display:flex;gap:.5rem;justify-content:center;margin:1rem 0}
+.input-row input{padding:.5rem;font-size:1.2rem;width:80px;text-align:center;border:2px solid #6366f1;border-radius:.5rem;background:#1e293b;color:#e2e8f0;font-family:inherit}
+.input-row button{padding:.5rem 1rem;font-size:1.1rem;border:none;border-radius:.5rem;cursor:pointer;background:#22c55e;color:#fff;font-family:inherit}
+#hint{font-size:1.3rem;margin:1rem 0;min-height:2rem;font-weight:700}
+#history{margin-top:1rem;display:flex;flex-wrap:wrap;gap:.3rem;justify-content:center}
+#history span{background:#1e293b;padding:.25rem .5rem;border-radius:.25rem;font-size:.85rem}
+.stats{margin-top:1.5rem;padding:1rem;background:#1e293b;border-radius:.5rem}
+.stats p{margin:.25rem 0}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Number Guess</h1>
+<p>I'm thinking of a number 1-100.<br>Guess it with as few tries as possible!</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="gameover-overlay" class="overlay hidden">
+<h2>Round Complete!</h2>
+<p>The number was <span id="final-number" style="color:#22c55e;font-weight:700">0</span></p>
+<p>You got it in <span id="final-guesses" style="color:#facc15;font-weight:700">0</span> guesses</p>
+<div class="stats">
+<p>Rounds played: <span id="total-rounds">0</span></p>
+<p>Average guesses: <span id="avg-guesses">0</span></p>
+<p>Best round: <span id="best-round">0</span> guesses</p>
+</div>
+<br>
+<button class="btn" onclick="newRound()">Next Round</button>
+</div>
+
+<div id="game">
+<h2>Guess the Number (1-100)</h2>
+<p>Round: <span id="round-num">1</span> | Guesses: <span id="guess-count">0</span></p>
+<div class="input-row">
+<input type="number" id="guess-input" min="1" max="100" placeholder="?" onkeydown="if(event.key==='Enter')makeGuess()">
+<button onclick="makeGuess()">Guess</button>
+</div>
+<div id="hint"></div>
+<div id="history"></div>
+</div>
+
+<script>
+let target,guesses,round=0,allScores=[];
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  round=0;allScores=[];
+  newRound();
+}
+
+function newRound(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  round++;
+  target=Math.floor(Math.random()*100)+1;
+  guesses=0;
+  document.getElementById('round-num').textContent=round;
+  document.getElementById('guess-count').textContent=0;
+  document.getElementById('hint').textContent='';
+  document.getElementById('hint').style.color='#e2e8f0';
+  document.getElementById('history').innerHTML='';
+  document.getElementById('guess-input').value='';
+  document.getElementById('guess-input').focus();
+}
+
+function makeGuess(){
+  const input=document.getElementById('guess-input');
+  const g=parseInt(input.value);
+  if(isNaN(g)||g<1||g>100)return;
+  guesses++;
+  document.getElementById('guess-count').textContent=guesses;
+  const hist=document.getElementById('history');
+  const hint=document.getElementById('hint');
+  if(g===target){
+    hint.textContent='Correct! It was '+target+'!';
+    hint.style.color='#22c55e';
+    hist.innerHTML+=`<span style="background:#22c55e;color:#0f172a;font-weight:700">${g}</span>`;
+    allScores.push(guesses);
+    setTimeout(showResults,800);
+  } else if(g<target){
+    hint.textContent='Higher!';hint.style.color='#3b82f6';
+    hist.innerHTML+=`<span style="border-left:3px solid #3b82f6">${g} ↑</span>`;
+  } else {
+    hint.textContent='Lower!';hint.style.color='#ef4444';
+    hist.innerHTML+=`<span style="border-left:3px solid #ef4444">${g} ↓</span>`;
+  }
+  input.value='';input.focus();
+}
+
+function showResults(){
+  document.getElementById('final-number').textContent=target;
+  document.getElementById('final-guesses').textContent=guesses;
+  document.getElementById('total-rounds').textContent=allScores.length;
+  document.getElementById('avg-guesses').textContent=(allScores.reduce((a,b)=>a+b,0)/allScores.length).toFixed(1);
+  document.getElementById('best-round').textContent=Math.min(...allScores);
+  document.getElementById('gameover-overlay').classList.remove('hidden');
+  window.parent.postMessage({type:'ca-save',slug:'number-guess',state:{round,allScores}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){
+    round=e.data.state.round||0;allScores=e.data.state.allScores||[];
+  }
+});
+</script>
+</body>
+</html>

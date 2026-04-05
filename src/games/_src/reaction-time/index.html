@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reaction Time</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;text-align:center;padding:1rem}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h2{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+.overlay p{font-size:1.1rem;margin-bottom:1rem;color:#e2e8f0}
+.btn{padding:.75rem 2rem;font-size:1.2rem;border:none;border-radius:.5rem;cursor:pointer;background:#6366f1;color:#fff;font-family:inherit;margin:.25rem}
+.btn:hover{background:#4f46e5}
+.hidden{display:none}
+#game-area{width:min(400px,90vw);height:min(400px,70vh);border:2px solid #6366f1;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;transition:background .15s;border-radius:.5rem;text-align:center;padding:1rem}
+#game-area.waiting{background:#ef4444}
+#game-area.ready{background:#22c55e}
+#game-area.idle{background:#1e293b}
+#game-area .msg{font-size:1.4rem;font-weight:700}
+.results{margin-top:1rem;text-align:center}
+.results p{margin:.25rem 0;font-size:1rem}
+.round-times{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:.5rem}
+.round-times span{background:#1e293b;padding:.25rem .75rem;border-radius:.25rem;font-size:.9rem}
+.round-times span.current{border:2px solid #facc15}
+</style>
+</head>
+<body>
+<div id="start-overlay" class="overlay">
+<h1>Reaction Time</h1>
+<p>When the box turns <span style="color:#22c55e;font-weight:700">GREEN</span>, click/tap as fast as you can!<br>Best of 5 rounds.</p>
+<button class="btn" onclick="startGame()">Play</button>
+</div>
+<div id="gameover-overlay" class="overlay hidden">
+<h2>Results</h2>
+<p>Average: <span id="final-avg">0</span> ms</p>
+<p>Best: <span id="final-best">0</span> ms</p>
+<div id="final-rounds" class="round-times"></div>
+<br>
+<button class="btn" onclick="startGame()">Play Again</button>
+</div>
+
+<div id="game-area" class="idle" onclick="handleClick()">
+<span class="msg" id="area-msg">Press Play to start</span>
+</div>
+<div class="results">
+<p>Round: <span id="round-num">0</span>/5</p>
+<div id="round-display" class="round-times"></div>
+</div>
+
+<script>
+const area=document.getElementById('game-area');
+const msg=document.getElementById('area-msg');
+let round=0,times=[],state='idle',greenTime=0,timeout=null;
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  round=0;times=[];
+  document.getElementById('round-display').innerHTML='';
+  nextRound();
+}
+
+function nextRound(){
+  if(round>=5){endGame();return;}
+  round++;
+  document.getElementById('round-num').textContent=round;
+  state='waiting';
+  area.className='waiting';
+  msg.textContent='Wait for green...';
+  const delay=1000+Math.random()*3000;
+  timeout=setTimeout(()=>{
+    state='ready';
+    area.className='ready';
+    msg.textContent='CLICK NOW!';
+    greenTime=performance.now();
+  },delay);
+}
+
+function handleClick(){
+  if(state==='waiting'){
+    clearTimeout(timeout);
+    state='idle';area.className='idle';
+    msg.textContent='Too early! Click to retry round.';
+    state='tooEarly';
+    return;
+  }
+  if(state==='tooEarly'){
+    nextRound();round--;nextRound(); // redo same round
+    return;
+  }
+  if(state==='ready'){
+    const rt=Math.round(performance.now()-greenTime);
+    times.push(rt);
+    state='result';area.className='idle';
+    msg.textContent=rt+' ms';
+    updateRoundDisplay();
+    setTimeout(nextRound,1200);
+  }
+}
+
+function updateRoundDisplay(){
+  const el=document.getElementById('round-display');
+  el.innerHTML=times.map((t,i)=>`<span${i===times.length-1?' class="current"':''}>${t}ms</span>`).join('');
+}
+
+function endGame(){
+  state='idle';area.className='idle';msg.textContent='Done!';
+  const avg=Math.round(times.reduce((a,b)=>a+b,0)/times.length);
+  const best=Math.min(...times);
+  document.getElementById('final-avg').textContent=avg;
+  document.getElementById('final-best').textContent=best;
+  document.getElementById('final-rounds').innerHTML=times.map(t=>`<span>${t}ms</span>`).join('');
+  document.getElementById('gameover-overlay').classList.remove('hidden');
+  window.parent.postMessage({type:'ca-save',slug:'reaction-time',state:{avg,best,times}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.state){/* no meaningful restore for this game */}
+});
+</script>
+</body>
+</html>
