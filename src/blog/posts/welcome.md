@@ -16,12 +16,8 @@ We're building a library of 200 HTML5 games across categories like puzzle, arcad
 
 Game progress, high scores, and favorites are saved in your browser's local storage. We never see it. If you clear your browser data, it's gone — because it was never anywhere else.
 
-## Play together
-
-Select games support multiplayer through WebRTC — that's direct peer-to-peer connections between browsers. Share a room code with a friend and play together. No sign-up, no server in the middle.
-
 ## What's next
 
-We'll be adding games regularly and posting updates here on the blog. If you have feedback or game suggestions, we'd love to hear from you.
+We'll be adding games regularly and posting updates here on the blog. If you have feedback or game suggestions, we'd love to hear from you at [hello@cleanarcade.com](mailto:hello@cleanarcade.com).
 
 Happy gaming.

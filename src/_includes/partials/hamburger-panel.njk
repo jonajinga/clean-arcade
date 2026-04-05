@@ -29,7 +29,7 @@
 
     <hr class="hamburger-panel__divider">
 
-    {# Navigation #}
+    {# Main navigation #}
     <nav aria-label="Navigation">
       <ul class="hamburger-panel__nav">
         {% for item in navigation %}
@@ -44,17 +44,30 @@
 
     <hr class="hamburger-panel__divider">
 
-    {# Extra links (formerly in footer) #}
-    <nav aria-label="Additional links">
+    {# Resources #}
+    <nav aria-label="Resources">
       <ul class="hamburger-panel__nav hamburger-panel__nav--secondary">
+        <li><a href="/about/" onclick="closeHamburger()">About</a></li>
+        <li><a href="/blog/" onclick="closeHamburger()">Blog</a></li>
+        <li><a href="/changelog/" onclick="closeHamburger()">Changelog</a></li>
+        <li><a href="/sitemap.xml" onclick="closeHamburger()">Sitemap</a></li>
         <li><a href="/style-guide/" onclick="closeHamburger()">Style Guide</a></li>
+      </ul>
+    </nav>
+
+    <hr class="hamburger-panel__divider">
+
+    {# Legal #}
+    <nav aria-label="Legal">
+      <ul class="hamburger-panel__nav hamburger-panel__nav--secondary">
+        <li><a href="/privacy-policy/" onclick="closeHamburger()">Privacy Policy</a></li>
         <li><a href="/feed.xml" onclick="closeHamburger()">RSS</a></li>
-        <li><a href="/privacy-policy/" onclick="closeHamburger()">Privacy</a></li>
       </ul>
     </nav>
 
     <div class="hamburger-panel__footer">
       <span>&copy; {{ "" | year }} {{ meta.title }}</span>
+      <span>Contact: <a href="mailto:{{ meta.email }}">{{ meta.email }}</a></span>
       <span>Website by <a href="https://www.pikespeakwebdesigns.com" target="_blank" rel="noopener">Pikes Peak Web Designs</a></span>
     </div>
   </div>

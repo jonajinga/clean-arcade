@@ -7,6 +7,7 @@
   display: flex;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  margin-bottom: var(--space-sm);
 }
 
 .game-filter__sort,
@@ -27,4 +28,35 @@
 .game-filter__search:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* A-Z letter filter */
+.game-filter__az {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.game-filter__letter {
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+  min-width: 28px;
+  text-align: center;
+}
+
+.game-filter__letter:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.game-filter__letter.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }

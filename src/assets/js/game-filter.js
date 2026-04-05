@@ -1,10 +1,9 @@
 /* Game Filtering & Sorting */
 var activeCategory = "all";
+var activeLetter = "all";
 
 function filterGames(category) {
   activeCategory = category;
-  var cards = document.querySelectorAll(".game-card");
-  var visible = 0;
 
   /* Sync dropdown if called programmatically */
   var catSelect = document.getElementById("category-select");
@@ -12,14 +11,33 @@ function filterGames(category) {
     catSelect.value = category;
   }
 
+  applyFilters();
+}
+
+function filterByLetter(letter) {
+  activeLetter = letter;
+
+  var btns = document.querySelectorAll(".game-filter__letter");
+  btns.forEach(function (btn) {
+    btn.classList.toggle("active", btn.getAttribute("data-letter") === letter);
+  });
+
+  applyFilters();
+}
+
+function applyFilters() {
+  var cards = document.querySelectorAll(".game-card");
+  var visible = 0;
+
+  var searchVal = document.getElementById("game-search")
+    ? document.getElementById("game-search").value.toLowerCase()
+    : "";
+
   cards.forEach(function (card) {
-    var match = category === "all" || card.getAttribute("data-category") === category;
-    var searchVal = document.getElementById("game-search")
-      ? document.getElementById("game-search").value.toLowerCase()
-      : "";
-    var titleMatch =
-      !searchVal || card.getAttribute("data-title").toLowerCase().includes(searchVal);
-    var show = match && titleMatch;
+    var catMatch = activeCategory === "all" || card.getAttribute("data-category") === activeCategory;
+    var titleMatch = !searchVal || card.getAttribute("data-title").toLowerCase().includes(searchVal);
+    var letterMatch = activeLetter === "all" || card.getAttribute("data-title").charAt(0).toUpperCase() === activeLetter;
+    var show = catMatch && titleMatch && letterMatch;
     card.style.display = show ? "" : "none";
     if (show) visible++;
   });
@@ -31,7 +49,7 @@ function filterGames(category) {
 }
 
 function searchGames(query) {
-  filterGames(activeCategory);
+  applyFilters();
 }
 
 function sortGames(sortBy) {
@@ -40,20 +58,7 @@ function sortGames(sortBy) {
   var cards = Array.from(grid.querySelectorAll(".game-card"));
 
   cards.sort(function (a, b) {
-    if (sortBy === "title") {
-      return a.getAttribute("data-title").localeCompare(b.getAttribute("data-title"));
-    }
-    if (sortBy === "newest") {
-      return b.getAttribute("data-date").localeCompare(a.getAttribute("data-date"));
-    }
-    if (sortBy === "difficulty") {
-      var order = { easy: 0, medium: 1, hard: 2 };
-      return (
-        (order[a.getAttribute("data-difficulty")] || 0) -
-        (order[b.getAttribute("data-difficulty")] || 0)
-      );
-    }
-    return 0;
+    return a.getAttribute("data-title").localeCompare(b.getAttribute("data-title"));
   });
 
   cards.forEach(function (card) {
@@ -64,11 +69,10 @@ function sortGames(sortBy) {
 }
 
 function updateHash() {
-  var sort = document.getElementById("sort-select");
   var hash = "";
   if (activeCategory !== "all") hash += "category=" + activeCategory;
-  if (sort && sort.value !== "title") {
-    hash += (hash ? "&" : "") + "sort=" + sort.value;
+  if (activeLetter !== "all") {
+    hash += (hash ? "&" : "") + "letter=" + activeLetter;
   }
   if (hash) {
     history.replaceState(null, "", "#" + hash);
@@ -86,12 +90,8 @@ document.addEventListener("DOMContentLoaded", function () {
     var parts = pair.split("=");
     params[parts[0]] = parts[1];
   });
-  if (params.sort) {
-    var sortSelect = document.getElementById("sort-select");
-    if (sortSelect) {
-      sortSelect.value = params.sort;
-      sortGames(params.sort);
-    }
+  if (params.letter) {
+    filterByLetter(params.letter);
   }
   if (params.category) {
     filterGames(params.category);

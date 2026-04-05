@@ -113,7 +113,6 @@
 
 /* Muted badge variants — minimal color */
 .badge--category { background: var(--bg-alt); color: var(--text-muted); }
-.badge--multiplayer { background: var(--bg-alt); color: var(--text-muted); }
 .badge--mobile { background: var(--bg-alt); color: var(--text-muted); }
 .badge--desktop { background: var(--bg-alt); color: var(--text-muted); }
 .badge--easy { color: var(--text-muted); }

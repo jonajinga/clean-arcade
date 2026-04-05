@@ -10,9 +10,12 @@
     <label class="sr-only" for="sort-select">Sort by</label>
     <select id="sort-select" class="game-filter__sort" onchange="sortGames(this.value)">
       <option value="title">A-Z</option>
-      <option value="newest">Newest</option>
     </select>
     <input type="search" id="game-search" class="game-filter__search" placeholder="Search games..." oninput="searchGames(this.value)" aria-label="Search games">
+  </div>
+  <div class="game-filter__az" id="az-filter">
+    <button class="game-filter__letter active" onclick="filterByLetter('all')" data-letter="all">All</button>
+    {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<button class="game-filter__letter" onclick="filterByLetter('{{ letter }}')" data-letter="{{ letter }}">{{ letter }}</button>{% endfor %}
   </div>
 </div>
 

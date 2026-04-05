@@ -32,10 +32,6 @@ bodyClass: game-active
       <iframe id="game-frame" src="{{ game.gamePath }}" title="Play {{ game.title }}"></iframe>
     </div>
   </div>
-
-  {% if game.multiplayer %}
-  {% include "partials/multiplayer-ui.njk" %}
-  {% endif %}
 </section>
 
 <script>
@@ -46,4 +42,3 @@ var GAME_SLUG = "{{ game.slug }}";
 <script src="/assets/js/save-system.js" defer></script>
 <script src="/assets/js/my-games.js" defer></script>
 <script src="/assets/js/share.js" defer></script>
-{% if game.multiplayer %}<script type="module" src="/assets/js/multiplayer.js"></script>{% endif %}
