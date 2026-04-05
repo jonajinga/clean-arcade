@@ -191,15 +191,6 @@ function filterBySlugList(slugs) {
   updateClearBtn();
 }
 
-/* View toggle — grid vs list */
-function toggleView() {
-  var grid = document.getElementById("game-grid");
-  if (!grid) return;
-  var isList = grid.classList.toggle("game-grid--list");
-  document.getElementById("view-icon-list").style.display = isList ? "none" : "";
-  document.getElementById("view-icon-grid").style.display = isList ? "" : "none";
-  localStorage.setItem("ca-view", isList ? "list" : "grid");
-}
 
 function toggleDropdown(id) {
   var target = document.getElementById(id);
@@ -228,11 +219,6 @@ document.addEventListener("keydown", function(e) {
 
 document.addEventListener("DOMContentLoaded", function () {
   sortAlpha();
-
-  /* Restore view preference */
-  if (localStorage.getItem("ca-view") === "list") {
-    toggleView();
-  }
 
   /* Restore filters from hash */
   var hash = window.location.hash.slice(1);

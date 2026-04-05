@@ -41,8 +41,7 @@ permalink: /my-games/
       var card = document.createElement("a");
       card.href = "/games/" + game.slug + "/";
       card.className = "game-card";
-      card.innerHTML =
-        '<div class="game-card__thumb"><div class="game-card__thumb-placeholder" style="background: var(--cat-' + game.category + ')"><span class="game-card__title">' + game.title + '</span></div></div>';
+      card.innerHTML = '<span class="game-card__list-title">' + game.title + '</span>';
       grid.appendChild(card);
     });
   }
