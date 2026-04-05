@@ -6,8 +6,11 @@ permalink: /style-guide/
 eleventyExcludeFromCollections: true
 ---
 <div class="content-page">
+  <p class="page-intro">Design tokens, components, and patterns used across Clean Arcade.</p>
+
   <div class="style-section">
     <h2>Colors</h2>
+    <h3>Core palette</h3>
     <div class="color-swatches">
       <div class="color-swatch">
         <div class="color-swatch__preview" style="background: var(--navy-950);"></div>
@@ -15,9 +18,19 @@ eleventyExcludeFromCollections: true
         <div class="color-swatch__value">#0f172a</div>
       </div>
       <div class="color-swatch">
+        <div class="color-swatch__preview" style="background: var(--navy-900);"></div>
+        <div class="color-swatch__label">Navy 900</div>
+        <div class="color-swatch__value">#1e293b</div>
+      </div>
+      <div class="color-swatch">
         <div class="color-swatch__preview" style="background: var(--accent);"></div>
         <div class="color-swatch__label">Accent</div>
         <div class="color-swatch__value">#6366f1</div>
+      </div>
+      <div class="color-swatch">
+        <div class="color-swatch__preview" style="background: var(--accent-hover);"></div>
+        <div class="color-swatch__label">Accent Hover</div>
+        <div class="color-swatch__value">#4f46e5</div>
       </div>
       <div class="color-swatch">
         <div class="color-swatch__preview" style="background: var(--green);"></div>
@@ -36,7 +49,7 @@ eleventyExcludeFromCollections: true
       </div>
     </div>
 
-    <h3 style="margin-top: var(--space-xl);">Category Colors</h3>
+    <h3>Category colors</h3>
     <div class="color-swatches">
       {% for cat in categories %}
         <div class="color-swatch">
@@ -50,17 +63,20 @@ eleventyExcludeFromCollections: true
   <div class="style-section">
     <h2>Typography</h2>
     <div class="type-sample">
-      <h1>Heading 1 — Space Grotesk</h1>
-      <h2>Heading 2 — Space Grotesk</h2>
-      <h3>Heading 3 — Space Grotesk</h3>
+      <h1 style="margin-bottom: var(--space-sm);">Heading 1 — Space Grotesk</h1>
+      <h2 style="border: none; margin-top: 0; padding-bottom: 0; margin-bottom: var(--space-sm);">Heading 2 — Space Grotesk</h2>
+      <h3 style="margin-top: 0; margin-bottom: var(--space-sm);">Heading 3 — Space Grotesk</h3>
       <p>Body text — Inter. Clean Arcade is built on a simple idea: games should be fun, not frustrating.</p>
       <p class="text-muted">Muted text for secondary information and descriptions.</p>
     </div>
+    <p>Display font: <strong>Space Grotesk</strong> (headings, version badges, nav labels)<br>
+    Body font: <strong>Inter</strong> (everything else)<br>
+    Served via <a href="https://fonts.bunny.net" target="_blank" rel="noopener">Bunny Fonts</a> (GDPR-compliant).</p>
   </div>
 
   <div class="style-section">
     <h2>Buttons</h2>
-    <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-lg);">
+    <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; align-items: center;">
       <button class="btn btn--primary">Primary</button>
       <button class="btn btn--outline">Outline</button>
       <button class="btn btn--primary btn--sm">Small</button>
@@ -78,5 +94,29 @@ eleventyExcludeFromCollections: true
       <span class="badge badge--mobile">Mobile OK</span>
       <span class="badge badge--desktop">Desktop only</span>
     </div>
+  </div>
+
+  <div class="style-section">
+    <h2>Components</h2>
+
+    <h3>Game filter bar</h3>
+    <p>Category dropdown, A-Z letter filter, and search input. All filtering is client-side JavaScript.</p>
+
+    <h3>Game cards</h3>
+    <p>Auto-fill grid (min 160px mobile, 180px desktop). Each card shows game title on a colored placeholder background using the category color variable.</p>
+
+    <h3>Game embed</h3>
+    <p>Full-width on mobile, max 960px centered on desktop. Control bar with back, info, and share buttons. Info overlay for game controls and description.</p>
+
+    <h3>Hamburger menu</h3>
+    <p>Slide-in panel from right. Contains search, theme toggle, translate, main navigation, resources section (About, Blog, Changelog, Sitemap, Style Guide), legal links, and footer credit.</p>
+
+    <h3>Dark mode</h3>
+    <p>System preference detection with manual toggle. Inline script in <code>&lt;head&gt;</code> prevents flash. Theme stored in <code>localStorage["theme"]</code>.</p>
+  </div>
+
+  <div class="style-section">
+    <h2>Spacing scale</h2>
+    <p>Based on a consistent scale from <code>--space-xs</code> (0.25rem) to <code>--space-3xl</code> (4rem). Section padding uses <code>clamp(3rem, 2rem + 4vw, 6rem)</code> for fluid scaling.</p>
   </div>
 </div>

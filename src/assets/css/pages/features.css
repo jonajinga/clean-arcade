@@ -89,6 +89,11 @@
 }
 
 /* Content page shared styles */
+.page-title {
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-lg);
+}
+
 .content-page h2 {
   font-size: var(--text-xl);
   margin-top: var(--space-2xl);
@@ -97,8 +102,14 @@
   border-bottom: 1px solid var(--border);
 }
 
-.content-page h2:first-child {
+.content-page h2:first-of-type {
   margin-top: 0;
+}
+
+.content-page h3 {
+  font-size: var(--text-lg);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-sm);
 }
 
 .content-page p {
