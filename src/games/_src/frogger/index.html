@@ -6,7 +6,7 @@
 <title>Frogger</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem;touch-action:manipulation}
 h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
 #info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem}
 #info span{color:#6366f1}
@@ -61,42 +61,51 @@ function resize(){
   canvas.width=W;canvas.height=H;
 }
 resize();
-window.addEventListener('resize',()=>{if(running){resize();draw();}});
+window.addEventListener('resize',()=>{resize();if(running)draw();});
 
-// Lane config: rows 1-5 road, row 6 median, rows 7-11 river, row 0 home, row 12 start
+/*
+  Layout (row 0 = top of canvas):
+  Row 0: Home row (goal slots)
+  Rows 1-5: River lanes
+  Row 6: Median (safe)
+  Rows 7-11: Road lanes
+  Row 12: Start row (safe)
+*/
+
 function initLanes(){
   lanes=[];
-  // Road lanes (rows 1-5 from bottom, canvas rows 11-7)
-  const roadSpeeds=[1.2,-1.5,1.8,-1,1.4];
-  const roadLengths=[2,3,2,3,2];
-  for(let i=0;i<5;i++){
-    const row=11-i;
-    const dir=roadSpeeds[i]>0?1:-1;
-    const spd=Math.abs(roadSpeeds[i]);
-    const len=roadLengths[i];
-    const gap=len+3;
+  // Road lanes: rows 7-11
+  const roadCfg=[
+    {row:7, dir:1, speed:1.2, len:2, count:3},
+    {row:8, dir:-1,speed:1.5, len:3, count:2},
+    {row:9, dir:1, speed:1.8, len:2, count:3},
+    {row:10,dir:-1,speed:1.0, len:3, count:2},
+    {row:11,dir:1, speed:1.4, len:2, count:3}
+  ];
+  for(const cfg of roadCfg){
     const objs=[];
-    for(let j=-1;j<Math.ceil(COLS/gap)+2;j++){
-      objs.push({x:j*gap*CELL,w:len*CELL});
+    const spacing=W/cfg.count;
+    for(let j=0;j<cfg.count;j++){
+      objs.push({x:j*spacing, w:cfg.len*CELL});
     }
-    lanes.push({row,type:'road',dir,speed:spd,len,objs});
+    lanes.push({row:cfg.row,type:'road',dir:cfg.dir,speed:cfg.speed,objs});
   }
-  // River lanes (rows 7-11 from bottom → canvas rows 5-1)
-  const riverSpeeds=[-1,1.3,-0.8,1.5,-1.2];
-  const riverLengths=[3,4,2,3,4];
-  for(let i=0;i<5;i++){
-    const row=5-i;
-    const dir=riverSpeeds[i]>0?1:-1;
-    const spd=Math.abs(riverSpeeds[i]);
-    const len=riverLengths[i];
-    const gap=len+2;
+  // River lanes: rows 1-5
+  const riverCfg=[
+    {row:1, dir:-1, speed:1.0, len:3, count:3},
+    {row:2, dir:1,  speed:1.3, len:4, count:2},
+    {row:3, dir:-1, speed:0.8, len:2, count:4},
+    {row:4, dir:1,  speed:1.5, len:3, count:3},
+    {row:5, dir:-1, speed:1.2, len:4, count:2}
+  ];
+  for(const cfg of riverCfg){
     const objs=[];
-    for(let j=-1;j<Math.ceil(COLS/gap)+2;j++){
-      objs.push({x:j*gap*CELL,w:len*CELL});
+    const spacing=W/cfg.count;
+    for(let j=0;j<cfg.count;j++){
+      objs.push({x:j*spacing, w:cfg.len*CELL});
     }
-    lanes.push({row,type:'river',dir,speed:spd,len,objs});
+    lanes.push({row:cfg.row,type:'river',dir:cfg.dir,speed:cfg.speed,objs});
   }
-  // Homes at row 0
   homes=[1,4,7,10];
   homeFilled=[false,false,false,false];
 }
@@ -124,12 +133,13 @@ function moveFrog(dx,dy){
   const nc=frog.col+dx;
   if(nc<0||nc>=COLS||nr<0||nr>12)return;
   frog.row=nr;frog.col=nc;
+  // Score for moving forward
+  if(dy===-1){score+=10;updateUI();}
   checkPosition();
 }
 
 function checkPosition(){
   const r=frog.row;
-  // Home row
   if(r===0){
     let landed=false;
     for(let i=0;i<homes.length;i++){
@@ -147,12 +157,7 @@ function checkPosition(){
     }
     resetFrog();
     updateUI();
-    return;
   }
-  // Median row 6 — safe
-  if(r===6||r===12)return;
-  // Road check done in update via collision
-  // River check done in update
 }
 
 function die(){
@@ -177,7 +182,6 @@ function gameOver(){
 function saveState(){
   window.parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');
 }
-
 window.addEventListener('message',e=>{
   if(e.data&&e.data.type==='ca-load'&&e.data.state){
     highScore=e.data.state.highScore||0;
@@ -185,37 +189,59 @@ window.addEventListener('message',e=>{
   }
 });
 
+function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;
+}
+
 function update(dt){
   if(paused||!running)return;
-  const frogPx=frog.col*CELL;
-  const frogPy=frog.row*CELL;
+  const frogX=frog.col*CELL;
+  const frogY=frog.row*CELL;
+  const frogPad=CELL*0.15;
+  const frogW=CELL-frogPad*2;
+  const frogH=CELL-frogPad*2;
+
   let onLog=false;
   let logDx=0;
 
   for(const lane of lanes){
+    const movePx=lane.dir*lane.speed*dt*60;
+    // Move all objects
     for(const obj of lane.objs){
-      obj.x+=lane.dir*lane.speed*dt*60;
-      if(lane.dir>0&&obj.x>W+CELL*2)obj.x-=(lane.len+Math.ceil(COLS/lane.len)*2+2)*CELL;
-      if(lane.dir<0&&obj.x<-obj.w-CELL*2)obj.x+=(lane.len+Math.ceil(COLS/lane.len)*2+2)*CELL;
+      obj.x+=movePx;
+      // Simple wrapping: reset to opposite side
+      if(lane.dir>0&&obj.x>W){
+        obj.x=-obj.w;
+      }else if(lane.dir<0&&obj.x+obj.w<0){
+        obj.x=W;
+      }
     }
+
+    // Check collision with frog
     if(lane.row===frog.row){
       if(lane.type==='road'){
         for(const obj of lane.objs){
-          if(frogPx+CELL*0.8>obj.x&&frogPx+CELL*0.2<obj.x+obj.w){
+          if(rectsOverlap(frogX+frogPad,frogY+frogPad,frogW,frogH,obj.x,lane.row*CELL+2,obj.w,CELL-4)){
             die();return;
           }
         }
       }
       if(lane.type==='river'){
+        // Check if frog is on ANY log in this lane
         for(const obj of lane.objs){
-          if(frogPx+CELL*0.5>obj.x&&frogPx+CELL*0.5<obj.x+obj.w){
+          if(rectsOverlap(frogX+frogPad,frogY+frogPad,frogW,frogH,obj.x,lane.row*CELL+4,obj.w,CELL-8)){
             onLog=true;
-            logDx=lane.dir*lane.speed*dt*60;
+            logDx=movePx;
           }
         }
-        if(!onLog){die();return;}
+        if(!onLog){
+          die();return;
+        }
+        // Move frog with log
         frog.col+=logDx/CELL;
-        if(frog.col<0||frog.col>=COLS-1){die();return;}
+        if(frog.col<0||frog.col>=COLS){
+          die();return;
+        }
       }
     }
   }
@@ -225,7 +251,7 @@ function draw(){
   ctx.fillStyle='#0f172a';
   ctx.fillRect(0,0,W,H);
 
-  // Home row
+  // Home row (row 0)
   ctx.fillStyle='#134e4a';
   ctx.fillRect(0,0,W,CELL);
   for(let i=0;i<homes.length;i++){
@@ -233,46 +259,23 @@ function draw(){
     ctx.fillRect(homes[i]*CELL,0,CELL*2,CELL);
   }
 
-  // River bg
+  // River background (rows 1-5)
   ctx.fillStyle='#1e3a5f';
   for(let r=1;r<=5;r++)ctx.fillRect(0,r*CELL,W,CELL);
 
-  // Median
+  // Median (row 6)
   ctx.fillStyle='#334155';
   ctx.fillRect(0,6*CELL,W,CELL);
 
-  // Road bg
+  // Road background (rows 7-11)
   ctx.fillStyle='#1e293b';
   for(let r=7;r<=11;r++)ctx.fillRect(0,r*CELL,W,CELL);
 
-  // Start row
+  // Start row (row 12)
   ctx.fillStyle='#334155';
   ctx.fillRect(0,12*CELL,W,CELL);
 
-  // Lane objects
-  for(const lane of lanes){
-    if(lane.type==='road'){
-      ctx.fillStyle='#ef4444';
-      for(const obj of lane.objs){
-        ctx.fillRect(obj.x,lane.row*CELL+2,obj.w,CELL-4);
-        // Wheels
-        ctx.fillStyle='#1e293b';
-        ctx.fillRect(obj.x+4,lane.row*CELL+CELL-6,8,4);
-        ctx.fillRect(obj.x+obj.w-12,lane.row*CELL+CELL-6,8,4);
-        ctx.fillStyle='#ef4444';
-      }
-    }else{
-      ctx.fillStyle='#854d0e';
-      for(const obj of lane.objs){
-        ctx.beginPath();
-        const cy=lane.row*CELL+CELL/2;
-        ctx.roundRect(obj.x,lane.row*CELL+4,obj.w,CELL-8,4);
-        ctx.fill();
-      }
-    }
-  }
-
-  // Draw road lines
+  // Road lane divider lines
   ctx.strokeStyle='#facc15';
   ctx.setLineDash([CELL/3,CELL/3]);
   ctx.lineWidth=2;
@@ -283,6 +286,41 @@ function draw(){
     ctx.stroke();
   }
   ctx.setLineDash([]);
+
+  // Draw lane objects
+  for(const lane of lanes){
+    if(lane.type==='road'){
+      for(const obj of lane.objs){
+        // Car body
+        ctx.fillStyle='#ef4444';
+        ctx.fillRect(obj.x,lane.row*CELL+2,obj.w,CELL-4);
+        // Windshield
+        ctx.fillStyle='#7dd3fc';
+        const wsX=lane.dir>0?obj.x+obj.w-CELL*0.4:obj.x+4;
+        ctx.fillRect(wsX,lane.row*CELL+6,CELL*0.35,CELL-14);
+        // Wheels
+        ctx.fillStyle='#1e293b';
+        ctx.fillRect(obj.x+4,lane.row*CELL+CELL-6,8,4);
+        ctx.fillRect(obj.x+obj.w-12,lane.row*CELL+CELL-6,8,4);
+      }
+    }else{
+      // Logs - simple fillRect, no roundRect
+      ctx.fillStyle='#854d0e';
+      for(const obj of lane.objs){
+        ctx.fillRect(obj.x,lane.row*CELL+4,obj.w,CELL-8);
+        // Wood grain lines
+        ctx.strokeStyle='#a16207';
+        ctx.lineWidth=1;
+        const logY=lane.row*CELL;
+        for(let i=1;i<3;i++){
+          ctx.beginPath();
+          ctx.moveTo(obj.x+2,logY+4+i*(CELL-8)/3);
+          ctx.lineTo(obj.x+obj.w-2,logY+4+i*(CELL-8)/3);
+          ctx.stroke();
+        }
+      }
+    }
+  }
 
   // Frog
   const fx=frog.col*CELL;
@@ -318,6 +356,7 @@ function startGame(){
   document.getElementById('startOverlay').classList.add('hidden');
   document.getElementById('overOverlay').classList.add('hidden');
   document.getElementById('pauseBtn').classList.remove('hidden');
+  resize();
   initGame();
   running=true;paused=false;
   document.getElementById('pauseBtn').textContent='⏸';
@@ -359,8 +398,6 @@ canvas.addEventListener('touchend',e=>{
   if(Math.abs(dx)>Math.abs(dy)){moveFrog(dx>0?1:-1,0);}
   else{moveFrog(0,dy>0?1:-1);}
 },{passive:false});
-
-resize();
 </script>
 </body>
 </html>

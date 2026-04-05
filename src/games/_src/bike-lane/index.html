@@ -48,8 +48,8 @@ const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 let W,H,ground;
 function resize(){
-  W=canvas.width=Math.min(window.innerWidth-20,600);
-  H=canvas.height=Math.round(W*0.5);
+  W=canvas.width=Math.min(window.innerWidth-16,800);
+  H=canvas.height=Math.round(Math.min(window.innerHeight-120,W*0.6));
   ground=H*0.78;
 }
 resize();window.addEventListener('resize',resize);
@@ -124,9 +124,12 @@ function jump(){
 }
 
 function checkCollision(){
-  const bx=bikeX,by=bikeY,bw=bikeW,bh=bikeH+8;
+  /* Check wheel positions against obstacle — tight hitbox */
+  const wheelY=bikeY+bikeH+6;
+  const frontX=bikeX+bikeW-8;
+  const backX=bikeX+8;
   for(const o of obstacles){
-    if(bx+bw>o.x+5&&bx<o.x+o.w-5&&by+bh>o.y+5&&by+bh<o.y+o.h+bh){
+    if(frontX>o.x+8&&backX<o.x+o.w-8&&wheelY>o.y+o.h*0.3){
       return true;
     }
   }

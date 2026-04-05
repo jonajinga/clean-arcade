@@ -6,7 +6,7 @@
 <title>Golf Putt</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;touch-action:manipulation}
 h1{font-size:1.4rem;margin:12px 0 4px}
 #hud{display:flex;gap:18px;font-size:1.05rem;margin-bottom:6px;flex-wrap:wrap;justify-content:center}
 #hud span{color:#facc15}
@@ -119,34 +119,45 @@ function ballMoving(){return Math.abs(ball.vx)>0.05||Math.abs(ball.vy)>0.05;}
 
 function update(){
   if(paused||!running||sunk)return;
-  ball.x+=ball.vx;ball.y+=ball.vy;
-  // Friction
+  const br=ball.r*scale;
+  // Sub-step physics to prevent clipping
+  const steps=3;
+  for(let s=0;s<steps;s++){
+    ball.x+=ball.vx/steps;
+    ball.y+=ball.vy/steps;
+    // Wall collision - proper line-segment to circle
+    walls.forEach(w=>{
+      const wx=w[2]-w[0],wy=w[3]-w[1];
+      const wLenSq=wx*wx+wy*wy;
+      if(wLenSq===0)return;
+      let t=((ball.x-w[0])*wx+(ball.y-w[1])*wy)/wLenSq;
+      t=Math.max(0,Math.min(1,t));
+      const cx=w[0]+t*wx,cy=w[1]+t*wy;
+      const ddx=ball.x-cx,ddy=ball.y-cy;
+      const dist=Math.sqrt(ddx*ddx+ddy*ddy);
+      const minDist=br+2;
+      if(dist<minDist&&dist>0.001){
+        const nx=ddx/dist,ny=ddy/dist;
+        ball.x=cx+nx*minDist;
+        ball.y=cy+ny*minDist;
+        const dot=ball.vx*nx+ball.vy*ny;
+        if(dot<0){
+          ball.vx-=1.8*dot*nx;
+          ball.vy-=1.8*dot*ny;
+          ball.vx*=0.85;ball.vy*=0.85;
+        }
+      }
+    });
+    // Bounds
+    if(ball.x<br){ball.x=br;ball.vx*=-0.7;}
+    if(ball.x>W-br){ball.x=W-br;ball.vx*=-0.7;}
+    if(ball.y<br){ball.y=br;ball.vy*=-0.7;}
+    if(ball.y>H-br){ball.y=H-br;ball.vy*=-0.7;}
+  }
+  // Friction (outside substeps)
   ball.vx*=0.985;ball.vy*=0.985;
   if(Math.abs(ball.vx)<0.05)ball.vx=0;
   if(Math.abs(ball.vy)<0.05)ball.vy=0;
-  // Wall collision
-  walls.forEach(w=>{
-    const wx=w[2]-w[0],wy=w[3]-w[1];
-    const wl=Math.sqrt(wx*wx+wy*wy);
-    const nx=-wy/wl,ny=wx/wl;
-    // Project ball onto wall normal
-    const t=((ball.x-w[0])*wx+(ball.y-w[1])*wy)/(wl*wl);
-    if(t>=0&&t<=1){
-      const cx=w[0]+t*wx,cy=w[1]+t*wy;
-      const dx=ball.x-cx,dy=ball.y-cy;
-      const dist=Math.sqrt(dx*dx+dy*dy);
-      if(dist<ball.r*scale+3){
-        const dot=ball.vx*nx+ball.vy*ny;
-        ball.vx-=1.6*dot*nx;ball.vy-=1.6*dot*ny;
-        ball.x=cx+nx*(ball.r*scale+4);ball.y=cy+ny*(ball.r*scale+4);
-      }
-    }
-  });
-  // Bounds
-  if(ball.x<ball.r*scale){ball.x=ball.r*scale;ball.vx*=-0.7;}
-  if(ball.x>W-ball.r*scale){ball.x=W-ball.r*scale;ball.vx*=-0.7;}
-  if(ball.y<ball.r*scale){ball.y=ball.r*scale;ball.vy*=-0.7;}
-  if(ball.y>H-ball.r*scale){ball.y=H-ball.r*scale;ball.vy*=-0.7;}
   // Check hole
   const dx=ball.x-hole.x,dy=ball.y-hole.y;
   const spd=Math.sqrt(ball.vx*ball.vx+ball.vy*ball.vy);

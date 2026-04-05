@@ -1,6 +1,8 @@
-/* Search — dynamically loads Pagefind */
+/* Search — simple game search modal */
 var searchModal = null;
-var pagefindLoaded = false;
+var searchInput = null;
+var searchResults = null;
+var allGamesData = null;
 
 function openSearch() {
   if (!searchModal) {
@@ -8,49 +10,67 @@ function openSearch() {
     searchModal.className = "search-modal";
     searchModal.setAttribute("role", "dialog");
     searchModal.setAttribute("aria-label", "Search");
-    searchModal.innerHTML = '<div class="search-modal__content" id="pagefind-container"><p style="padding:2rem;text-align:center;color:#94a3b8">Loading search...</p></div>';
+    searchModal.innerHTML =
+      '<div class="search-modal__content">' +
+      '<input type="search" class="search-modal__input" placeholder="Search games..." autofocus>' +
+      '<div class="search-modal__results"></div>' +
+      '</div>';
     searchModal.addEventListener("click", function (e) {
       if (e.target === searchModal) closeSearch();
     });
     document.body.appendChild(searchModal);
+    searchInput = searchModal.querySelector(".search-modal__input");
+    searchResults = searchModal.querySelector(".search-modal__results");
+    searchInput.addEventListener("input", function () {
+      renderSearchResults(this.value.toLowerCase().trim());
+    });
+  }
+
+  /* Load game data from the page if available */
+  if (!allGamesData) {
+    var cards = document.querySelectorAll(".game-card");
+    if (cards.length) {
+      allGamesData = [];
+      cards.forEach(function (card) {
+        allGamesData.push({
+          title: card.getAttribute("data-title") || card.textContent.trim(),
+          href: card.getAttribute("href"),
+          category: card.getAttribute("data-category") || ""
+        });
+      });
+    }
+  }
+
+  /* Fallback: fetch from /games/ pages */
+  if (!allGamesData || !allGamesData.length) {
+    allGamesData = [];
+    searchResults.innerHTML = '<p style="color:#94a3b8;padding:1rem;">Search from the home page.</p>';
   }
 
   searchModal.classList.add("open");
   document.body.style.overflow = "hidden";
+  searchInput.value = "";
+  searchInput.focus();
+  renderSearchResults("");
+}
 
-  if (!pagefindLoaded) {
-    pagefindLoaded = true;
-    /* Load Pagefind CSS */
-    var link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "/pagefind/pagefind-ui.css";
-    document.head.appendChild(link);
-    /* Load Pagefind JS */
-    var script = document.createElement("script");
-    script.src = "/pagefind/pagefind-ui.js";
-    script.onload = function () {
-      document.getElementById("pagefind-container").innerHTML = "";
-      new PagefindUI({
-        element: "#pagefind-container",
-        showSubResults: true,
-        showImages: false,
-      });
-      setTimeout(function () {
-        var input = document.querySelector(".pagefind-ui__search-input");
-        if (input) input.focus();
-      }, 50);
-    };
-    script.onerror = function () {
-      document.getElementById("pagefind-container").innerHTML =
-        '<p style="padding:2rem;text-align:center;color:#94a3b8">Search unavailable in dev mode.</p>';
-    };
-    document.head.appendChild(script);
-  } else {
-    setTimeout(function () {
-      var input = searchModal.querySelector(".pagefind-ui__search-input");
-      if (input) input.focus();
-    }, 50);
+function renderSearchResults(query) {
+  if (!searchResults || !allGamesData) return;
+  if (!query) {
+    searchResults.innerHTML = '<p style="color:#94a3b8;padding:0.5rem;">Type to search ' + allGamesData.length + ' games</p>';
+    return;
   }
+  var matches = allGamesData.filter(function (g) {
+    return g.title.toLowerCase().indexOf(query) !== -1 ||
+           g.category.toLowerCase().indexOf(query) !== -1;
+  });
+  if (!matches.length) {
+    searchResults.innerHTML = '<p style="color:#94a3b8;padding:0.5rem;">No games found</p>';
+    return;
+  }
+  searchResults.innerHTML = matches.map(function (g) {
+    return '<a href="' + g.href + '" class="search-modal__item">' + g.title + ' <span>' + g.category + '</span></a>';
+  }).join("");
 }
 
 function closeSearch() {

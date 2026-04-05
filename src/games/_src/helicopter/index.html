@@ -6,7 +6,7 @@
 <title>Helicopter</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;touch-action:manipulation}
 h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
 .overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;text-align:center;gap:1rem}
 .overlay h2{font-size:2rem;color:#facc15}
@@ -14,7 +14,7 @@ h1{font-size:1.4rem;margin:.5rem 0;color:#facc15}
 .btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:.5rem;cursor:pointer;font-family:inherit}
 .btn:hover{background:#818cf8}
 .hidden{display:none!important}
-#game{display:flex;flex-direction:column;align-items:center;width:100%;max-width:600px;padding:.5rem}
+#game{display:flex;flex-direction:column;align-items:center;width:100%;max-width:820px;padding:.5rem}
 .hud{display:flex;justify-content:space-between;width:100%;font-size:.85rem;margin-bottom:.3rem}
 .hud span{background:#1e293b;padding:.2rem .6rem;border-radius:.25rem}
 canvas{background:#1e293b;border-radius:.5rem;display:block;max-width:100%;touch-action:none}
@@ -37,20 +37,21 @@ canvas{background:#1e293b;border-radius:.5rem;display:block;max-width:100%;touch
 <h1>Helicopter</h1>
 <div class="hud">
 <span>Distance: <b id="dist">0</b></span>
+<span>Speed: <b id="spdEl">1.0</b>x</span>
 <span>Best: <b id="high">0</b></span>
 </div>
-<canvas id="canvas" width="600" height="400"></canvas>
+<canvas id="canvas" width="800" height="400"></canvas>
 <div class="pause-row"><button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button></div>
 </div>
 <script>
 const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
-const W=600,H=400;
+const W=800,H=400;
 let heli,cave,score,highScore=0,gameActive=false,paused=false,holding=false,lastTime,raf,scrollSpeed;
-function resize(){let w=Math.min(600,window.innerWidth-16);canvas.style.width=w+'px';canvas.style.height=(w*H/W)+'px';}
+function resize(){let w=Math.min(window.innerWidth-16,800);canvas.style.width=w+'px';canvas.style.height=(w*H/W)+'px';}
 window.addEventListener('resize',resize);
 function initCave(){
-  cave=[];let top=50,bot=H-50,gap=220;
+  cave=[];let top=50,bot=H-50,gap=250;
   for(let x=0;x<W+100;x+=4){
     top+=randFloat(-3,3);bot+=randFloat(-3,3);
     top=Math.max(10,Math.min(H/2-gap/2-10,top));
@@ -61,7 +62,7 @@ function initCave(){
 function randFloat(a,b){return a+Math.random()*(b-a);}
 function extendCave(){
   let last=cave[cave.length-1];
-  let gap=Math.max(80,220-score*0.15);
+  let gap=Math.max(100,250-score*0.08);
   let mid=H/2;
   let t=last.top+randFloat(-4,4);let b=last.bot+randFloat(-4,4);
   t=Math.max(10,Math.min(mid-gap/2,t));
@@ -81,7 +82,7 @@ function update(dt){
   // collision
   let seg=cave.find(c=>Math.abs(c.x-heli.x)<6);
   if(seg){
-    if(heli.y-8<seg.top||heli.y+8>seg.bot){endGame();return;}
+    if(heli.y-10<seg.top||heli.y+10>seg.bot){endGame();return;}
   }
   if(heli.y<0||heli.y>H){endGame();return;}
   score+=scrollSpeed*0.05;
@@ -98,11 +99,12 @@ function draw(){
   ctx.lineTo(W,H);ctx.closePath();ctx.fill();
   // helicopter
   ctx.fillStyle='#22c55e';
-  ctx.fillRect(heli.x-12,heli.y-6,24,12);
+  ctx.fillRect(heli.x-16,heli.y-8,32,16);
   ctx.fillStyle='#6366f1';
-  ctx.fillRect(heli.x-16,heli.y-8,32,3); // rotor
-  ctx.fillRect(heli.x+10,heli.y-2,6,4); // tail
+  ctx.fillRect(heli.x-20,heli.y-10,40,3); // rotor
+  ctx.fillRect(heli.x+14,heli.y-3,8,6); // tail
   document.getElementById('dist').textContent=score|0;
+  document.getElementById('spdEl').textContent=scrollSpeed.toFixed(1);
   document.getElementById('high').textContent=highScore|0;
 }
 function loop(ts){

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "npx @11ty/eleventy --serve --port=8080",
     "dev": "npx @11ty/eleventy --serve --port=8080",
-    "build": "npx @11ty/eleventy && npx pagefind --site _site",
+    "build": "npx @11ty/eleventy",
     "clean": "npx rimraf _site"
   },
   "keywords": [
@@ -22,7 +22,6 @@
     "@11ty/eleventy-img": "^6.0.4",
     "@11ty/eleventy-plugin-rss": "^3.0.0",
     "@sardine/eleventy-plugin-tinyhtml": "^0.2.0",
-    "luxon": "^3.7.2",
-    "pagefind": "^1.4.0"
+    "luxon": "^3.7.2"
   }
 }
