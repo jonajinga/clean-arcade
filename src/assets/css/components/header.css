@@ -31,12 +31,8 @@
 .site-header__logo:hover { color: var(--accent); }
 .site-header__logo svg { flex-shrink: 0; }
 
-/* Mobile: icon only, desktop: icon + text */
+/* Always hide logo text — shown only in hamburger menu */
 .logo-text { display: none; }
-
-@media (min-width: 640px) {
-  .logo-text { display: inline; }
-}
 
 /* Filter buttons — right-aligned */
 .site-header__filters {
