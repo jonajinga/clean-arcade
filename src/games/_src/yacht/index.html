@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yacht</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay-wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+#dice-area{display:flex;gap:8px;margin:0.5rem 0;align-items:center;justify-content:center}
+.die{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:bold;background:#facc15;color:#0f172a;cursor:pointer;border:3px solid transparent}
+.die.held{border-color:#ef4444;background:#fbbf24}
+#scorecard{display:grid;grid-template-columns:1fr auto;gap:1px;max-width:300px;width:100%;margin:0.5rem auto;font-size:0.85rem;border:2px solid #6366f1}
+.sc-row{display:contents}
+.sc-name,.sc-val{padding:4px 8px;background:#1e293b}
+.sc-name{text-align:left}
+.sc-val{text-align:center;min-width:50px}
+.sc-row.available .sc-val{cursor:pointer;color:#22c55e}
+.sc-row.available:hover .sc-val{background:#334155}
+.sc-row.filled .sc-val{color:#facc15}
+.sc-row.header .sc-name,.sc-row.header .sc-val{background:#334155;font-weight:bold;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Yacht</h1>
+<div id="info">Round: <span id="hud-round">1</span>/13 | Rolls left: <span id="hud-rolls">3</span> | High Score: <span id="hud-high">0</span></div>
+<div class="overlay-wrap">
+<div class="overlay" id="start-overlay">
+<h2>Yacht</h2>
+<p>Roll 5 dice, keep the best, score categories</p>
+<p>Click dice to hold, fill all 13 categories</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="dice-area">
+<button class="btn-primary" id="roll-btn" onclick="rollDice()">Roll</button>
+<div class="die" id="d0" onclick="toggleHold(0)">-</div>
+<div class="die" id="d1" onclick="toggleHold(1)">-</div>
+<div class="die" id="d2" onclick="toggleHold(2)">-</div>
+<div class="die" id="d3" onclick="toggleHold(3)">-</div>
+<div class="die" id="d4" onclick="toggleHold(4)">-</div>
+</div>
+<div id="scorecard"></div>
+<script>
+let dice=[0,0,0,0,0],held=[false,false,false,false,false],rollsLeft=3,round=1;
+let scores={},gameRunning=false,highScore=0;
+
+const CATEGORIES=[
+  {id:'ones',name:'Ones',fn:d=>d.filter(v=>v===1).reduce((a,b)=>a+b,0)},
+  {id:'twos',name:'Twos',fn:d=>d.filter(v=>v===2).reduce((a,b)=>a+b,0)},
+  {id:'threes',name:'Threes',fn:d=>d.filter(v=>v===3).reduce((a,b)=>a+b,0)},
+  {id:'fours',name:'Fours',fn:d=>d.filter(v=>v===4).reduce((a,b)=>a+b,0)},
+  {id:'fives',name:'Fives',fn:d=>d.filter(v=>v===5).reduce((a,b)=>a+b,0)},
+  {id:'sixes',name:'Sixes',fn:d=>d.filter(v=>v===6).reduce((a,b)=>a+b,0)},
+  {id:'three_kind',name:'3 of a Kind',fn:d=>{let c=counts(d);return Object.values(c).some(v=>v>=3)?d.reduce((a,b)=>a+b,0):0;}},
+  {id:'four_kind',name:'4 of a Kind',fn:d=>{let c=counts(d);return Object.values(c).some(v=>v>=4)?d.reduce((a,b)=>a+b,0):0;}},
+  {id:'full_house',name:'Full House',fn:d=>{let c=Object.values(counts(d)).sort();return(c.length===2&&c[0]===2&&c[1]===3)?25:0;}},
+  {id:'sm_straight',name:'Sm Straight',fn:d=>{let u=[...new Set(d)].sort().join('');return /1234|2345|3456/.test(u)?30:0;}},
+  {id:'lg_straight',name:'Lg Straight',fn:d=>{let u=[...new Set(d)].sort().join('');return u==='12345'||u==='23456'?40:0;}},
+  {id:'yacht',name:'Yacht (5)',fn:d=>{let c=counts(d);return Object.values(c).some(v=>v===5)?50:0;}},
+  {id:'chance',name:'Chance',fn:d=>d.reduce((a,b)=>a+b,0)},
+];
+
+function counts(d){let c={};d.forEach(v=>{c[v]=(c[v]||0)+1;});return c;}
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='yacht'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'yacht',state:{highScore}},'*');}catch(e){}}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  dice=[0,0,0,0,0];held=[false,false,false,false,false];
+  rollsLeft=3;round=1;scores={};gameRunning=true;
+  updateDice();renderScorecard();updateInfo();
+}
+
+function updateInfo(){
+  document.getElementById('hud-round').textContent=round;
+  document.getElementById('hud-rolls').textContent=rollsLeft;
+  document.getElementById('hud-high').textContent=highScore;
+}
+
+function updateDice(){
+  for(let i=0;i<5;i++){
+    let el=document.getElementById('d'+i);
+    el.textContent=dice[i]||'-';
+    el.className='die'+(held[i]?' held':'');
+  }
+}
+
+function toggleHold(i){
+  if(!gameRunning||rollsLeft>=3)return;
+  held[i]=!held[i];
+  updateDice();
+}
+
+function rollDice(){
+  if(!gameRunning||rollsLeft<=0)return;
+  for(let i=0;i<5;i++){
+    if(!held[i])dice[i]=1+Math.floor(Math.random()*6);
+  }
+  rollsLeft--;
+  updateDice();renderScorecard();updateInfo();
+}
+
+function scoreCategory(id){
+  if(!gameRunning||scores[id]!==undefined||rollsLeft>=3)return;
+  let cat=CATEGORIES.find(c=>c.id===id);
+  scores[id]=cat.fn(dice);
+  round++;
+  rollsLeft=3;held=[false,false,false,false,false];
+  dice=[0,0,0,0,0];
+  updateDice();renderScorecard();updateInfo();
+
+  if(round>13){
+    // Calculate total
+    let upper=0;
+    ['ones','twos','threes','fours','fives','sixes'].forEach(id2=>{upper+=(scores[id2]||0);});
+    let bonus=upper>=63?35:0;
+    let total=Object.values(scores).reduce((a,b)=>a+b,0)+bonus;
+    if(total>highScore)highScore=total;
+    gameRunning=false;
+    document.getElementById('final-score').textContent='Total: '+total+(bonus?' (incl. +35 bonus)':'');
+    document.getElementById('high-score-msg').textContent='High Score: '+highScore;
+    document.getElementById('over-overlay').classList.remove('hidden');
+    saveState();
+  }
+}
+
+function renderScorecard(){
+  let el=document.getElementById('scorecard');
+  let html='<div class="sc-row header"><div class="sc-name">Category</div><div class="sc-val">Score</div></div>';
+
+  CATEGORIES.forEach((cat,i)=>{
+    let filled=scores[cat.id]!==undefined;
+    let potential=rollsLeft<3?cat.fn(dice):'';
+    let cls=filled?'filled':(rollsLeft<3?'available':'');
+    html+=`<div class="sc-row ${cls}"><div class="sc-name">${cat.name}</div>`;
+    if(filled)html+=`<div class="sc-val">${scores[cat.id]}</div>`;
+    else html+=`<div class="sc-val" onclick="scoreCategory('${cat.id}')">${rollsLeft<3?'('+potential+')':''}</div>`;
+    html+='</div>';
+    if(i===5){
+      let upper=0;
+      ['ones','twos','threes','fours','fives','sixes'].forEach(id=>{upper+=(scores[id]||0);});
+      let bonus=upper>=63?35:0;
+      html+=`<div class="sc-row header"><div class="sc-name">Upper Total (63 for bonus)</div><div class="sc-val">${upper}${bonus?' +35':''}</div></div>`;
+    }
+  });
+
+  let total=Object.values(scores).reduce((a,b)=>a+b,0);
+  let upper2=0;['ones','twos','threes','fours','fives','sixes'].forEach(id=>{upper2+=(scores[id]||0);});
+  if(upper2>=63)total+=35;
+  html+=`<div class="sc-row header"><div class="sc-name">Total</div><div class="sc-val">${total}</div></div>`;
+  el.innerHTML=html;
+}
+
+renderScorecard();
+</script>
+</body>
+</html>

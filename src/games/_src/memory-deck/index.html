@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Memory Deck</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(600px,95vw);background:#1e293b;position:relative;padding:8px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.info{display:flex;justify-content:space-between;font-size:.85rem;padding:4px 0}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:3px;margin:6px 0}
+.card{aspect-ratio:2/3;background:#6366f1;border:1px solid #475569;display:flex;align-items:center;justify-content:center;font-size:clamp(.55rem,.9vw,.85rem);font-weight:700;cursor:pointer;user-select:none;color:transparent;transition:background .2s}
+.card.flipped,.card.matched{background:#fff;color:#1e293b}
+.card.red.flipped,.card.red.matched{color:#ef4444}
+.card.matched{opacity:.5;cursor:default}
+</style>
+</head>
+<body>
+<h1>Memory Deck</h1>
+<div id="game-area">
+<div class="info"><span id="moves">Moves: 0</span><span id="pairs">Pairs: 0/26</span><span id="timer">Time: 0s</span></div>
+<div class="grid" id="grid"></div>
+<div class="overlay" id="start-overlay">
+<h2>Memory Deck</h2>
+<p>Match all 26 pairs from a full 52-card deck! Click two cards to reveal them.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>You Win!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SLUG='memory-deck';
+let cards,flipped,matched,moves,pairs,startTime,timerInt,highScore=Infinity;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||Infinity});
+
+function isRed(s){return s==='♥'||s==='♦'}
+function matchKey(c){return c.rank}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  let deck=[];
+  SUITS.forEach(s=>RANKS.forEach(r=>deck.push({rank:r,suit:s})));
+  for(let i=deck.length-1;i>0;i--){let j=Math.random()*i+1|0;[deck[i],deck[j]]=[deck[j],deck[i]]}
+  cards=deck;flipped=[];matched=new Set();moves=0;pairs=0;
+  startTime=Date.now();clearInterval(timerInt);
+  timerInt=setInterval(()=>{document.getElementById('timer').textContent='Time: '+Math.floor((Date.now()-startTime)/1000)+'s'},1000);
+  render();
+}
+
+function render(){
+  let g=document.getElementById('grid');
+  g.innerHTML=cards.map((c,i)=>{
+    let m=matched.has(i),f=flipped.includes(i);
+    let cls='card'+(isRed(c.suit)?' red':'')+(f?' flipped':'')+(m?' matched':'');
+    return `<div class="${cls}" data-idx="${i}">${c.rank}${c.suit}</div>`;
+  }).join('');
+  g.querySelectorAll('.card').forEach(el=>{
+    el.addEventListener('click',()=>flipCard(+el.dataset.idx));
+  });
+  document.getElementById('moves').textContent='Moves: '+moves;
+  document.getElementById('pairs').textContent='Pairs: '+pairs+'/26';
+}
+
+function flipCard(i){
+  if(matched.has(i)||flipped.includes(i)||flipped.length>=2)return;
+  flipped.push(i);render();
+  if(flipped.length===2){
+    moves++;
+    let a=cards[flipped[0]],b=cards[flipped[1]];
+    // Match = same rank, same color
+    let aRed=isRed(a.suit),bRed=isRed(b.suit);
+    if(a.rank===b.rank&&aRed===bRed&&flipped[0]!==flipped[1]){
+      matched.add(flipped[0]);matched.add(flipped[1]);
+      pairs++;flipped=[];
+      setTimeout(()=>{render();checkWin()},400);
+    } else {
+      setTimeout(()=>{flipped=[];render()},800);
+    }
+  }
+}
+
+function checkWin(){
+  if(pairs>=26){
+    clearInterval(timerInt);
+    let t=Math.floor((Date.now()-startTime)/1000);
+    let sc=moves;
+    if(sc<highScore)highScore=sc;
+    document.getElementById('over-overlay').style.display='flex';
+    document.getElementById('over-msg').textContent=`Completed in ${moves} moves, ${t}s! Best: ${highScore===Infinity?'-':highScore} moves`;
+    save();
+  }
+}
+</script>
+</body>
+</html>

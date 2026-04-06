@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stratego Mini</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;margin:0.25rem 0;text-align:center;min-height:1.4em}
+.board{display:grid;grid-template-columns:repeat(6,1fr);gap:2px;border:2px solid #6366f1;width:min(90vw,360px);height:min(90vw,360px);background:#6366f1}
+.cell{background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:bold;cursor:pointer;user-select:none;position:relative;flex-direction:column}
+.cell:hover{background:#334155}
+.cell.selected{background:#4f46e5}
+.cell.valid{background:#1e3a5f}
+.piece{width:80%;height:80%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:0.7rem;line-height:1.1}
+.piece.red{background:#ef4444;color:#fff}
+.piece.blue{background:#3b82f6;color:#fff}
+.piece.hidden-piece{background:#3b82f6;color:#3b82f6}
+.legend{font-size:0.7rem;margin:0.5rem;text-align:center;max-width:360px;line-height:1.4}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Stratego Mini</h1>
+<div class="info" id="info">Select a piece to move</div>
+<div class="board" id="board"></div>
+<div class="legend">Ranks: Marshal(6) > General(5) > Colonel(4) > Major(3) > Captain(2) > Spy(1). Spy beats Marshal. Flag(F) = capture to win. Bomb(B) = destroys attacker (except Captain).</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Stratego Mini</h2>
+<p>6x6 grid, hidden pieces. Capture the enemy Flag to win! Higher rank wins battles. Spy beats Marshal. Captain defuses Bombs.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const S=6;
+// Pieces: F=flag, B=bomb, 1=spy, 2=captain, 3=major, 4=colonel, 5=general, 6=marshal
+const PIECES=[{t:'F',n:'Flag'},{t:'B',n:'Bomb'},{t:'1',n:'Spy'},{t:'2',n:'Capt'},{t:'3',n:'Maj'},{t:'4',n:'Col'},{t:'5',n:'Gen'},{t:'6',n:'Mar'}];
+const SETUP_PLAYER=['F','B','1','2','3','4','5','6'];
+const SETUP_AI=['F','B','1','2','3','4','5','6'];
+let board,selected,gameOver,highScore=0,wins=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='stratego-mini'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'stratego-mini',state:{highScore}},'*')}catch(e){}}
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function startGame(){
+board=Array.from({length:S},()=>Array(S).fill(null));
+// Place player pieces (bottom 2 rows)
+const pp=shuffle([...SETUP_PLAYER]);
+let pi=0;
+for(let r=4;r<6;r++)for(let c=0;c<S&&pi<pp.length;c++,pi++){
+// Skip some cells to spread out - place all 8 in bottom 2 rows (12 cells)
+board[r][c]={type:pp[pi],owner:'player',revealed:true};
+}
+// Place AI pieces (top 2 rows)
+const ap=shuffle([...SETUP_AI]);
+let ai=0;
+for(let r=0;r<2;r++)for(let c=0;c<S&&ai<ap.length;c++,ai++){
+board[r][c]={type:ap[ai],owner:'ai',revealed:false};
+}
+selected=null;gameOver=false;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('info').textContent='Select a piece to move';
+render();
+}
+
+function render(){
+const el=document.getElementById('board');el.innerHTML='';
+for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+const cell=document.createElement('div');
+cell.className='cell';
+if(selected&&selected.r===r&&selected.c===c)cell.classList.add('selected');
+if(selected&&isValidMove(selected.r,selected.c,r,c))cell.classList.add('valid');
+const p=board[r][c];
+if(p){
+const piece=document.createElement('div');
+piece.className='piece '+(p.owner==='player'?'red':(p.revealed?'blue':'hidden-piece'));
+piece.textContent=p.owner==='player'||p.revealed?p.type:'?';
+cell.appendChild(piece);
+}
+cell.onclick=()=>cellClick(r,c);
+el.appendChild(cell);
+}
+}
+
+function isMovable(type){return type!=='F'&&type!=='B'}
+
+function isValidMove(fr,fc,tr,tc){
+if(fr===tr&&fc===tc)return false;
+if(Math.abs(fr-tr)+Math.abs(fc-tc)!==1)return false;
+const target=board[tr][tc];
+if(target&&target.owner==='player')return false;
+return true;
+}
+
+function cellClick(r,c){
+if(gameOver)return;
+const p=board[r][c];
+if(selected){
+if(r===selected.r&&c===selected.c){selected=null;render();return}
+if(isValidMove(selected.r,selected.c,r,c)){
+doMove(selected.r,selected.c,r,c,'player');
+selected=null;
+if(!gameOver){
+document.getElementById('info').textContent='AI moving...';
+setTimeout(aiTurn,400);
+}
+return;
+}
+selected=null;
+}
+if(p&&p.owner==='player'&&isMovable(p.type)){selected={r,c}}
+render();
+}
+
+function doMove(fr,fc,tr,tc,owner){
+const attacker=board[fr][fc];
+const defender=board[tr][tc];
+if(!defender){
+board[tr][tc]=attacker;board[fr][fc]=null;
+}else{
+defender.revealed=true;
+const result=battle(attacker,defender);
+if(defender.type==='F'){
+board[tr][tc]=attacker;board[fr][fc]=null;
+endGame(owner==='player'?'You captured the flag!':'AI captured your flag!',owner==='player');
+return;
+}
+if(result==='win'){board[tr][tc]=attacker;board[fr][fc]=null}
+else if(result==='lose'){board[fr][fc]=null}
+else{board[fr][fc]=null;board[tr][tc]=null}// tie
+}
+render();
+// Check if either side has no movable pieces
+checkStalemate();
+}
+
+function battle(a,d){
+if(d.type==='B')return a.type==='2'?'win':'lose';
+if(a.type==='1'&&d.type==='6')return'win';
+if(d.type==='1'&&a.type==='6')return'lose';
+const ar=parseInt(a.type),dr=parseInt(d.type);
+if(ar>dr)return'win';if(dr>ar)return'lose';return'tie';
+}
+
+function checkStalemate(){
+if(gameOver)return;
+let pm=false,am=false;
+for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+const p=board[r][c];if(!p)continue;
+if(p.owner==='player'&&isMovable(p.type))pm=true;
+if(p.owner==='ai'&&isMovable(p.type))am=true;
+}
+if(!pm&&!am)endGame('Stalemate!',false);
+else if(!pm)endGame('No moves left - AI wins!',false);
+else if(!am)endGame('AI has no moves - You win!',true);
+}
+
+function aiTurn(){
+if(gameOver)return;
+const moves=[];
+for(let r=0;r<S;r++)for(let c=0;c<S;c++){
+const p=board[r][c];
+if(!p||p.owner!=='ai'||!isMovable(p.type))continue;
+for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){
+const nr=r+dr,nc=c+dc;
+if(nr<0||nr>=S||nc<0||nc>=S)continue;
+const t=board[nr][nc];
+if(t&&t.owner==='ai')continue;
+let score=0;
+score+=(nr-r)*2;// prefer moving forward
+if(t&&t.owner==='player'){
+score+=10;// aggressive
+if(parseInt(p.type)>=4)score+=5;
+}
+if(!t)score+=1;
+moves.push({fr:r,fc:c,tr:nr,tc:nc,score});
+}
+}
+if(!moves.length){endGame('AI has no moves - You win!',true);return}
+moves.sort((a,b)=>b.score-a.score);
+const top=moves.filter(m=>m.score>=moves[0].score-2);
+const m=top[Math.floor(Math.random()*top.length)];
+doMove(m.fr,m.fc,m.tr,m.tc,'ai');
+if(!gameOver)document.getElementById('info').textContent='Your turn - select a piece';
+}
+
+function endGame(msg,won){
+gameOver=true;
+if(won){wins++;highScore=Math.max(highScore,wins);save()}
+document.getElementById('info').textContent=msg;
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=won?'Victory!':msg.includes('Stalemate')?'Draw':'Defeat';
+document.getElementById('overMsg').textContent=msg+'\nWins: '+wins;
+document.getElementById('overOverlay').classList.remove('hidden');
+},600);
+}
+</script>
+</body>
+</html>

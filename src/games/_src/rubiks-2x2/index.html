@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2x2 Rubik's Cube</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.2rem;font-size:0.9rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.cube-container{border:2px solid #6366f1;padding:1rem;margin:0.5rem}
+.cube-net{display:grid;grid-template-columns:repeat(4,auto);gap:8px;justify-content:center;align-items:center}
+.face{display:grid;grid-template-columns:1fr 1fr;gap:2px;width:80px;height:80px}
+.face-cell{display:flex;align-items:center;justify-content:center;border:1px solid rgba(0,0,0,0.3)}
+.face-label{color:#94a3b8;font-size:0.7rem;text-align:center;margin-bottom:2px}
+.controls{display:flex;gap:0.3rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.controls button{padding:0.4rem 0.7rem;font-size:0.8rem}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem;max-width:400px}
+.face-row{display:flex;gap:8px;align-items:start}
+.face-col{display:flex;flex-direction:column;align-items:center;gap:2px}
+</style>
+</head>
+<body>
+<h1>2x2 Rubik's Cube</h1>
+<div class="score-display">Moves: <span id="moves">0</span></div>
+<div class="cube-container" id="cubeContainer"></div>
+<div class="controls" id="moveControls">
+<button onclick="doMove('U')">U</button>
+<button onclick="doMove('U_')">U'</button>
+<button onclick="doMove('D')">D</button>
+<button onclick="doMove('D_')">D'</button>
+<button onclick="doMove('L')">L</button>
+<button onclick="doMove('L_')">L'</button>
+<button onclick="doMove('R')">R</button>
+<button onclick="doMove('R_')">R'</button>
+<button onclick="doMove('F')">F</button>
+<button onclick="doMove('F_')">F'</button>
+<button onclick="doMove('B')">B</button>
+<button onclick="doMove('B_')">B'</button>
+</div>
+<div class="controls">
+<button onclick="scramble()" style="background:#ef4444">Scramble</button>
+<button onclick="resetCube()" style="background:#334155">Reset</button>
+</div>
+<div class="info">Click face rotation buttons to solve. U=Up, D=Down, L=Left, R=Right, F=Front, B=Back. Prime (') = counter-clockwise.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>2x2 Rubik's Cube</h2>
+<p>Solve the pocket cube</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Rotate faces to make each side a single color. Shown as an unfolded net.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Solved!</h2>
+<p>Moves: <span id="finalMoves">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+// Faces: 0=U(white), 1=D(yellow), 2=F(green), 3=B(blue), 4=L(orange), 5=R(red)
+// Each face has 4 cells: [0,1,2,3] = [TL,TR,BL,BR]
+const FACE_COLORS=['#ffffff','#facc15','#22c55e','#3b82f6','#f97316','#ef4444'];
+const FACE_NAMES=['Top','Bottom','Front','Back','Left','Right'];
+
+let cube=[];
+let moveCount=0;
+let gameActive=false;
+let highScore=0;
+
+function initCube(){
+cube=[];
+for(let f=0;f<6;f++)cube[f]=[f,f,f,f];
+}
+
+function rotateFaceCW(f){
+const c=[...cube[f]];
+cube[f]=[c[2],c[0],c[3],c[1]];
+}
+function rotateFaceCCW(f){
+const c=[...cube[f]];
+cube[f]=[c[1],c[3],c[0],c[2]];
+}
+
+function doMove(m){
+if(!gameActive)return;
+const moves={
+'U':()=>{rotateFaceCW(0);const t=[cube[2][0],cube[2][1]];cube[2][0]=cube[5][0];cube[2][1]=cube[5][1];cube[5][0]=cube[3][1];cube[5][1]=cube[3][0];cube[3][0]=cube[4][1];cube[3][1]=cube[4][0];cube[4][0]=t[0];cube[4][1]=t[1];/* fix back */const b0=cube[3][0],b1=cube[3][1];},
+'U_':()=>{doMoveInternal('U');doMoveInternal('U');doMoveInternal('U');},
+'D':()=>{rotateFaceCW(1);const t=[cube[2][2],cube[2][3]];cube[2][2]=cube[4][2];cube[2][3]=cube[4][3];cube[4][2]=cube[3][3];cube[4][3]=cube[3][2];cube[3][3]=cube[5][2];cube[3][2]=cube[5][3];cube[5][2]=t[0];cube[5][3]=t[1];},
+'D_':()=>{doMoveInternal('D');doMoveInternal('D');doMoveInternal('D');},
+'F':()=>{rotateFaceCW(2);const t=[cube[0][2],cube[0][3]];cube[0][2]=cube[4][3];cube[0][3]=cube[4][1];cube[4][1]=cube[1][0];cube[4][3]=cube[1][1];cube[1][0]=cube[5][2];cube[1][1]=cube[5][0];cube[5][0]=t[0];cube[5][2]=t[1];},
+'F_':()=>{doMoveInternal('F');doMoveInternal('F');doMoveInternal('F');},
+'B':()=>{rotateFaceCW(3);const t=[cube[0][0],cube[0][1]];cube[0][0]=cube[5][1];cube[0][1]=cube[5][3];cube[5][1]=cube[1][3];cube[5][3]=cube[1][2];cube[1][2]=cube[4][0];cube[1][3]=cube[4][2];cube[4][0]=t[1];cube[4][2]=t[0];},
+'B_':()=>{doMoveInternal('B');doMoveInternal('B');doMoveInternal('B');},
+'R':()=>{rotateFaceCW(5);const t=[cube[0][1],cube[0][3]];cube[0][1]=cube[2][1];cube[0][3]=cube[2][3];cube[2][1]=cube[1][1];cube[2][3]=cube[1][3];cube[1][1]=cube[3][2];cube[1][3]=cube[3][0];cube[3][0]=t[1];cube[3][2]=t[0];},
+'R_':()=>{doMoveInternal('R');doMoveInternal('R');doMoveInternal('R');},
+'L':()=>{rotateFaceCW(4);const t=[cube[0][0],cube[0][2]];cube[0][0]=cube[3][3];cube[0][2]=cube[3][1];cube[3][1]=cube[1][2];cube[3][3]=cube[1][0];cube[1][0]=cube[2][0];cube[1][2]=cube[2][2];cube[2][0]=t[0];cube[2][2]=t[1];},
+'L_':()=>{doMoveInternal('L');doMoveInternal('L');doMoveInternal('L');}
+};
+if(moves[m]){
+moves[m]();
+moveCount++;
+document.getElementById('moves').textContent=moveCount;
+render();
+checkSolved();
+}
+}
+
+function doMoveInternal(m){
+// same as doMove but no count increment or render
+const moves={
+'U':()=>{rotateFaceCW(0);const t=[cube[2][0],cube[2][1]];cube[2][0]=cube[5][0];cube[2][1]=cube[5][1];cube[5][0]=cube[3][1];cube[5][1]=cube[3][0];cube[3][0]=cube[4][1];cube[3][1]=cube[4][0];cube[4][0]=t[0];cube[4][1]=t[1];},
+'D':()=>{rotateFaceCW(1);const t=[cube[2][2],cube[2][3]];cube[2][2]=cube[4][2];cube[2][3]=cube[4][3];cube[4][2]=cube[3][3];cube[4][3]=cube[3][2];cube[3][3]=cube[5][2];cube[3][2]=cube[5][3];cube[5][2]=t[0];cube[5][3]=t[1];},
+'F':()=>{rotateFaceCW(2);const t=[cube[0][2],cube[0][3]];cube[0][2]=cube[4][3];cube[0][3]=cube[4][1];cube[4][1]=cube[1][0];cube[4][3]=cube[1][1];cube[1][0]=cube[5][2];cube[1][1]=cube[5][0];cube[5][0]=t[0];cube[5][2]=t[1];},
+'B':()=>{rotateFaceCW(3);const t=[cube[0][0],cube[0][1]];cube[0][0]=cube[5][1];cube[0][1]=cube[5][3];cube[5][1]=cube[1][3];cube[5][3]=cube[1][2];cube[1][2]=cube[4][0];cube[1][3]=cube[4][2];cube[4][0]=t[1];cube[4][2]=t[0];},
+'R':()=>{rotateFaceCW(5);const t=[cube[0][1],cube[0][3]];cube[0][1]=cube[2][1];cube[0][3]=cube[2][3];cube[2][1]=cube[1][1];cube[2][3]=cube[1][3];cube[1][1]=cube[3][2];cube[1][3]=cube[3][0];cube[3][0]=t[1];cube[3][2]=t[0];},
+'L':()=>{rotateFaceCW(4);const t=[cube[0][0],cube[0][2]];cube[0][0]=cube[3][3];cube[0][2]=cube[3][1];cube[3][1]=cube[1][2];cube[3][3]=cube[1][0];cube[1][0]=cube[2][0];cube[1][2]=cube[2][2];cube[2][0]=t[0];cube[2][2]=t[1];}
+};
+if(moves[m])moves[m]();
+}
+
+function render(){
+const container=document.getElementById('cubeContainer');
+container.innerHTML='';
+// Net layout:     [B]
+//             [L][U][R]
+//                 [F]
+//                 [D]
+const layout=[
+[null,3,null,null],
+[4,0,5,null],
+[null,2,null,null],
+[null,1,null,null]
+];
+const table=document.createElement('div');
+table.style.display='grid';
+table.style.gridTemplateColumns='repeat(3,auto)';
+table.style.gap='4px';
+table.style.justifyContent='center';
+const order=[null,3,null,4,0,5,null,2,null,null,1,null];
+order.forEach((f,i)=>{
+const div=document.createElement('div');
+if(f!==null){
+div.style.display='flex';div.style.flexDirection='column';div.style.alignItems='center';
+const label=document.createElement('div');
+label.className='face-label';label.textContent=FACE_NAMES[f];
+const face=document.createElement('div');
+face.className='face';
+cube[f].forEach(c=>{
+const cell=document.createElement('div');
+cell.className='face-cell';
+cell.style.background=FACE_COLORS[c];
+cell.style.width='36px';cell.style.height='36px';
+face.appendChild(cell);
+});
+div.appendChild(label);div.appendChild(face);
+}else{
+div.style.width='80px';div.style.height='80px';
+}
+table.appendChild(div);
+});
+container.appendChild(table);
+}
+
+function checkSolved(){
+for(let f=0;f<6;f++){
+if(cube[f][0]!==cube[f][1]||cube[f][1]!==cube[f][2]||cube[f][2]!==cube[f][3])return;
+}
+gameActive=false;
+if(moveCount<highScore||highScore===0){highScore=moveCount;save();}
+document.getElementById('finalMoves').textContent=moveCount;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),300);
+}
+
+function scramble(){
+initCube();
+const ms=['U','D','F','B','R','L'];
+for(let i=0;i<20;i++){
+const m=ms[Math.floor(Math.random()*ms.length)];
+doMoveInternal(m);
+}
+moveCount=0;
+document.getElementById('moves').textContent='0';
+gameActive=true;
+render();
+}
+
+function resetCube(){
+initCube();moveCount=0;
+document.getElementById('moves').textContent='0';
+render();
+}
+
+function startGame(){
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+scramble();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'rubiks-2x2',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='rubiks-2x2'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+initCube();render();
+</script>
+</body>
+</html>

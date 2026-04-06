@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chinese Checkers</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+</style>
+</head>
+<body>
+<h1>Chinese Checkers</h1>
+<div id="info"><span id="hud-turn">Your turn</span> | <span id="hud-wins">Wins: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="440"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Chinese Checkers</h2>
+<p>Click to select and move marbles</p>
+<p>Jump over pieces to move further</p>
+<p>Move all marbles to opposite triangle</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">You Win!</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=440;
+let gameRunning=false,paused=false,wins=0;
+let cells=[],selected=-1,validMoves=[],playerTurn=true,jumping=false;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=(400*s)+'px';canvas.style.height=(440*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='chinese-checkers'&&e.data.state)wins=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'chinese-checkers',state:{highScore:wins}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)saveState();}
+
+// Build star board (simplified 2-player on a diamond grid)
+// Using a hex-style grid: 17 rows
+// Top triangle: rows 0-3 (AI start, 10 pieces)
+// Middle: rows 4-12
+// Bottom triangle: rows 13-16 (Player start, 10 pieces)
+function buildBoard(){
+  cells=[];
+  // Star-shaped board definition
+  // Row widths and offsets for a 6-pointed star simplified to 2 players
+  const rows=[
+    {w:1,y:0},{w:2,y:1},{w:3,y:2},{w:4,y:3}, // top triangle
+    {w:13,y:4},{w:12,y:5},{w:11,y:6},{w:10,y:7},{w:9,y:8}, // upper middle
+    {w:10,y:9},{w:11,y:10},{w:12,y:11},{w:13,y:12}, // lower middle
+    {w:4,y:13},{w:3,y:14},{w:2,y:15},{w:1,y:16} // bottom triangle
+  ];
+
+  const SPC=22,OX=W/2,OY=20;
+
+  rows.forEach(r=>{
+    let startX=OX-(r.w-1)*SPC/2;
+    for(let c=0;c<r.w;c++){
+      let x=startX+c*SPC;
+      let y=OY+r.y*SPC+6;
+      let owner=0; // 0=empty
+      if(r.y<=3)owner=2; // AI
+      if(r.y>=13)owner=1; // Player
+      cells.push({x,y,row:r.y,col:c,owner,id:cells.length});
+    }
+  });
+}
+
+function getNeighbors(idx){
+  let c=cells[idx];
+  let neighbors=[];
+  cells.forEach((n,i)=>{
+    if(i===idx)return;
+    let dx=Math.abs(n.x-c.x),dy=Math.abs(n.y-c.y);
+    if(dx<=24&&dy<=24&&(dx+dy)<40)neighbors.push(i);
+  });
+  return neighbors;
+}
+
+function getValidMoves(idx){
+  let moves=[];
+  let neighbors=getNeighbors(idx);
+
+  // Adjacent empty
+  if(!jumping){
+    neighbors.forEach(n=>{
+      if(cells[n].owner===0)moves.push({to:n,jump:false});
+    });
+  }
+
+  // Jump over occupied
+  neighbors.forEach(n=>{
+    if(cells[n].owner===0)return;
+    // Find landing spot (mirror of n relative to idx)
+    let dx=cells[n].x-cells[idx].x;
+    let dy=cells[n].y-cells[idx].y;
+    let landing=cells.findIndex(c=>Math.abs(c.x-(cells[idx].x+dx*2))<8&&Math.abs(c.y-(cells[idx].y+dy*2))<8);
+    if(landing>=0&&cells[landing].owner===0)moves.push({to:landing,jump:true});
+  });
+
+  return moves;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  buildBoard();
+  selected=-1;validMoves=[];playerTurn=true;jumping=false;
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateInfo();draw();
+}
+
+function updateInfo(){
+  document.getElementById('hud-turn').textContent=playerTurn?'Your turn':'AI thinking';
+  document.getElementById('hud-wins').textContent='Wins: '+wins;
+}
+
+function checkWin(){
+  // Player wins if all their pieces are in rows 0-3
+  let playerPieces=cells.filter(c=>c.owner===1);
+  let playerWin=playerPieces.every(c=>c.row<=3);
+  // AI wins if all their pieces are in rows 13-16
+  let aiPieces=cells.filter(c=>c.owner===2);
+  let aiWin=aiPieces.every(c=>c.row>=13);
+  return{playerWin,aiWin};
+}
+
+canvas.addEventListener('click',e=>{
+  if(!gameRunning||paused||!playerTurn)return;
+  let rect=canvas.getBoundingClientRect();
+  let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+
+  // Find clicked cell
+  let clicked=-1;
+  cells.forEach((c,i)=>{
+    if(Math.sqrt((c.x-mx)**2+(c.y-my)**2)<10)clicked=i;
+  });
+
+  if(clicked<0){
+    if(jumping){jumping=false;selected=-1;validMoves=[];endPlayerTurn();}
+    return;
+  }
+
+  if(selected<0){
+    if(cells[clicked].owner===1){
+      selected=clicked;
+      jumping=false;
+      validMoves=getValidMoves(clicked);
+    }
+  } else {
+    let move=validMoves.find(m=>m.to===clicked);
+    if(move){
+      cells[clicked].owner=1;
+      cells[selected].owner=0;
+      if(move.jump){
+        jumping=true;
+        selected=clicked;
+        validMoves=getValidMoves(clicked).filter(m=>m.jump);
+        if(validMoves.length===0){jumping=false;selected=-1;endPlayerTurn();}
+      } else {
+        selected=-1;validMoves=[];jumping=false;endPlayerTurn();
+      }
+    } else if(cells[clicked].owner===1&&!jumping){
+      selected=clicked;validMoves=getValidMoves(clicked);
+    } else if(jumping){
+      jumping=false;selected=-1;validMoves=[];endPlayerTurn();
+    }
+  }
+  draw();
+});
+
+function endPlayerTurn(){
+  let w=checkWin();
+  if(w.playerWin){gameRunning=false;wins++;document.getElementById('win-msg').textContent='You Win!';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();return;}
+  playerTurn=false;updateInfo();draw();
+  setTimeout(aiMove,500);
+}
+
+function aiMove(){
+  if(!gameRunning)return;
+  let aiPieces=[];
+  cells.forEach((c,i)=>{if(c.owner===2)aiPieces.push(i);});
+
+  let bestFrom=-1,bestTo=-1,bestScore=-9999;
+  aiPieces.forEach(idx=>{
+    let moves=getValidMoves(idx);
+    // Try chain jumps
+    moves.forEach(m=>{
+      let sc=cells[m.to].row-cells[idx].row; // prefer moving down
+      sc*=10;
+      if(m.jump)sc+=5;
+      // Check chain jumps
+      if(m.jump){
+        let tempOwner=cells[idx].owner;
+        cells[idx].owner=0;cells[m.to].owner=2;
+        let chain=getValidMoves(m.to).filter(mm=>mm.jump);
+        chain.forEach(mm=>{sc+=cells[mm.to].row-cells[m.to].row;});
+        cells[idx].owner=tempOwner;cells[m.to].owner=0;
+      }
+      if(sc>bestScore){bestScore=sc;bestFrom=idx;bestTo=m.to;}
+    });
+  });
+
+  if(bestFrom>=0){
+    cells[bestTo].owner=2;cells[bestFrom].owner=0;
+  }
+
+  let w=checkWin();
+  if(w.aiWin){gameRunning=false;document.getElementById('win-msg').textContent='AI Wins';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();return;}
+
+  playerTurn=true;updateInfo();draw();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Draw connections
+  ctx.strokeStyle='#1e293b';ctx.lineWidth=1;
+  cells.forEach((c,i)=>{
+    getNeighbors(i).forEach(n=>{
+      if(n>i){ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(cells[n].x,cells[n].y);ctx.stroke();}
+    });
+  });
+
+  // Valid move highlights
+  validMoves.forEach(m=>{
+    ctx.fillStyle='rgba(250,204,21,0.3)';
+    ctx.beginPath();ctx.arc(cells[m.to].x,cells[m.to].y,10,0,Math.PI*2);ctx.fill();
+  });
+
+  // Cells
+  cells.forEach((c,i)=>{
+    if(c.owner===0){
+      ctx.fillStyle='#334155';
+      ctx.beginPath();ctx.arc(c.x,c.y,6,0,Math.PI*2);ctx.fill();
+    } else {
+      ctx.fillStyle=c.owner===1?'#3b82f6':'#ef4444';
+      if(i===selected)ctx.fillStyle='#facc15';
+      ctx.beginPath();ctx.arc(c.x,c.y,9,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#0f172a';ctx.lineWidth=1.5;ctx.stroke();
+    }
+  });
+
+  // Labels
+  ctx.fillStyle='#ef4444';ctx.font='11px system-ui';ctx.textAlign='center';
+  ctx.fillText('AI',W/2,16);
+  ctx.fillStyle='#3b82f6';
+  ctx.fillText('YOU',W/2,H-8);
+}
+
+draw();
+</script>
+</body>
+</html>

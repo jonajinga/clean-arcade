@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot Connect</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+#undo-btn{background:#334155;padding:8px 16px;font-size:0.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Dot Connect</h1>
+<div id="hud"><span id="level-txt">Level 1</span><span id="status">Connect 1 → 2</span></div>
+<canvas id="c"></canvas>
+<button id="undo-btn" onclick="undoLine()">Undo</button>
+
+<div class="overlay" id="start-overlay">
+<h2>Dot Connect</h2>
+<p>Connect numbered dots in order (1→2→3...).<br>Draw lines between consecutive numbers.<br>Lines cannot cross.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Level Complete!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Level</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Levels Done!</h2>
+<p id="go-msg">Congratulations!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let cellSize,currentLevel=0,highScore=0,nextDot=1,lines=[];
+
+// Levels: array of {n, x, y} positions on a grid
+// Grid size increases with level
+const LEVELS=[
+  {grid:5,dots:[{n:1,x:0,y:0},{n:2,x:4,y:0},{n:3,x:4,y:4},{n:4,x:0,y:4},{n:5,x:2,y:2}]},
+  {grid:5,dots:[{n:1,x:0,y:2},{n:2,x:2,y:0},{n:3,x:4,y:2},{n:4,x:2,y:4},{n:5,x:1,y:1},{n:6,x:3,y:3}]},
+  {grid:6,dots:[{n:1,x:0,y:0},{n:2,x:5,y:0},{n:3,x:5,y:5},{n:4,x:0,y:5},{n:5,x:2,y:2},{n:6,x:3,y:3},{n:7,x:1,y:4}]},
+  {grid:6,dots:[{n:1,x:1,y:0},{n:2,x:4,y:0},{n:3,x:5,y:2},{n:4,x:4,y:5},{n:5,x:1,y:5},{n:6,x:0,y:3},{n:7,x:2,y:2},{n:8,x:3,y:3}]},
+  {grid:7,dots:[{n:1,x:0,y:0},{n:2,x:3,y:0},{n:3,x:6,y:0},{n:4,x:6,y:3},{n:5,x:6,y:6},{n:6,x:3,y:6},{n:7,x:0,y:6},{n:8,x:0,y:3},{n:9,x:3,y:3}]},
+  {grid:7,dots:[{n:1,x:1,y:1},{n:2,x:5,y:0},{n:3,x:6,y:4},{n:4,x:3,y:6},{n:5,x:0,y:4},{n:6,x:2,y:2},{n:7,x:4,y:3},{n:8,x:5,y:5},{n:9,x:1,y:5},{n:10,x:3,y:1}]},
+  {grid:8,dots:[{n:1,x:0,y:0},{n:2,x:4,y:0},{n:3,x:7,y:0},{n:4,x:7,y:4},{n:5,x:7,y:7},{n:6,x:4,y:7},{n:7,x:0,y:7},{n:8,x:0,y:4},{n:9,x:2,y:2},{n:10,x:5,y:2},{n:11,x:5,y:5},{n:12,x:2,y:5}]},
+  {grid:8,dots:[{n:1,x:1,y:0},{n:2,x:6,y:0},{n:3,x:7,y:3},{n:4,x:6,y:7},{n:5,x:1,y:7},{n:6,x:0,y:3},{n:7,x:3,y:1},{n:8,x:5,y:2},{n:9,x:5,y:5},{n:10,x:3,y:6},{n:11,x:2,y:4},{n:12,x:4,y:3}]}
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='dot-connect'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'dot-connect',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  const maxW=Math.min(window.innerWidth-20,400);
+  cellSize=Math.floor(maxW/lvl.grid);
+  canvas.width=cellSize*lvl.grid;
+  canvas.height=cellSize*lvl.grid;
+  draw();
+}
+
+function loadLevel(idx){
+  nextDot=1;lines=[];
+  updateStatus();
+  resize();
+  document.getElementById('level-txt').textContent='Level '+(idx+1);
+}
+
+function updateStatus(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  if(nextDot<=lvl.dots.length){
+    document.getElementById('status').textContent='Connect '+nextDot+' → '+(nextDot<lvl.dots.length?nextDot+1:'done');
+  }
+}
+
+function draw(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // grid
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let r=0;r<=lvl.grid;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=lvl.grid;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // lines
+  ctx.strokeStyle='#22c55e';ctx.lineWidth=3;
+  lines.forEach(l=>{
+    ctx.beginPath();
+    ctx.moveTo(l.x1*cellSize+cellSize/2,l.y1*cellSize+cellSize/2);
+    ctx.lineTo(l.x2*cellSize+cellSize/2,l.y2*cellSize+cellSize/2);
+    ctx.stroke();
+  });
+  // dots
+  lvl.dots.forEach(d=>{
+    const cx=d.x*cellSize+cellSize/2,cy=d.y*cellSize+cellSize/2;
+    const connected=d.n<nextDot;
+    ctx.beginPath();ctx.arc(cx,cy,cellSize*0.3,0,Math.PI*2);
+    ctx.fillStyle=connected?'#22c55e':(d.n===nextDot?'#facc15':'#6366f1');
+    ctx.fill();
+    ctx.fillStyle='#fff';ctx.font='bold '+Math.floor(cellSize*0.35)+'px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(d.n,cx,cy);
+  });
+}
+
+function segmentsIntersect(a,b,c,d,e,f,g,h){
+  const det=(c-a)*(h-f)-(d-b)*(g-e);
+  if(Math.abs(det)<1e-10)return false;
+  const t=((e-a)*(h-f)-(f-b)*(g-e))/det;
+  const u=((e-a)*(d-b)-(f-b)*(c-a))/det;
+  return t>0.01&&t<0.99&&u>0.01&&u<0.99;
+}
+
+function wouldCross(x1,y1,x2,y2){
+  for(const l of lines){
+    if(segmentsIntersect(x1,y1,x2,y2,l.x1,l.y1,l.x2,l.y2))return true;
+  }
+  return false;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const clickX=Math.floor(mx/cellSize),clickY=Math.floor(my/cellSize);
+
+  // Find which dot was clicked
+  const dot=lvl.dots.find(d=>d.x===clickX&&d.y===clickY);
+  if(!dot)return;
+
+  if(dot.n===nextDot&&nextDot===1){
+    // First dot selected, nothing to connect yet
+    nextDot=2;
+    updateStatus();draw();
+  } else if(dot.n===nextDot){
+    // Connect from previous dot
+    const prev=lvl.dots.find(d=>d.n===nextDot-1);
+    if(!wouldCross(prev.x,prev.y,dot.x,dot.y)){
+      lines.push({x1:prev.x,y1:prev.y,x2:dot.x,y2:dot.y});
+      nextDot++;
+      updateStatus();draw();
+      if(nextDot>lvl.dots.length){
+        // Level complete
+        const score=currentLevel+1;
+        if(score>highScore){highScore=score;save()}
+        setTimeout(()=>{
+          if(currentLevel>=LEVELS.length-1){
+            document.getElementById('go-msg').textContent='All '+LEVELS.length+' levels completed!';
+            document.getElementById('gameover-overlay').classList.remove('hidden');
+          } else {
+            document.getElementById('win-msg').textContent='All dots connected!';
+            document.getElementById('win-overlay').classList.remove('hidden');
+          }
+        },300);
+      }
+    }
+  }
+});
+
+function undoLine(){
+  if(lines.length>0){
+    lines.pop();
+    nextDot--;
+    if(nextDot<1)nextDot=1;
+    updateStatus();draw();
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentLevel++;loadLevel(currentLevel);
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

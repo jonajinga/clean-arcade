@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>High Jump</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;justify-content:center}
+</style>
+</head>
+<body>
+<h1>High Jump</h1>
+<div class="hud">
+  <span id="heightDisp">Bar: 1.50m</span>
+  <span id="attDisp">Attempt: 1/3</span>
+  <span id="phaseDisp">Tap to run!</span>
+  <span id="hScore">Best: 0m</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="300"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>High Jump</h2>
+    <p>Tap rapidly to build speed!</p>
+    <p>Then tap to plant, jump, and arch.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Competition Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="doTap()" id="tapBtn" style="display:none;background:#22c55e;padding:1rem 2rem;font-size:1.2rem">TAP!</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=300,GROUND=H-40;
+let barHeight,attempt,speed,phase,jumperX,jumperY,jumperVY,cleared;
+let highScore=0,taps=0,running=false,animId;
+const BAR_X=280,phases=['run','plant','jump','arch','result'];
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('tapBtn').style.display='inline-block';
+  barHeight=1.50;attempt=1;running=true;
+  resetAttempt();
+}
+
+function resetAttempt(){
+  phase='run';speed=0;taps=0;
+  jumperX=50;jumperY=GROUND;jumperVY=0;cleared=false;
+  updateHUD();draw();
+  cancelAnimationFrame(animId);
+  animLoop();
+}
+
+function doTap(){
+  if(!running)return;
+  if(phase==='run'){taps++;speed=Math.min(10,taps*0.5);}
+  else if(phase==='plant'){phase='jump';jumperVY=-(5+speed*1.2);}
+  else if(phase==='jump'){phase='arch';}// arch over bar
+}
+
+document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();doTap();}});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();doTap();},{passive:false});
+
+function updateHUD(){
+  document.getElementById('heightDisp').textContent='Bar: '+barHeight.toFixed(2)+'m';
+  document.getElementById('attDisp').textContent='Attempt: '+attempt+'/3';
+  document.getElementById('phaseDisp').textContent=
+    phase==='run'?'Tap to run!':phase==='plant'?'Tap to plant!':
+    phase==='jump'?'Tap to arch!':phase==='arch'?'Flying...':'';
+  document.getElementById('hScore').textContent='Best: '+highScore.toFixed(2)+'m';
+}
+
+function update(){
+  if(phase==='run'){
+    jumperX+=speed*0.5;
+    if(jumperX>=BAR_X-60){phase='plant';updateHUD();}
+  }
+  if(phase==='jump'||phase==='arch'){
+    jumperVY+=0.3;// gravity
+    jumperY+=jumperVY;
+    jumperX+=2;
+    // check bar clearance
+    const barScreenY=GROUND-barHeight*80;
+    if(phase==='arch'&&jumperX>=BAR_X-10&&jumperX<=BAR_X+10){
+      // arch gives bonus lift
+      jumperY-=2;
+    }
+    if(jumperY>=GROUND){
+      jumperY=GROUND;
+      // did we clear?
+      const peakY=GROUND+jumperVY*jumperVY/(2*0.3)*-1;// rough
+      phase='result';
+      // simple: check if jumper passed bar area while above bar
+      if(jumperX>BAR_X){
+        cleared=true;
+      }
+      handleResult();
+    }
+  }
+}
+
+function handleResult(){
+  // check if actually cleared based on how high they got
+  const maxJumpHeight=speed*1.2+5;
+  const jumpMeters=maxJumpHeight*0.15;
+  cleared=jumpMeters>=barHeight;
+
+  if(cleared){
+    barHeight+=0.05;
+    if(barHeight>highScore){highScore=barHeight;saveState();}
+    attempt=1;
+    setTimeout(resetAttempt,1000);
+  } else {
+    attempt++;
+    if(attempt>3){
+      running=false;
+      document.getElementById('finalScore').textContent='Best Height: '+(barHeight-0.05).toFixed(2)+'m';
+      document.getElementById('gameOverOverlay').style.display='flex';
+      return;
+    }
+    setTimeout(resetAttempt,1000);
+  }
+  updateHUD();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // track
+  ctx.fillStyle='#78350f';ctx.fillRect(0,GROUND,W,H-GROUND);
+  ctx.strokeStyle='#fff';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,GROUND);ctx.lineTo(W,GROUND);ctx.stroke();
+  // mat
+  ctx.fillStyle='#3b82f6';ctx.fillRect(BAR_X+20,GROUND-5,80,5);
+  // bar
+  const barY=GROUND-barHeight*80;
+  // uprights
+  ctx.fillStyle='#e2e8f0';ctx.fillRect(BAR_X-5,barY,3,GROUND-barY);
+  ctx.fillRect(BAR_X+25,barY,3,GROUND-barY);
+  // bar
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(BAR_X-5,barY);ctx.lineTo(BAR_X+28,barY);ctx.stroke();
+  // jumper
+  const jx=jumperX,jy=jumperY;
+  // body
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(jx-4,jy-35,8,20);
+  // head
+  ctx.beginPath();ctx.arc(jx,jy-40,6,0,Math.PI*2);ctx.fill();
+  // legs
+  ctx.strokeStyle='#facc15';ctx.lineWidth=3;
+  if(phase==='run'){
+    const legOff=Math.sin(Date.now()/100)*8;
+    ctx.beginPath();ctx.moveTo(jx,jy-15);ctx.lineTo(jx+legOff,jy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(jx,jy-15);ctx.lineTo(jx-legOff,jy);ctx.stroke();
+  } else {
+    ctx.beginPath();ctx.moveTo(jx,jy-15);ctx.lineTo(jx-5,jy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(jx,jy-15);ctx.lineTo(jx+5,jy);ctx.stroke();
+  }
+  // speed meter during run
+  if(phase==='run'){
+    ctx.fillStyle='#1e293b';ctx.fillRect(20,20,100,12);
+    ctx.fillStyle='#22c55e';ctx.fillRect(20,20,speed*10,12);
+    ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';ctx.fillText('Speed',20,15);
+  }
+  // result
+  if(phase==='result'){
+    ctx.fillStyle=cleared?'#22c55e':'#ef4444';ctx.font='bold 24px system-ui';ctx.textAlign='center';
+    ctx.fillText(cleared?'CLEARED!':'KNOCKED OFF!',W/2,80);ctx.textAlign='start';
+  }
+  // height label
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';
+  ctx.fillText(barHeight.toFixed(2)+'m',BAR_X+35,barY+4);
+}
+
+function animLoop(){
+  if(!running)return;
+  update();draw();updateHUD();
+  animId=requestAnimationFrame(animLoop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'high-jump',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='high-jump'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+  }
+});
+</script>
+</body>
+</html>

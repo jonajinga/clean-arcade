@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spelling Bee</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.hex-grid{display:flex;flex-direction:column;align-items:center;gap:2px;margin:0.5rem 0}
+.hex-row{display:flex;gap:4px}
+.hex{width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:bold;cursor:pointer;border:2px solid #6366f1;background:#1e293b;transition:background 0.15s}
+.hex:hover{background:#334155}
+.hex.center{background:#facc15;color:#0f172a;border-color:#facc15}
+.input-area{display:flex;gap:0.5rem;margin:0.5rem 0;align-items:center}
+.word-display{font-size:1.3rem;min-width:150px;text-align:center;background:#1e293b;padding:0.5rem 1rem;border:1px solid #334155;min-height:2.2rem;letter-spacing:2px}
+.found-words{max-height:200px;overflow-y:auto;width:90%;max-width:400px;display:flex;flex-wrap:wrap;gap:0.3rem;justify-content:center;padding:0.5rem}
+.found-word{background:#1e293b;padding:0.2rem 0.5rem;font-size:0.8rem;border:1px solid #334155}
+.msg{color:#ef4444;font-size:0.9rem;min-height:1.2rem;text-align:center}
+.score-display{color:#22c55e;font-size:1.1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+</style>
+</head>
+<body>
+<h1>Spelling Bee</h1>
+<div class="score-display">Score: <span id="score">0</span> | Found: <span id="foundCount">0</span></div>
+<div class="word-display" id="currentWord"></div>
+<div class="hex-grid" id="hexGrid"></div>
+<div class="input-area">
+<button onclick="deleteLetter()">Del</button>
+<button onclick="shuffleOuter()">Shuffle</button>
+<button onclick="submitWord()" style="background:#22c55e">Enter</button>
+</div>
+<div class="msg" id="msg"></div>
+<div class="info">Use center letter in every word. 4+ letters. Letters can repeat.</div>
+<div class="found-words" id="foundWords"></div>
+
+<div class="overlay" id="startOverlay">
+<h2>Spelling Bee</h2>
+<p>Find words using the 7 letters</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Every word must include the center letter. Words must be 4+ letters. Letters can be reused.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Great Job!</h2>
+<p>Score: <span id="finalScore">0</span></p>
+<p>Words Found: <span id="finalWords">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const WORDS=["able","ache","acme","acre","aged","aide","aisle","ajar","akin","alas","alert","align","alive","alley","allot","allow","alter","ample","angel","angle","ankle","annex","antic","anvil","apple","arena","argue","arise","aside","atlas","attic","avail","avoid","awake","award","badge","badly","bagel","baker","basic","basin","batch","beach","beast","began","begin","being","bench","berry","black","blade","blame","bland","blank","blaze","bleak","bleed","blend","bless","blind","blink","bliss","block","bloom","blown","bluff","blunt","blurt","board","boast","bonus","boost","booth","bound","brace","brain","brand","brave","bread","break","breed","brick","bride","brief","bring","brink","brisk","broad","broil","broke","brood","brook","brush","budge","build","burst","buyer","cabin","cable","candy","cargo","carry","carve","catch","cause","cedar","chain","chair","chalk","chant","chaos","charm","chart","chase","cheap","check","cheek","cheer","chess","chest","child","chill","china","chirp","choir","chord","chose","chunk","civil","claim","clamp","clash","clasp","class","clean","clear","clerk","click","cliff","climb","cling","clip","cloak","clock","clone","close","cloth","cloud","clown","coach","coast","cobra","coral","could","count","court","cover","crack","craft","crane","crash","crate","crawl","crazy","creak","cream","crest","crisp","cross","crowd","crown","crude","crush","curve","cycle","daily","dance","debug","decay","decoy","decry","defer","delay","delta","demon","dense","depot","depth","derby","digit","diner","dirty","ditch","dizzy","dodge","doing","doubt","dough","draft","drain","drape","drawn","dread","dream","dress","dried","drift","drill","drink","drive","drone","drool","drops","drown","drugs","drums","drunk","dryer","dummy","dunce","dusty","dwarf","dwell","dying","eager","eagle","early","earth","easel","eaten","edict","eight","elbow","elder","elect","elite","embed","ember","empty","ended","enemy","enjoy","enter","envoy","epoch","equal","equip","erase","erode","error","essay","ethic","evade","event","every","exact","exalt","excel","exert","exile","exist","expel","extra","exult","fable","facet","faith","false","fancy","fatal","fault","feast","fence","ferry","fetch","fever","fiber","field","fifth","fifty","fight","final","first","flame","flank","flare","flash","flask","fleet","flesh","flick","fling","flint","flirt","float","flock","flood","floor","flora","flour","flown","fluid","fluke","flung","flush","flute","focal","foggy","force","forge","forty","forum","found","foxes","frail","frame","frank","fraud","freak","fresh","fried","front","frost","froze","fruit","fully","fungi","gauge","gaunt","given","glare","glass","gleam","glide","glint","globe","gloom","glory","gloss","glove","glyph","going","grace","grade","graft","grain","grand","grant","grape","graph","grasp","grass","grate","grave","gravel","graze","great","greed","green","greet","grief","grill","grind","gripe","groan","groom","grope","gross","group","grove","growl","grown","guard","guess","guest","guide","guild","guilt","guise","gulch","gully","gumbo","habit","handy","happy","hardy","harsh","hasn","hasn't","haste","haven","heart","heavy","hedge","heist","hence","herbs","hinge","hobby","hoist","honor","horse","hotel","hotly","hound","house","human","humid","hurry","hyena","icily","ideal","image","imply","inbox","index","indie","inept","inert","infer","inner","input","intel","inter","ionic","irate","ivory","jazzy","jewel","joint","joker","jolly","joust","judge","juice","juicy","jumbo","kayak","kebab","knack","knead","kneel","knelt","knife","knack","knock","known","label","lance","large","laser","latch","later","laugh","layer","leach","learn","lease","leave","ledge","legal","lemon","level","lever","light","liken","limit","linen","liner","lingo","liven","llama","lodge","lofty","logic","loose","lorry","lousy","lover","lower","loyal","lucid","lucky","lunar","lunch","lunge","lurch","lyric","macro","magic","major","manor","maple","march","marry","marsh","mason","match","maxim","mayor","media","mercy","merge","merit","might","mimic","minor","minus","mirth","model","mogul","moist","money","month","moose","moral","mount","mourn","mouse","mouth","moved","mower","mulch","mural","music","naive","named","navel","nerve","never","night","noble","noise","north","notch","noted","novel","nudge","nurse","oasis","occur","ocean","offal","offer","often","olive","onset","opera","orbit","order","organ","other","otter","ought","outer","outdo","overt","oxide","ozone","paint","panel","panic","paper","paste","patch","pause","peace","pearl","pedal","penny","perch","peril","phase","phone","piano","piece","pilot","pinch","pitch","pixel","pizza","place","plaid","plain","plane","plank","plant","plate","plaza","plead","pleat","plied","plumb","plume","plump","plunge","plunk","poker","polar","polyp","posed","poser","pouch","pound","power","press","price","pride","prime","print","prior","prism","prize","probe","prone","proof","prose","proud","prove","prune","psalm","pulse","punch","pupil","purge","purse","quack","quail","qualm","quart","queen","query","quest","queue","quick","quiet","quilt","quirk","quota","quote","rabbi","radar","radii","radio","raise","rally","ranch","range","rapid","raven","reach","react","realm","rebus","recur","refer","reign","relax","relay","remit","renew","repay","repel","reply","resin","retro","rider","ridge","rifle","right","rigid","rival","river","roast","robin","robot","rocky","rodeo","rogue","round","route","royal","rugby","ruler","rural","sable","saint","salad","salon","salsa","salve","sandy","satin","sauna","savor","scale","scare","scene","scent","scope","score","scout","scrap","screw","scrub","sedan","seize","sense","sepia","serve","seven","shade","shaft","shake","shame","shape","share","shark","sharp","shave","shawl","sheen","sheep","sheer","sheet","shelf","shell","shift","shine","shirt","shock","shore","short","shout","shove","shown","shrub","shrug","siege","sight","sigma","silky","silly","since","sixth","sixty","skate","skill","skull","slain","slang","slash","slate","sleek","sleep","slice","slide","slope","sloth","slump","smart","smear","smell","smile","smirk","smoke","snack","snail","snake","snare","sneak","solar","solid","solve","sonic","south","space","spare","spark","spawn","speak","spear","speed","spell","spend","spice","spike","spine","spoke","sport","spray","squad","stack","staff","stage","stain","stair","stake","stale","stall","stamp","stand","stare","stark","start","state","stays","steak","steal","steam","steel","steep","steer","stern","stick","stiff","still","sting","stink","stock","stoic","stole","stone","stood","stool","store","storm","story","stout","stove","strap","straw","stray","strip","stuck","study","stuff","stump","stung","stunk","style","suite","super","surge","swamp","swarm","swear","sweat","sweep","sweet","swept","swift","swing","swirl","sword","swore","sworn","swung","syrup","table","taste","taunt","teach","tempo","tense","terms","theme","thick","thorn","those","three","threw","throw","thumb","tiger","tight","timer","tired","title","toast","token","total","touch","tough","towel","tower","toxic","trace","track","trade","trail","train","trait","tramp","trash","treat","trend","trial","tribe","trick","tried","trite","troll","troop","trout","truck","truly","trump","trunk","trust","truth","tumor","tuner","tunic","turns","tutor","tweed","twice","twirl","twist","ulcer","ultra","uncle","under","undue","unfit","unfold","union","unite","unity","unlit","until","upper","upset","urban","usher","usual","utter","vague","valid","value","valve","vapor","vault","verse","vigor","vinyl","viola","viral","virus","visit","visor","vista","vital","vivid","vocal","vodka","voice","voter","vouch","vowel","vulgar","wafer","wages","wagon","waist","walks","waste","watch","water","weary","weave","wedge","weigh","weird","wheat","wheel","where","which","while","whine","whirl","white","whole","whose","width","wield","windy","witch","woman","world","worry","worse","worst","worth","would","wound","wreck","wring","write","wrong","wrote","yacht","yearn","yield","young","youth","zebra","zesty"];
+
+let letters=[];
+let centerLetter='';
+let currentWord='';
+let foundWordsSet=new Set();
+let score=0;
+let highScore=0;
+let validWords=[];
+let gameActive=false;
+
+function generatePuzzle(){
+const vowels='aeiou';
+const consonants='bcdfghjklmnprstwy';
+centerLetter=vowels[Math.floor(Math.random()*vowels.length)];
+let outer=new Set();
+outer.add(vowels[Math.floor(Math.random()*vowels.length)]);
+while(outer.size<6){
+if(outer.size<3)outer.add(consonants[Math.floor(Math.random()*consonants.length)]);
+else outer.add((Math.random()<0.3?vowels:consonants)[Math.floor(Math.random()*(Math.random()<0.3?vowels.length:consonants.length))]);
+}
+letters=[centerLetter,...outer];
+validWords=WORDS.filter(w=>{
+if(w.length<4)return false;
+if(!w.includes(centerLetter))return false;
+for(const ch of w)if(!letters.includes(ch))return false;
+return true;
+});
+if(validWords.length<8){generatePuzzle();return;}
+}
+
+function buildHexGrid(){
+const grid=document.getElementById('hexGrid');
+grid.innerHTML='';
+const rows=[[letters[1],letters[2]],[letters[3],letters[0],letters[4]],[letters[5],letters[6]]];
+rows.forEach((row,ri)=>{
+const div=document.createElement('div');
+div.className='hex-row';
+row.forEach((l,ci)=>{
+const h=document.createElement('div');
+h.className='hex'+(l===centerLetter?' center':'');
+h.textContent=l.toUpperCase();
+h.onclick=()=>addLetter(l);
+div.appendChild(h);
+});
+grid.appendChild(div);
+});
+}
+
+function addLetter(l){if(!gameActive)return;currentWord+=l;updateDisplay();}
+function deleteLetter(){if(!gameActive)return;currentWord=currentWord.slice(0,-1);updateDisplay();}
+function updateDisplay(){document.getElementById('currentWord').textContent=currentWord.toUpperCase();}
+
+function shuffleOuter(){
+if(!gameActive)return;
+let outer=letters.slice(1);
+for(let i=outer.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[outer[i],outer[j]]=[outer[j],outer[i]];}
+letters=[centerLetter,...outer];
+buildHexGrid();
+}
+
+function submitWord(){
+if(!gameActive)return;
+const w=currentWord.toLowerCase();
+const msg=document.getElementById('msg');
+if(w.length<4){msg.textContent='Too short (4+ letters)';msg.style.color='#ef4444';}
+else if(!w.includes(centerLetter)){msg.textContent='Must use center letter!';msg.style.color='#ef4444';}
+else if(foundWordsSet.has(w)){msg.textContent='Already found!';msg.style.color='#ef4444';}
+else if(!validWords.includes(w)){msg.textContent='Not in word list';msg.style.color='#ef4444';}
+else{
+foundWordsSet.add(w);
+const pts=w.length===4?1:w.length;
+score+=pts;
+msg.textContent=`+${pts} points!`;msg.style.color='#22c55e';
+document.getElementById('score').textContent=score;
+document.getElementById('foundCount').textContent=foundWordsSet.size;
+const el=document.createElement('span');el.className='found-word';el.textContent=w;
+document.getElementById('foundWords').appendChild(el);
+if(foundWordsSet.size===validWords.length){endGame();}
+}
+currentWord='';updateDisplay();
+setTimeout(()=>{msg.textContent='';},2000);
+}
+
+function endGame(){
+gameActive=false;
+if(score>highScore){highScore=score;save();}
+document.getElementById('finalScore').textContent=score;
+document.getElementById('finalWords').textContent=foundWordsSet.size;
+document.getElementById('overOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+generatePuzzle();
+score=0;foundWordsSet=new Set();currentWord='';
+document.getElementById('score').textContent='0';
+document.getElementById('foundCount').textContent='0';
+document.getElementById('foundWords').innerHTML='';
+document.getElementById('currentWord').textContent='';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+buildHexGrid();
+gameActive=true;
+}
+
+document.addEventListener('keydown',e=>{
+if(!gameActive)return;
+if(e.key==='Enter')submitWord();
+else if(e.key==='Backspace')deleteLetter();
+else if(/^[a-z]$/i.test(e.key)){
+const l=e.key.toLowerCase();
+if(letters.includes(l))addLetter(l);
+}
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'spelling-bee',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='spelling-bee'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

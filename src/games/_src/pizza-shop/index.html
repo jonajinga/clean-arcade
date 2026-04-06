@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pizza Shop</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.toppings{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Pizza Shop</h1>
+<div class="hud">
+  <span id="timerDisp">Time: 120s</span>
+  <span id="tipsDisp">Tips: $0</span>
+  <span id="ordersDisp">Orders: 0</span>
+  <span id="hScore">Best: $0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Pizza Shop</h2>
+    <p>Make pizzas! Match the order!</p>
+    <p>Click toppings, then bake &amp; serve.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Shift Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="toppings" id="toppingBtns"></div>
+<div style="display:flex;gap:0.3rem;justify-content:center;margin:0.3rem">
+  <button onclick="bake()" id="bakeBtn" style="display:none;background:#ef4444">Bake</button>
+  <button onclick="serve()" id="serveBtn" style="display:none;background:#22c55e">Serve</button>
+  <button onclick="clearPizza()" id="clearBtn" style="display:none;background:#334155">Clear</button>
+  <button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400;
+const TOPPINGS=['Pepperoni','Mushroom','Olive','Pepper','Onion','Sausage'];
+const TCOLORS=['#ef4444','#a3a3a3','#1e293b','#22c55e','#c084fc','#b45309'];
+let order=[],placed=[],tips=0,orders=0,highScore=0,timer=120,baking=false,bakeTimer=0,baked=false;
+let paused=false,running=false,interval;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  ['bakeBtn','serveBtn','clearBtn','pauseBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
+  tips=0;orders=0;timer=120;baking=false;baked=false;placed=[];
+  running=true;paused=false;
+  buildToppingBtns();newOrder();updateHUD();draw();
+  clearInterval(interval);
+  interval=setInterval(()=>{
+    if(paused||!running)return;
+    timer--;
+    if(baking){bakeTimer--;if(bakeTimer<=0){baking=false;baked=true;}}
+    if(timer<=0){endGame();}
+    updateHUD();draw();
+  },1000);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function buildToppingBtns(){
+  const p=document.getElementById('toppingBtns');p.innerHTML='';
+  TOPPINGS.forEach((t,i)=>{
+    const b=document.createElement('button');
+    b.textContent=t;b.style.background=TCOLORS[i];
+    b.onclick=()=>addTopping(i);
+    p.appendChild(b);
+  });
+}
+
+function newOrder(){
+  order=[];baked=false;baking=false;placed=[];
+  const n=2+Math.floor(Math.random()*3);
+  for(let i=0;i<n;i++){
+    const t=Math.floor(Math.random()*TOPPINGS.length);
+    if(!order.includes(t))order.push(t);
+  }
+}
+
+function addTopping(i){
+  if(!running||paused||baking||baked)return;
+  if(!placed.includes(i))placed.push(i);
+  draw();
+}
+
+function clearPizza(){placed=[];baked=false;baking=false;draw();}
+
+window.bake=function(){
+  if(!running||paused||baking||baked||placed.length===0)return;
+  baking=true;bakeTimer=3;
+};
+
+window.serve=function(){
+  if(!running||paused||!baked)return;
+  const correct=order.every(t=>placed.includes(t))&&placed.every(t=>order.includes(t));
+  if(correct){
+    tips+=5+Math.floor(Math.random()*6);
+    orders++;
+  } else {
+    tips+=1;orders++;
+  }
+  if(tips>highScore){highScore=tips;saveState();}
+  newOrder();updateHUD();draw();
+};
+
+function endGame(){
+  running=false;clearInterval(interval);
+  document.getElementById('finalScore').textContent='Tips: $'+tips+' | Orders: '+orders;
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('timerDisp').textContent='Time: '+timer+'s';
+  document.getElementById('tipsDisp').textContent='Tips: $'+tips;
+  document.getElementById('ordersDisp').textContent='Orders: '+orders;
+  document.getElementById('hScore').textContent='Best: $'+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // order
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';
+  ctx.fillText('Order: '+order.map(i=>TOPPINGS[i]).join(', '),10,25);
+  // pizza base
+  const cx=W/2,cy=H/2+20,r=120;
+  ctx.fillStyle='#d4a017';ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(cx,cy,r-15,0,Math.PI*2);ctx.fill();// sauce
+  ctx.fillStyle='#fef3c7';ctx.beginPath();ctx.arc(cx,cy,r-20,0,Math.PI*2);ctx.fill();// cheese
+  // placed toppings
+  for(let t of placed){
+    ctx.fillStyle=TCOLORS[t];
+    for(let j=0;j<6;j++){
+      const a=Math.PI*2/6*j+t*0.5;
+      const d=40+t*8;
+      ctx.beginPath();ctx.arc(cx+Math.cos(a)*d,cy+Math.sin(a)*d,8,0,Math.PI*2);ctx.fill();
+    }
+  }
+  if(baking){
+    ctx.fillStyle='rgba(239,68,68,0.3)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#facc15';ctx.font='bold 24px system-ui';ctx.textAlign='center';
+    ctx.fillText('Baking... '+bakeTimer+'s',cx,cy);ctx.textAlign='start';
+  }
+  if(baked){
+    ctx.fillStyle='#22c55e';ctx.font='bold 16px system-ui';ctx.fillText('Ready to serve!',10,H-10);
+  }
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'pizza-shop',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='pizza-shop'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

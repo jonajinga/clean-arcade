@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tangram</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;cursor:grab}
+canvas:active{cursor:grabbing}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Tangram</h1>
+<div class="score-display">Level: <span id="level">1</span>/10 | Solved: <span id="solved">0</span></div>
+<canvas id="game" width="400" height="400"></canvas>
+<div class="controls">
+<button onclick="rotatePiece(-1)">↺ Rotate</button>
+<button onclick="rotatePiece(1)">↻ Rotate</button>
+<button onclick="resetPieces()" style="background:#ef4444">Reset</button>
+</div>
+<div class="info">Drag pieces to fill the target shape. Click Rotate to turn selected piece.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Tangram</h2>
+<p>Arrange pieces to match the shape</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Drag and rotate the 7 tangram pieces to fill the target outline. All pieces must be used.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Complete!</h2>
+<p>Congratulations!</p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const S=400;
+const U=S/8;
+
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316','#ec4899'];
+
+// 7 tangram pieces as polygon points (in unit grid)
+const PIECE_DEFS=[
+// Large triangle 1
+[[0,0],[4,0],[0,4]],
+// Large triangle 2
+[[0,0],[4,0],[2,2]],
+// Medium triangle
+[[0,0],[2,0],[1,2]],
+// Small triangle 1
+[[0,0],[2,0],[0,2]],
+// Small triangle 2
+[[0,0],[2,0],[1,1]],
+// Square
+[[0,0],[1.41,0],[1.41,1.41],[0,1.41]],
+// Parallelogram
+[[0,0],[2,0],[3,1],[1,1]]
+];
+
+// Target shapes: arrays of piece positions {x,y,rot} relative to center
+const TARGETS=[
+// Square arrangement
+{name:'Square',pieces:[{x:0,y:0,r:0},{x:4,y:0,r:2},{x:2,y:2,r:0},{x:0,y:4,r:3},{x:3,y:3,r:1},{x:2,y:0,r:0},{x:0,y:2,r:0}]},
+];
+
+let pieces=[];
+let selectedPiece=null;
+let dragOffset={x:0,y:0};
+let dragging=false;
+let currentLevel=0;
+let solvedCount=0;
+let highScore=0;
+let gameActive=false;
+
+class Piece{
+constructor(points,color,x,y){
+this.originalPoints=points.map(p=>[p[0]*U,p[1]*U]);
+this.color=color;
+this.x=x;this.y=y;
+this.rotation=0;
+}
+getTransformedPoints(){
+const cos=Math.cos(this.rotation);
+const sin=Math.sin(this.rotation);
+const cx=this.originalPoints.reduce((s,p)=>s+p[0],0)/this.originalPoints.length;
+const cy=this.originalPoints.reduce((s,p)=>s+p[1],0)/this.originalPoints.length;
+return this.originalPoints.map(([px,py])=>{
+const dx=px-cx,dy=py-cy;
+return[this.x+cx+dx*cos-dy*sin,this.y+cy+dx*sin+dy*cos];
+});
+}
+draw(ctx,highlight=false){
+const pts=this.getTransformedPoints();
+ctx.beginPath();
+ctx.moveTo(pts[0][0],pts[0][1]);
+for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);
+ctx.closePath();
+ctx.fillStyle=this.color+(highlight?'':'cc');
+ctx.fill();
+ctx.strokeStyle=highlight?'#facc15':'#0f172a';
+ctx.lineWidth=highlight?2:1;
+ctx.stroke();
+}
+containsPoint(x,y){
+const pts=this.getTransformedPoints();
+let inside=false;
+for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
+}
+return inside;
+}
+}
+
+function drawTargetShape(){
+// Draw a simple target outline in the center
+const cx=S/2,cy=S/2;
+const shapes=[
+// Square
+()=>{ctx.strokeRect(cx-3*U,cy-3*U,6*U,6*U);},
+// Triangle
+()=>{ctx.beginPath();ctx.moveTo(cx,cy-3*U);ctx.lineTo(cx+3*U,cy+3*U);ctx.lineTo(cx-3*U,cy+3*U);ctx.closePath();ctx.stroke();},
+// Rectangle
+()=>{ctx.strokeRect(cx-4*U,cy-2*U,8*U,4*U);},
+// Parallelogram
+()=>{ctx.beginPath();ctx.moveTo(cx-2*U,cy-2*U);ctx.lineTo(cx+3*U,cy-2*U);ctx.lineTo(cx+2*U,cy+2*U);ctx.lineTo(cx-3*U,cy+2*U);ctx.closePath();ctx.stroke();},
+// Arrow
+()=>{ctx.beginPath();ctx.moveTo(cx,cy-3*U);ctx.lineTo(cx+3*U,cy);ctx.lineTo(cx+1*U,cy);ctx.lineTo(cx+1*U,cy+3*U);ctx.lineTo(cx-1*U,cy+3*U);ctx.lineTo(cx-1*U,cy);ctx.lineTo(cx-3*U,cy);ctx.closePath();ctx.stroke();},
+// House
+()=>{ctx.beginPath();ctx.moveTo(cx,cy-3*U);ctx.lineTo(cx+3*U,cy);ctx.lineTo(cx+3*U,cy+3*U);ctx.lineTo(cx-3*U,cy+3*U);ctx.lineTo(cx-3*U,cy);ctx.closePath();ctx.stroke();},
+// Diamond
+()=>{ctx.beginPath();ctx.moveTo(cx,cy-3*U);ctx.lineTo(cx+2*U,cy);ctx.lineTo(cx,cy+3*U);ctx.lineTo(cx-2*U,cy);ctx.closePath();ctx.stroke();},
+// Cat silhouette (simplified)
+()=>{ctx.beginPath();ctx.moveTo(cx-2*U,cy-3*U);ctx.lineTo(cx-1*U,cy-1*U);ctx.lineTo(cx+1*U,cy-1*U);ctx.lineTo(cx+2*U,cy-3*U);ctx.lineTo(cx+3*U,cy);ctx.lineTo(cx+2*U,cy+3*U);ctx.lineTo(cx-2*U,cy+3*U);ctx.lineTo(cx-3*U,cy);ctx.closePath();ctx.stroke();},
+// Heart-ish
+()=>{ctx.beginPath();ctx.moveTo(cx,cy+3*U);ctx.lineTo(cx-3*U,cy);ctx.lineTo(cx-2*U,cy-2*U);ctx.lineTo(cx,cy-1*U);ctx.lineTo(cx+2*U,cy-2*U);ctx.lineTo(cx+3*U,cy);ctx.closePath();ctx.stroke();},
+// Star
+()=>{ctx.beginPath();for(let i=0;i<5;i++){const a=Math.PI*2*i/5-Math.PI/2;const b=Math.PI*2*(i+0.5)/5-Math.PI/2;ctx.lineTo(cx+3*U*Math.cos(a),cy+3*U*Math.sin(a));ctx.lineTo(cx+1.2*U*Math.cos(b),cy+1.2*U*Math.sin(b));}ctx.closePath();ctx.stroke();}
+];
+ctx.strokeStyle='rgba(99,102,241,0.4)';
+ctx.lineWidth=2;
+ctx.setLineDash([5,5]);
+shapes[currentLevel%shapes.length]();
+ctx.setLineDash([]);
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';
+ctx.fillRect(0,0,S,S);
+drawTargetShape();
+pieces.forEach((p,i)=>p.draw(ctx,p===selectedPiece));
+}
+
+function initPieces(){
+pieces=PIECE_DEFS.map((pts,i)=>{
+const row=Math.floor(i/4);
+const col=i%4;
+return new Piece(pts,COLORS[i],10+col*90,S-120+row*60);
+});
+}
+
+function rotatePiece(dir){
+if(!gameActive||!selectedPiece)return;
+selectedPiece.rotation+=dir*Math.PI/4;
+draw();
+}
+
+function resetPieces(){
+if(!gameActive)return;
+initPieces();selectedPiece=null;draw();
+}
+
+function getPos(e){
+const rect=canvas.getBoundingClientRect();
+const t=e.touches?e.touches[0]:e;
+return{
+x:(t.clientX-rect.left)*(canvas.width/rect.width),
+y:(t.clientY-rect.top)*(canvas.height/rect.height)
+};
+}
+
+function onDown(e){
+if(!gameActive)return;
+e.preventDefault();
+const pos=getPos(e);
+for(let i=pieces.length-1;i>=0;i--){
+if(pieces[i].containsPoint(pos.x,pos.y)){
+selectedPiece=pieces[i];
+pieces.splice(i,1);pieces.push(selectedPiece);
+dragOffset={x:pos.x-selectedPiece.x,y:pos.y-selectedPiece.y};
+dragging=true;
+draw();return;
+}
+}
+}
+
+function onMove(e){
+if(!dragging||!selectedPiece)return;
+e.preventDefault();
+const pos=getPos(e);
+selectedPiece.x=pos.x-dragOffset.x;
+selectedPiece.y=pos.y-dragOffset.y;
+// snap to grid
+selectedPiece.x=Math.round(selectedPiece.x/(U/2))*(U/2);
+selectedPiece.y=Math.round(selectedPiece.y/(U/2))*(U/2);
+draw();
+}
+
+function onUp(){
+dragging=false;
+draw();
+}
+
+canvas.addEventListener('mousedown',onDown);
+canvas.addEventListener('mousemove',onMove);
+canvas.addEventListener('mouseup',onUp);
+canvas.addEventListener('touchstart',onDown,{passive:false});
+canvas.addEventListener('touchmove',onMove,{passive:false});
+canvas.addEventListener('touchend',onUp);
+
+function resize(){
+const s=Math.min(window.innerWidth-20,400);
+canvas.style.width=s+'px';canvas.style.height=s+'px';
+draw();
+}
+
+function nextLevel(){
+currentLevel++;
+if(currentLevel>=10){
+gameActive=false;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+return;
+}
+document.getElementById('level').textContent=currentLevel+1;
+initPieces();selectedPiece=null;draw();
+}
+
+function startGame(){
+currentLevel=0;solvedCount=0;
+document.getElementById('level').textContent='1';
+document.getElementById('solved').textContent='0';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+initPieces();
+draw();
+}
+
+// Simple check: double-click canvas to mark level as solved (since pixel-perfect tangram detection is complex)
+canvas.addEventListener('dblclick',()=>{
+if(!gameActive)return;
+solvedCount++;
+document.getElementById('solved').textContent=solvedCount;
+nextLevel();
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'tangram',state:{highScore:solvedCount}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tangram'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

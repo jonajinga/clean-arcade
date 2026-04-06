@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Centipede</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}
+.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+.touch-controls{display:grid;grid-template-columns:60px 60px 60px;grid-template-rows:50px 50px;gap:4px;margin:0.25rem 0}
+.touch-controls button{width:100%;height:100%;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>Centipede</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Centipede</h2>
+<p>Arrow keys / touch to move & shoot</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<div class="touch-controls">
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowUp=true" ontouchend="event.preventDefault();keys.ArrowUp=false">▲</button>
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowDown=true" ontouchend="event.preventDefault();keys.ArrowDown=false">▼</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<button class="btn-primary" style="margin:0.25rem 0;width:188px;height:44px" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false">FIRE</button>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=480,TILE=16,COLS=W/TILE,ROWS=H/TILE;
+let gameRunning=false,paused=false,animId;
+let ship,bullets,centipedes,mushrooms,score,lives,level,highScore=0,shootCd=0;
+let keys={};
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=(400*s)+'px';canvas.style.height=(480*s)+'px';}
+resize();window.addEventListener('resize',resize);
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='centipede'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'centipede',state:{highScore}},'*');}catch(e){}}
+
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function createMushrooms(count){
+  mushrooms=[];
+  for(let i=0;i<count;i++){
+    let gx=Math.floor(Math.random()*COLS),gy=2+Math.floor(Math.random()*(ROWS-6));
+    if(!mushrooms.find(m=>m.gx===gx&&m.gy===gy)){
+      mushrooms.push({gx,gy,hp:4});
+    }
+  }
+}
+
+function createCentipede(len){
+  let segs=[];
+  for(let i=0;i<len;i++){
+    segs.push({x:(COLS/2+i)*TILE,y:0,dir:-1,dropping:false,targetY:0});
+  }
+  return{segs,speed:1+level*0.3};
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;
+  ship={x:W/2-TILE/2,y:H-TILE*2,w:TILE,h:TILE};
+  bullets=[];
+  createMushrooms(25);
+  centipedes=[createCentipede(10+level*2)];
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+function mushAt(gx,gy){return mushrooms.find(m=>m.gx===gx&&m.gy===gy&&m.hp>0);}
+
+function loop(){
+  if(!gameRunning||paused)return;
+  update();
+  draw();
+  animId=requestAnimationFrame(loop);
+}
+
+function update(){
+  // Ship
+  const spd=3;
+  if(keys.ArrowLeft&&ship.x>0)ship.x-=spd;
+  if(keys.ArrowRight&&ship.x<W-ship.w)ship.x+=spd;
+  if(keys.ArrowUp&&ship.y>H-TILE*6)ship.y-=spd;
+  if(keys.ArrowDown&&ship.y<H-TILE)ship.y+=spd;
+  if(keys[' ']){shootCd--;if(shootCd<=0){bullets.push({x:ship.x+ship.w/2-2,y:ship.y-4,w:3,h:8});shootCd=8;}}
+
+  bullets.forEach(b=>b.y-=6);
+  bullets=bullets.filter(b=>b.y>-10);
+
+  // Bullet vs mushroom
+  bullets.forEach(b=>{
+    let gx=Math.floor((b.x+1)/TILE),gy=Math.floor(b.y/TILE);
+    let m=mushAt(gx,gy);
+    if(m){m.hp--;b.y=-99;if(m.hp<=0)score+=1;}
+  });
+  mushrooms=mushrooms.filter(m=>m.hp>0);
+
+  // Centipede movement
+  centipedes.forEach(cent=>{
+    cent.segs.forEach(s=>{
+      let gx=Math.floor(s.x/TILE),gy=Math.floor(s.y/TILE);
+      let nextGx=gx+s.dir;
+      let blocked=nextGx<0||nextGx>=COLS||mushAt(nextGx,gy);
+
+      if(s.dropping){
+        s.y+=TILE*0.1*cent.speed;
+        if(s.y>=s.targetY*TILE){
+          s.y=s.targetY*TILE;
+          s.dropping=false;
+        }
+      } else if(blocked){
+        s.dir*=-1;
+        s.dropping=true;
+        s.targetY=gy+1;
+        if(s.targetY>=ROWS)s.targetY=0;
+      } else {
+        s.x+=s.dir*cent.speed;
+      }
+
+      // Hit ship
+      if(Math.abs(s.x-ship.x)<TILE&&Math.abs(s.y-ship.y)<TILE){
+        loseLife();
+      }
+    });
+  });
+
+  // Bullet vs centipede
+  bullets.forEach(b=>{
+    centipedes.forEach(cent=>{
+      cent.segs.forEach((s,i)=>{
+        if(s.alive!==false&&Math.abs(b.x-s.x)<TILE&&Math.abs(b.y-s.y)<TILE){
+          s.alive=false;
+          b.y=-99;
+          score+=10;
+          mushrooms.push({gx:Math.floor(s.x/TILE),gy:Math.floor(s.y/TILE),hp:4});
+        }
+      });
+    });
+  });
+
+  // Remove dead segments, split centipedes
+  let newCents=[];
+  centipedes.forEach(cent=>{
+    let group=[];
+    cent.segs.forEach(s=>{
+      if(s.alive!==false){group.push(s);}
+      else{
+        if(group.length>0)newCents.push({segs:[...group],speed:cent.speed});
+        group=[];
+      }
+    });
+    if(group.length>0)newCents.push({segs:group,speed:cent.speed});
+  });
+  centipedes=newCents;
+
+  // Check level
+  if(centipedes.length===0||centipedes.every(c=>c.segs.length===0)){
+    level++;
+    centipedes=[createCentipede(10+level*2)];
+    updateHUD();
+  }
+  updateHUD();
+}
+
+function loseLife(){
+  lives--;
+  updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{ship.x=W/2-TILE/2;ship.y=H-TILE*2;}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Mushrooms
+  mushrooms.forEach(m=>{
+    let alpha=m.hp/4;
+    ctx.fillStyle=`rgba(34,197,94,${0.3+alpha*0.7})`;
+    ctx.fillRect(m.gx*TILE+2,m.gy*TILE+2,TILE-4,TILE-4);
+    ctx.fillStyle='#166534';
+    ctx.fillRect(m.gx*TILE+5,m.gy*TILE+1,TILE-10,3);
+  });
+
+  // Centipede
+  centipedes.forEach(cent=>{
+    cent.segs.forEach((s,i)=>{
+      if(s.alive===false)return;
+      ctx.fillStyle=i===0?'#ef4444':'#22c55e';
+      ctx.beginPath();
+      ctx.arc(s.x+TILE/2,s.y+TILE/2,TILE/2-1,0,Math.PI*2);
+      ctx.fill();
+      if(i===0){ctx.fillStyle='#fff';ctx.fillRect(s.x+4,s.y+4,3,3);ctx.fillRect(s.x+9,s.y+4,3,3);}
+    });
+  });
+
+  // Ship
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(ship.x,ship.y,ship.w,ship.h);
+  ctx.fillStyle='#6366f1';
+  ctx.fillRect(ship.x+ship.w/2-2,ship.y-3,4,5);
+
+  // Bullets
+  ctx.fillStyle='#facc15';
+  bullets.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
+}
+</script>
+</body>
+</html>

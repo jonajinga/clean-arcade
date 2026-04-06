@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Territory War</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;margin:0.25rem 0;text-align:center;min-height:2.8em;padding:0 0.5rem}
+canvas{border:2px solid #6366f1;display:block;margin:0.25rem auto}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;flex-wrap:wrap;justify-content:center}
+.controls button{padding:0.5rem 1rem;font-size:0.85rem;background:#334155}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Territory War</h1>
+<div class="info" id="info">Click empty hex to place unit. Click your unit then enemy neighbor to attack.</div>
+<canvas id="canvas"></canvas>
+<div class="controls">
+<button onclick="endPlayerTurn()" style="background:#334155">End Turn</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Territory War</h2>
+<p>Hex grid territory control. Place units, expand territory, fight adjacent enemies (dice roll). Control majority of hexes to win after 15 turns!</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const ROWS=7,COLS=9,MAX_TURNS=15;
+let hexes,selected,turnNum,phase,placesLeft,gameOver,highScore=0,wins=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d'),info=document.getElementById('info');
+let hexSize,cw,ch;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='territory-war'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'territory-war',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+cw=Math.min(window.innerWidth-20,450);ch=cw*0.75;
+canvas.width=cw;canvas.height=ch;
+hexSize=cw/(COLS*1.85+1);
+render();
+}
+window.addEventListener('resize',resize);
+
+function hexCenter(r,c){
+const x=hexSize*1.75*c+hexSize+(r%2)*hexSize*0.875;
+const y=hexSize*1.55*r+hexSize*1.2;
+return{x,y};
+}
+
+function hexNeighbors(r,c){
+const even=r%2===0;
+const offsets=even?[[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]]:[[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]];
+return offsets.map(([dr,dc])=>[r+dr,c+dc]).filter(([nr,nc])=>nr>=0&&nr<ROWS&&nc>=0&&nc<COLS);
+}
+
+function startGame(){
+hexes=Array.from({length:ROWS},()=>Array.from({length:COLS},()=>({owner:0,units:0})));
+// Starting positions
+hexes[0][COLS-1]={owner:2,units:2};hexes[0][COLS-2]={owner:2,units:1};
+hexes[ROWS-1][0]={owner:1,units:2};hexes[ROWS-1][1]={owner:1,units:1};
+selected=null;turnNum=1;phase='place';placesLeft=2;gameOver=false;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+info.textContent=`Turn ${turnNum}/${MAX_TURNS} | Place ${placesLeft} units on your territory or adjacent empty hexes`;
+resize();
+}
+
+function drawHex(cx,cy,s,fill,stroke){
+ctx.beginPath();
+for(let i=0;i<6;i++){const a=Math.PI/6+i*Math.PI/3;ctx.lineTo(cx+s*Math.cos(a),cy+s*Math.sin(a))}
+ctx.closePath();
+ctx.fillStyle=fill;ctx.fill();
+ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,ch);
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+const{x,y}=hexCenter(r,c);
+const h=hexes[r][c];
+let fill=h.owner===1?'#166534':h.owner===2?'#7f1d1d':'#1e293b';
+let stroke='#475569';
+if(selected&&selected[0]===r&&selected[1]===c){fill='#4f46e5';stroke='#facc15'}
+drawHex(x,y,hexSize*0.9,fill,stroke);
+if(h.units>0){
+ctx.fillStyle=h.owner===1?'#22c55e':'#ef4444';
+ctx.font='bold '+(hexSize*0.5)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(h.units,x,y);
+}
+}
+// Score
+const p=hexes.flat().filter(h=>h.owner===1).length;
+const a=hexes.flat().filter(h=>h.owner===2).length;
+ctx.fillStyle='#e2e8f0';ctx.font=(hexSize*0.4)+'px system-ui';ctx.textAlign='left';
+ctx.fillText(`You: ${p}`,5,ch-5);ctx.textAlign='right';ctx.fillText(`AI: ${a}`,cw-5,ch-5);
+}
+
+canvas.addEventListener('click',e=>{
+if(gameOver||phase==='ai')return;
+const rect=canvas.getBoundingClientRect();
+const mx=(e.clientX-rect.left)*(cw/rect.width),my=(e.clientY-rect.top)*(ch/rect.height);
+let clickR=-1,clickC=-1,bestD=Infinity;
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+const{x,y}=hexCenter(r,c);
+const d=Math.hypot(mx-x,my-y);
+if(d<hexSize*0.9&&d<bestD){bestD=d;clickR=r;clickC=c}
+}
+if(clickR<0)return;
+
+if(phase==='place'){
+const h=hexes[clickR][clickC];
+// Can place on own territory or adjacent to own
+if(h.owner===1){h.units++;placesLeft--}
+else if(h.owner===0){
+const adj=hexNeighbors(clickR,clickC);
+if(adj.some(([nr,nc])=>hexes[nr][nc].owner===1)){
+h.owner=1;h.units=1;placesLeft--;
+}
+}
+if(placesLeft<=0){phase='attack';info.textContent=`Turn ${turnNum}/${MAX_TURNS} | Click your unit, then enemy neighbor to attack. Or End Turn.`}
+else info.textContent=`Turn ${turnNum}/${MAX_TURNS} | Place ${placesLeft} more units`;
+render();return;
+}
+
+if(phase==='attack'){
+const h=hexes[clickR][clickC];
+if(!selected){
+if(h.owner===1&&h.units>0){selected=[clickR,clickC];render()}
+return;
+}
+if(clickR===selected[0]&&clickC===selected[1]){selected=null;render();return}
+// Attack
+const adj=hexNeighbors(selected[0],selected[1]);
+if(!adj.some(([nr,nc])=>nr===clickR&&nc===clickC)){selected=null;render();return}
+if(h.owner!==2){selected=null;render();return}
+const attacker=hexes[selected[0]][selected[1]];
+// Dice combat
+const atkRoll=Math.ceil(Math.random()*6)+attacker.units;
+const defRoll=Math.ceil(Math.random()*6)+h.units;
+if(atkRoll>defRoll){
+h.owner=1;h.units=1;attacker.units--;
+info.textContent=`Attack ${atkRoll} vs ${defRoll}: You win!`;
+}else{
+attacker.units--;h.units=Math.max(1,h.units-1);
+info.textContent=`Attack ${atkRoll} vs ${defRoll}: Defended!`;
+}
+if(attacker.units<=0){attacker.owner=0}
+selected=null;render();
+if(hexes.flat().filter(h=>h.owner===2).length===0){endGame('You conquered all!',true);return}
+if(hexes.flat().filter(h=>h.owner===1).length===0){endGame('AI conquered all!',false);return}
+}
+});
+
+function endPlayerTurn(){
+if(gameOver||phase==='ai')return;
+phase='ai';selected=null;
+info.textContent='AI turn...';
+setTimeout(aiTurn,400);
+}
+
+function aiTurn(){
+// AI place units
+const aiTerr=[];
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(hexes[r][c].owner===2)aiTerr.push([r,c]);
+let places=Math.max(1,Math.floor(aiTerr.length/2));
+for(let i=0;i<places;i++){
+// Place on border hexes or expand
+let best=null,bestScore=-1;
+for(const[r,c]of aiTerr){
+const adj=hexNeighbors(r,c);
+const enemyAdj=adj.filter(([nr,nc])=>hexes[nr][nc].owner===1).length;
+if(enemyAdj>bestScore){bestScore=enemyAdj;best=[r,c]}
+}
+// Try expand
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+if(hexes[r][c].owner===0){
+const adj=hexNeighbors(r,c);
+if(adj.some(([nr,nc])=>hexes[nr][nc].owner===2)){
+if(Math.random()<0.4){hexes[r][c]={owner:2,units:1};best=null;break}
+}
+}
+}
+if(best)hexes[best[0]][best[1]].units++;
+}
+// AI attack
+for(const[r,c]of aiTerr){
+if(hexes[r][c].owner!==2||hexes[r][c].units<2)continue;
+const adj=hexNeighbors(r,c);
+for(const[nr,nc]of adj){
+if(hexes[nr][nc].owner===1){
+const atkRoll=Math.ceil(Math.random()*6)+hexes[r][c].units;
+const defRoll=Math.ceil(Math.random()*6)+hexes[nr][nc].units;
+if(atkRoll>defRoll){hexes[nr][nc]={owner:2,units:1};hexes[r][c].units--}
+else{hexes[r][c].units--;hexes[nr][nc].units=Math.max(1,hexes[nr][nc].units-1)}
+if(hexes[r][c].units<=0){hexes[r][c].owner=0;break}
+}
+}
+}
+render();
+if(hexes.flat().filter(h=>h.owner===1).length===0){endGame('AI conquered all!',false);return}
+if(hexes.flat().filter(h=>h.owner===2).length===0){endGame('You conquered all!',true);return}
+turnNum++;
+if(turnNum>MAX_TURNS){
+const p=hexes.flat().filter(h=>h.owner===1).length;
+const a=hexes.flat().filter(h=>h.owner===2).length;
+endGame(p>a?'You control more territory!':p<a?'AI controls more territory!':'Draw!',p>a);
+return;
+}
+phase='place';placesLeft=Math.max(1,Math.floor(hexes.flat().filter(h=>h.owner===1).length/2));
+info.textContent=`Turn ${turnNum}/${MAX_TURNS} | Place ${placesLeft} units`;
+}
+
+function endGame(msg,won){
+gameOver=true;
+if(won){wins++;highScore=Math.max(highScore,wins);save()}
+const p=hexes.flat().filter(h=>h.owner===1).length;
+const a=hexes.flat().filter(h=>h.owner===2).length;
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=won?'Victory!':'Defeat';
+document.getElementById('overMsg').textContent=`${msg}\nYou: ${p} | AI: ${a} hexes`;
+document.getElementById('overOverlay').classList.remove('hidden');
+},400);
+}
+</script>
+</body>
+</html>

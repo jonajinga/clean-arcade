@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snap!</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(400px,95vw);height:500px;background:#1e293b;position:relative;padding:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:12px 28px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.card{width:80px;height:120px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700}
+.card.red{color:#ef4444}
+.card.face-down{background:#6366f1;color:transparent}
+.piles{display:flex;gap:30px;align-items:center}
+.pile-wrap{text-align:center}
+.pile-wrap .label{font-size:.75rem;color:#94a3b8;margin-top:4px}
+#snap-btn{background:#ef4444;font-size:1.5rem;padding:16px 40px;font-weight:700;margin:8px 0}
+#snap-btn:active{background:#dc2626;transform:scale(.95)}
+#msg{text-align:center;min-height:1.5em;font-weight:600;font-size:1rem}
+.scores{font-size:.9rem;display:flex;gap:20px}
+</style>
+</head>
+<body>
+<h1>Snap!</h1>
+<div id="game-area">
+<div class="scores"><span id="sc-you">You: 0</span><span id="sc-cpu">CPU: 0</span></div>
+<div class="piles">
+  <div class="pile-wrap"><div class="card face-down" id="pile1"></div><div class="label">Your Pile</div></div>
+  <div class="pile-wrap"><div class="card face-down" id="pile2"></div><div class="label">CPU Pile</div></div>
+</div>
+<div id="msg">&nbsp;</div>
+<button id="snap-btn" onclick="doSnap()">SNAP!</button>
+<div class="scores"><span id="cards-left"></span></div>
+<div class="overlay" id="start-overlay">
+<h2>Snap!</h2>
+<p>Cards flip alternately. When both piles show the same rank, hit SNAP! before the CPU does!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Game Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SLUG='snap-card';
+let pDeck,cDeck,pPile,cPile,pScore,cScore,highScore=0,running,snapWindow,flipInt,turn;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function makeDeck(){let d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}return d}
+function isRed(s){return s==='♥'||s==='♦'}
+function showPile(id,c){
+  let el=document.getElementById(id);
+  if(!c){el.className='card face-down';el.textContent='';return}
+  el.className='card'+(isRed(c.suit)?' red':'');el.textContent=c.rank+c.suit;
+}
+
+function render(){
+  let p1=pPile[pPile.length-1],p2=cPile[cPile.length-1];
+  showPile('pile1',p1);showPile('pile2',p2);
+  document.getElementById('sc-you').textContent='You: '+pScore;
+  document.getElementById('sc-cpu').textContent='CPU: '+cScore;
+  document.getElementById('cards-left').textContent='Cards: You '+pDeck.length+' | CPU '+cDeck.length;
+}
+
+function flipCard(){
+  if(!running)return;
+  if(pDeck.length===0&&cDeck.length===0){endGame();return}
+  if(turn===0&&pDeck.length>0){pPile.push(pDeck.pop());turn=1}
+  else if(turn===1&&cDeck.length>0){cPile.push(cDeck.pop());turn=0}
+  else turn=turn===0?1:0;
+  render();
+  checkSnap();
+}
+
+function isMatch(){
+  if(pPile.length===0||cPile.length===0)return false;
+  return pPile[pPile.length-1].rank===cPile[cPile.length-1].rank;
+}
+
+function checkSnap(){
+  if(!isMatch())return;
+  snapWindow=true;
+  // CPU reacts with delay
+  let delay=400+Math.random()*800;
+  setTimeout(()=>{
+    if(!snapWindow||!running)return;
+    snapWindow=false;
+    cScore++;
+    let won=[...pPile,...cPile];
+    pPile=[];cPile=[];
+    cDeck.unshift(...won);
+    document.getElementById('msg').textContent='CPU snapped first!';
+    document.getElementById('msg').style.color='#ef4444';
+    render();
+    setTimeout(()=>{if(running)document.getElementById('msg').textContent=''},1000);
+  },delay);
+}
+
+function doSnap(){
+  if(!running)return;
+  if(snapWindow&&isMatch()){
+    snapWindow=false;
+    pScore++;
+    let won=[...pPile,...cPile];
+    pPile=[];cPile=[];
+    pDeck.unshift(...won);
+    document.getElementById('msg').textContent='SNAP! You got it!';
+    document.getElementById('msg').style.color='#22c55e';
+    render();
+    setTimeout(()=>{if(running)document.getElementById('msg').textContent=''},1000);
+  } else if(!isMatch()){
+    document.getElementById('msg').textContent='False snap! -1';
+    document.getElementById('msg').style.color='#ef4444';
+    pScore=Math.max(0,pScore-1);render();
+    setTimeout(()=>{if(running)document.getElementById('msg').textContent=''},800);
+  }
+}
+
+function endGame(){
+  running=false;clearInterval(flipInt);
+  let won=pScore>cScore;
+  if(pScore>highScore)highScore=pScore;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent=won?'You Win!':'CPU Wins!';
+  document.getElementById('over-msg').textContent=`You: ${pScore} | CPU: ${cScore} | Best: ${highScore}`;
+  save();
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  let full=makeDeck();pDeck=full.slice(0,26);cDeck=full.slice(26);
+  pPile=[];cPile=[];pScore=0;cScore=0;turn=0;running=true;snapWindow=false;
+  document.getElementById('msg').textContent='';
+  render();
+  clearInterval(flipInt);
+  flipInt=setInterval(flipCard,1200);
+}
+</script>
+</body>
+</html>

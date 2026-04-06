@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rush Hour</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{color:#94a3b8;font-size:0.85rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Rush Hour</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/20 | Moves: <span id="moves">0</span></div>
+<canvas id="game" width="360" height="360"></canvas>
+<div class="controls">
+<button onclick="resetPuzzle()" style="background:#ef4444">Reset</button>
+<button onclick="nextPuzzle()">Skip</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg">Slide the red car to the right exit</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Rush Hour</h2>
+<p>Get the red car out!</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Slide vehicles to clear a path for the red car to reach the exit on the right side. Vehicles can only move along their orientation.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Puzzle Solved!</h2>
+<p>Moves: <span id="finalMoves">0</span></p>
+<button id="againBtn">Next Puzzle</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const GRID=6;
+let cellSize=60;
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#6366f1','#f97316','#ec4899','#14b8a6','#a855f7','#f43f5e','#84cc16','#06b6d4','#e879f9','#fb923c','#34d399','#fbbf24'];
+
+// Puzzle format: array of vehicles {x,y,len,dir:'h'|'v',isTarget}
+const PUZZLES=[
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:3,dir:'v'},{x:1,y:0,len:2,dir:'h'},{x:3,y:0,len:2,dir:'v'},{x:4,y:1,len:2,dir:'h'},{x:5,y:2,len:3,dir:'v'},{x:2,y:3,len:2,dir:'h'},{x:0,y:4,len:2,dir:'v'},{x:1,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'v'},{x:2,y:0,len:2,dir:'v'},{x:4,y:0,len:2,dir:'h'},{x:5,y:1,len:2,dir:'v'},{x:3,y:2,len:3,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:4,y:4,len:2,dir:'h'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:2,y:0,len:3,dir:'v'},{x:3,y:0,len:2,dir:'h'},{x:5,y:0,len:3,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:3,y:3,len:2,dir:'v'},{x:4,y:4,len:2,dir:'h'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:2,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:3,y:0,len:3,dir:'v'},{x:4,y:0,len:2,dir:'v'},{x:0,y:1,len:2,dir:'v'},{x:1,y:3,len:2,dir:'h'},{x:5,y:3,len:3,dir:'v'},{x:2,y:4,len:2,dir:'v'},{x:0,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:3,y:0,len:2,dir:'v'},{x:4,y:0,len:2,dir:'h'},{x:5,y:1,len:2,dir:'v'},{x:2,y:2,len:3,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:4,y:3,len:3,dir:'v'},{x:0,y:5,len:3,dir:'h'},{x:3,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:3,dir:'v'},{x:1,y:0,len:2,dir:'h'},{x:3,y:0,len:2,dir:'v'},{x:5,y:0,len:3,dir:'v'},{x:4,y:1,len:2,dir:'v'},{x:3,y:3,len:3,dir:'h'},{x:1,y:4,len:2,dir:'v'},{x:2,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:2,y:0,len:2,dir:'v'},{x:3,y:0,len:3,dir:'h'},{x:5,y:1,len:2,dir:'v'},{x:3,y:2,len:3,dir:'v'},{x:4,y:3,len:2,dir:'h'},{x:0,y:4,len:2,dir:'v'},{x:1,y:4,len:2,dir:'h'},{x:4,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'v'},{x:1,y:0,len:3,dir:'h'},{x:4,y:0,len:2,dir:'v'},{x:2,y:1,len:2,dir:'v'},{x:5,y:2,len:3,dir:'v'},{x:3,y:3,len:2,dir:'h'},{x:0,y:4,len:2,dir:'h'},{x:2,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:3,y:0,len:2,dir:'v'},{x:5,y:0,len:3,dir:'v'},{x:0,y:1,len:2,dir:'v'},{x:4,y:2,len:2,dir:'v'},{x:1,y:3,len:2,dir:'h'},{x:2,y:4,len:3,dir:'h'},{x:0,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:2,y:0,len:3,dir:'v'},{x:3,y:0,len:2,dir:'h'},{x:5,y:0,len:2,dir:'v'},{x:0,y:3,len:2,dir:'v'},{x:1,y:3,len:2,dir:'h'},{x:3,y:3,len:3,dir:'v'},{x:4,y:4,len:2,dir:'h'},{x:1,y:5,len:2,dir:'h'}]},
+// Puzzles 11-20: variations
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:2,y:0,len:2,dir:'v'},{x:4,y:0,len:2,dir:'v'},{x:3,y:1,len:2,dir:'h'},{x:5,y:2,len:3,dir:'v'},{x:0,y:4,len:3,dir:'h'},{x:3,y:4,len:2,dir:'v'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:3,dir:'v'},{x:2,y:0,len:2,dir:'h'},{x:4,y:0,len:3,dir:'v'},{x:3,y:1,len:2,dir:'v'},{x:1,y:3,len:3,dir:'h'},{x:5,y:3,len:3,dir:'v'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:2,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'v'},{x:1,y:0,len:2,dir:'h'},{x:4,y:0,len:2,dir:'v'},{x:2,y:1,len:2,dir:'v'},{x:5,y:1,len:2,dir:'v'},{x:0,y:3,len:3,dir:'h'},{x:3,y:4,len:2,dir:'v'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:3,y:0,len:3,dir:'v'},{x:4,y:0,len:2,dir:'h'},{x:2,y:1,len:2,dir:'v'},{x:5,y:2,len:2,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:4,y:4,len:2,dir:'v'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:2,y:0,len:2,dir:'v'},{x:3,y:0,len:2,dir:'h'},{x:5,y:0,len:3,dir:'v'},{x:0,y:3,len:3,dir:'h'},{x:3,y:3,len:2,dir:'v'},{x:4,y:4,len:2,dir:'h'},{x:0,y:5,len:2,dir:'h'},{x:3,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'v'},{x:1,y:0,len:3,dir:'h'},{x:4,y:0,len:2,dir:'v'},{x:3,y:2,len:3,dir:'v'},{x:5,y:2,len:2,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:4,y:5,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:2,y:0,len:3,dir:'v'},{x:4,y:0,len:2,dir:'v'},{x:3,y:1,len:2,dir:'h'},{x:5,y:1,len:3,dir:'v'},{x:0,y:4,len:2,dir:'v'},{x:1,y:4,len:3,dir:'h'},{x:4,y:4,len:2,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:2,y:0,len:2,dir:'v'},{x:3,y:0,len:3,dir:'h'},{x:5,y:1,len:3,dir:'v'},{x:3,y:2,len:2,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:4,y:4,len:2,dir:'v'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:1,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:3,dir:'v'},{x:2,y:0,len:2,dir:'h'},{x:4,y:0,len:2,dir:'v'},{x:5,y:0,len:2,dir:'v'},{x:3,y:1,len:2,dir:'v'},{x:1,y:3,len:2,dir:'h'},{x:4,y:3,len:2,dir:'h'},{x:2,y:4,len:2,dir:'v'},{x:0,y:5,len:3,dir:'h'}]},
+{vehicles:[{x:0,y:2,len:2,dir:'h',isTarget:true},{x:0,y:0,len:2,dir:'h'},{x:3,y:0,len:2,dir:'v'},{x:4,y:0,len:2,dir:'h'},{x:2,y:1,len:2,dir:'v'},{x:5,y:2,len:3,dir:'v'},{x:0,y:3,len:2,dir:'h'},{x:3,y:3,len:3,dir:'v'},{x:4,y:5,len:2,dir:'h'}]}
+];
+
+let vehicles=[];
+let currentPuzzle=0;
+let moveCount=0;
+let selectedVehicle=-1;
+let dragStart=null;
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function resize(){
+const s=Math.min(window.innerWidth-20,360);
+canvas.width=s;canvas.height=s;
+cellSize=Math.floor(s/GRID);
+canvas.width=cellSize*GRID;canvas.height=cellSize*GRID;
+draw();
+}
+
+function loadPuzzle(){
+vehicles=PUZZLES[currentPuzzle%PUZZLES.length].vehicles.map(v=>({...v}));
+moveCount=0;
+document.getElementById('moves').textContent='0';
+document.getElementById('puzzleNum').textContent=(currentPuzzle%PUZZLES.length)+1;
+draw();
+}
+
+function getGrid(){
+const grid=Array.from({length:GRID},()=>Array(GRID).fill(-1));
+vehicles.forEach((v,vi)=>{
+for(let i=0;i<v.len;i++){
+const r=v.dir==='v'?v.y+i:v.y;
+const c=v.dir==='h'?v.x+i:v.x;
+if(r>=0&&r<GRID&&c>=0&&c<GRID)grid[r][c]=vi;
+}
+});
+return grid;
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';
+ctx.fillRect(0,0,canvas.width,canvas.height);
+// Grid lines
+ctx.strokeStyle='#1e293b';
+for(let i=0;i<=GRID;i++){
+ctx.beginPath();ctx.moveTo(i*cellSize,0);ctx.lineTo(i*cellSize,canvas.height);ctx.stroke();
+ctx.beginPath();ctx.moveTo(0,i*cellSize);ctx.lineTo(canvas.width,i*cellSize);ctx.stroke();
+}
+// Exit indicator
+ctx.fillStyle='#22c55e';
+ctx.fillRect(canvas.width-4,2*cellSize+cellSize*0.2,4,cellSize*0.6);
+// Vehicles
+vehicles.forEach((v,i)=>{
+const x=v.x*cellSize+2,y=v.y*cellSize+2;
+const w=v.dir==='h'?v.len*cellSize-4:cellSize-4;
+const h=v.dir==='v'?v.len*cellSize-4:cellSize-4;
+ctx.fillStyle=v.isTarget?'#ef4444':COLORS[(i+1)%COLORS.length];
+ctx.fillRect(x,y,w,h);
+ctx.strokeStyle=i===selectedVehicle?'#facc15':'rgba(0,0,0,0.3)';
+ctx.lineWidth=i===selectedVehicle?3:1;
+ctx.strokeRect(x,y,w,h);
+// Direction indicator
+ctx.fillStyle='rgba(255,255,255,0.3)';
+if(v.dir==='h'){
+ctx.beginPath();ctx.arc(x+w/2,y+h/2,4,0,Math.PI*2);ctx.fill();
+}else{
+ctx.beginPath();ctx.arc(x+w/2,y+h/2,4,0,Math.PI*2);ctx.fill();
+}
+});
+}
+
+function findVehicle(mx,my){
+const gx=Math.floor(mx/cellSize),gy=Math.floor(my/cellSize);
+const grid=getGrid();
+if(gx>=0&&gx<GRID&&gy>=0&&gy<GRID&&grid[gy][gx]>=0)return grid[gy][gx];
+return -1;
+}
+
+function canMove(vi,dx,dy){
+const v=vehicles[vi];
+const grid=getGrid();
+if(v.dir==='h'){
+if(dy!==0)return false;
+if(dx<0){
+const nx=v.x-1;
+if(nx<0)return false;
+if(grid[v.y][nx]>=0&&grid[v.y][nx]!==vi)return false;
+}else{
+const nx=v.x+v.len;
+if(nx>=GRID)return false;
+if(grid[v.y][nx]>=0&&grid[v.y][nx]!==vi)return false;
+}
+}else{
+if(dx!==0)return false;
+if(dy<0){
+const ny=v.y-1;
+if(ny<0)return false;
+if(grid[ny][v.x]>=0&&grid[ny][v.x]!==vi)return false;
+}else{
+const ny=v.y+v.len;
+if(ny>=GRID)return false;
+if(grid[ny][v.x]>=0&&grid[ny][v.x]!==vi)return false;
+}
+}
+return true;
+}
+
+function moveVehicle(vi,dx,dy){
+if(!canMove(vi,dx,dy))return false;
+vehicles[vi].x+=dx;
+vehicles[vi].y+=dy;
+moveCount++;
+document.getElementById('moves').textContent=moveCount;
+return true;
+}
+
+function checkWin(){
+const target=vehicles.find(v=>v.isTarget);
+if(target&&target.x+target.len>GRID){
+// actually check if at exit
+return target.x+target.len-1>=GRID-1&&target.x>=GRID-target.len;
+}
+return target&&target.x===GRID-target.len;
+}
+
+let lastPos=null;
+function onDown(e){
+if(!gameActive||paused)return;
+e.preventDefault();
+const p=getPos(e);
+const vi=findVehicle(p.x,p.y);
+if(vi>=0){
+selectedVehicle=vi;
+lastPos=p;
+draw();
+}
+}
+
+function onMove(e){
+if(!gameActive||paused||selectedVehicle<0)return;
+e.preventDefault();
+const p=getPos(e);
+const v=vehicles[selectedVehicle];
+if(v.dir==='h'){
+const dx=p.x-lastPos.x;
+if(Math.abs(dx)>=cellSize){
+const dir=dx>0?1:-1;
+if(moveVehicle(selectedVehicle,dir,0)){
+lastPos.x+=dir*cellSize;
+draw();
+if(v.isTarget&&v.x+v.len>GRID-1){
+// Check exit
+if(v.x>=GRID-v.len){
+gameActive=false;
+if(moveCount<highScore||highScore===0){highScore=moveCount;save();}
+document.getElementById('finalMoves').textContent=moveCount;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),300);
+}
+}
+}
+}
+}else{
+const dy=p.y-lastPos.y;
+if(Math.abs(dy)>=cellSize){
+const dir=dy>0?1:-1;
+if(moveVehicle(selectedVehicle,0,dir)){
+lastPos.y+=dir*cellSize;
+draw();
+}
+}
+}
+}
+
+function onUp(){selectedVehicle=-1;lastPos=null;draw();}
+
+function getPos(e){
+const rect=canvas.getBoundingClientRect();
+const t=e.touches?e.touches[0]:e;
+return{x:(t.clientX-rect.left)*(canvas.width/rect.width),y:(t.clientY-rect.top)*(canvas.height/rect.height)};
+}
+
+canvas.addEventListener('mousedown',onDown);
+canvas.addEventListener('mousemove',onMove);
+canvas.addEventListener('mouseup',onUp);
+canvas.addEventListener('touchstart',onDown,{passive:false});
+canvas.addEventListener('touchmove',onMove,{passive:false});
+canvas.addEventListener('touchend',onUp);
+
+function resetPuzzle(){if(gameActive)loadPuzzle();}
+function nextPuzzle(){
+currentPuzzle=(currentPuzzle+1)%PUZZLES.length;
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+loadPuzzle();
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+currentPuzzle=0;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+loadPuzzle();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'rush-hour',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='rush-hour'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',nextPuzzle);
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

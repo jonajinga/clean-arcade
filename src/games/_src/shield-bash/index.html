@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shield Bash</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.hud{display:flex;gap:2rem;font-size:0.9rem;margin:0.25rem}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+.pause-btn{background:#334155;margin:0.25rem;padding:0.5rem 1rem;font-size:0.85rem}
+</style>
+</head>
+<body>
+<h1>Shield Bash</h1>
+<div class="hud">
+<span>Score: <strong id="scoreEl">0</strong></span>
+<span>Time: <strong id="timeEl">60</strong>s</span>
+<span>HP: <strong id="hpEl">3</strong></span>
+</div>
+<canvas id="canvas"></canvas>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+
+<div class="overlay" id="startOverlay">
+<h2>Shield Bash</h2>
+<p>Rotate your shield around the player to block incoming projectiles from all angles. Survive 60 seconds! Click/touch to rotate shield position.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+let player,shieldAngle,shieldArc,projectiles,particles,score,timeLeft,hp,paused,gameOver,animId,lastTime,spawnTimer,highScore=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+let cw,ch,cx,cy;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='shield-bash'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'shield-bash',state:{highScore}},'*')}catch(e){}}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='P'||e.key==='p')togglePause();
+if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+});
+document.addEventListener('keyup',e=>{
+if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+});
+const keys={left:false,right:false};
+
+function resize(){
+cw=Math.min(window.innerWidth-4,450);ch=Math.min(window.innerHeight-120,450);
+canvas.width=cw;canvas.height=ch;cx=cw/2;cy=ch/2;
+}
+window.addEventListener('resize',resize);
+
+canvas.addEventListener('mousemove',e=>{
+if(gameOver)return;
+const r=canvas.getBoundingClientRect();
+const mx=(e.clientX-r.left)*(cw/r.width)-cx;
+const my=(e.clientY-r.top)*(ch/r.height)-cy;
+shieldAngle=Math.atan2(my,mx);
+});
+canvas.addEventListener('touchmove',e=>{
+e.preventDefault();
+const t=e.touches[0];const r=canvas.getBoundingClientRect();
+const mx=(t.clientX-r.left)*(cw/r.width)-cx;
+const my=(t.clientY-r.top)*(ch/r.height)-cy;
+shieldAngle=Math.atan2(my,mx);
+},{passive:false});
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+const t=e.touches[0];const r=canvas.getBoundingClientRect();
+const mx=(t.clientX-r.left)*(cw/r.width)-cx;
+const my=(t.clientY-r.top)*(ch/r.height)-cy;
+shieldAngle=Math.atan2(my,mx);
+},{passive:false});
+
+function startGame(){
+resize();
+player={r:15};shieldAngle=0;shieldArc=Math.PI*0.6;
+projectiles=[];particles=[];score=0;timeLeft=60;hp=3;
+paused=false;gameOver=false;spawnTimer=0;
+lastTime=performance.now();
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+updateHUD();gameLoop(performance.now());
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();gameLoop(performance.now())}}
+
+function spawnProjectile(){
+const angle=Math.random()*Math.PI*2;
+const dist=Math.max(cw,ch)*0.6;
+const speed=2+Math.random()*2+(60-timeLeft)*0.03;
+const size=4+Math.random()*4;
+projectiles.push({
+x:cx+Math.cos(angle)*dist,y:cy+Math.sin(angle)*dist,
+vx:-Math.cos(angle)*speed,vy:-Math.sin(angle)*speed,
+size,color:['#ef4444','#facc15','#3b82f6','#22c55e'][Math.floor(Math.random()*4)]
+});
+}
+
+function angleDiff(a,b){
+let d=((a-b)%(Math.PI*2)+(Math.PI*3))%(Math.PI*2)-Math.PI;
+return d;
+}
+
+function gameLoop(now){
+if(paused||gameOver){animId=null;return}
+const dt=Math.min(now-lastTime,50)/16.67;lastTime=now;
+timeLeft-=dt/60;
+if(timeLeft<=0){timeLeft=0;endGame(true);return}
+// Keyboard shield rotation
+if(keys.left)shieldAngle-=0.06*dt;
+if(keys.right)shieldAngle+=0.06*dt;
+// Spawn
+spawnTimer+=dt;
+const rate=Math.max(8,30-Math.floor((60-timeLeft)/5)*3);
+if(spawnTimer>=rate){spawnTimer=0;const count=1+Math.floor((60-timeLeft)/20);for(let i=0;i<count;i++)spawnProjectile()}
+// Move projectiles
+const shieldDist=50;
+for(const p of projectiles){
+p.x+=p.vx*dt;p.y+=p.vy*dt;
+const dx=p.x-cx,dy=p.y-cy;
+const dist=Math.hypot(dx,dy);
+// Check shield collision
+if(dist<shieldDist+p.size+5&&dist>shieldDist-p.size-15){
+const pAngle=Math.atan2(dy,dx);
+const diff=Math.abs(angleDiff(pAngle,shieldAngle));
+if(diff<shieldArc/2){
+// Blocked!
+score+=10;p.blocked=true;
+addParticles(p.x,p.y,p.color,6);
+// Reflect
+const norm=Math.atan2(dy,dx);
+p.vx=Math.cos(norm)*5;p.vy=Math.sin(norm)*5;
+p.reflected=true;
+continue;
+}
+}
+// Hit player
+if(dist<player.r+p.size&&!p.reflected){
+hp--;p.blocked=true;
+addParticles(cx,cy,'#ef4444',10);
+if(hp<=0){endGame(false);return}
+}
+}
+projectiles=projectiles.filter(p=>!p.blocked&&p.x>-50&&p.x<cw+50&&p.y>-50&&p.y<ch+50);
+// Particles
+particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt});
+particles=particles.filter(p=>p.life>0);
+updateHUD();render();
+animId=requestAnimationFrame(gameLoop);
+}
+
+function addParticles(x,y,color,n){
+for(let i=0;i<n;i++){
+const a=Math.random()*Math.PI*2;const s=1+Math.random()*3;
+particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,color,life:15+Math.random()*10,size:2+Math.random()*3});
+}
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,ch);
+// Concentric rings for depth
+for(let i=4;i>0;i--){
+ctx.strokeStyle=`rgba(99,102,241,${0.05*i})`;ctx.lineWidth=1;
+ctx.beginPath();ctx.arc(cx,cy,i*50,0,Math.PI*2);ctx.stroke();
+}
+// Player
+ctx.fillStyle='#6366f1';ctx.beginPath();ctx.arc(cx,cy,player.r,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#818cf8';ctx.beginPath();ctx.arc(cx,cy,player.r*0.6,0,Math.PI*2);ctx.fill();
+// Shield
+const shieldDist=50;
+ctx.strokeStyle='#22c55e';ctx.lineWidth=8;ctx.lineCap='round';
+ctx.beginPath();
+ctx.arc(cx,cy,shieldDist,shieldAngle-shieldArc/2,shieldAngle+shieldArc/2);
+ctx.stroke();
+// Shield glow
+ctx.strokeStyle='rgba(34,197,94,0.3)';ctx.lineWidth=16;
+ctx.beginPath();ctx.arc(cx,cy,shieldDist,shieldAngle-shieldArc/2,shieldAngle+shieldArc/2);ctx.stroke();
+// Shield end caps
+const a1=shieldAngle-shieldArc/2,a2=shieldAngle+shieldArc/2;
+ctx.fillStyle='#22c55e';
+ctx.beginPath();ctx.arc(cx+Math.cos(a1)*shieldDist,cy+Math.sin(a1)*shieldDist,5,0,Math.PI*2);ctx.fill();
+ctx.beginPath();ctx.arc(cx+Math.cos(a2)*shieldDist,cy+Math.sin(a2)*shieldDist,5,0,Math.PI*2);ctx.fill();
+// Projectiles
+for(const p of projectiles){
+ctx.fillStyle=p.reflected?'rgba(226,232,240,0.3)':p.color;
+ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();
+if(!p.reflected){
+// Trail
+ctx.strokeStyle=p.color;ctx.lineWidth=1;ctx.globalAlpha=0.3;
+ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-p.vx*3,p.y-p.vy*3);ctx.stroke();
+ctx.globalAlpha=1;
+}
+}
+// Particles
+for(const p of particles){
+ctx.globalAlpha=p.life/25;ctx.fillStyle=p.color;
+ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+}
+ctx.globalAlpha=1;
+// Timer arc
+const frac=timeLeft/60;
+ctx.strokeStyle='rgba(250,204,21,0.2)';ctx.lineWidth=3;
+ctx.beginPath();ctx.arc(cx,cy,Math.min(cw,ch)/2-10,-Math.PI/2,-Math.PI/2+frac*Math.PI*2);ctx.stroke();
+}
+
+function updateHUD(){
+document.getElementById('scoreEl').textContent=score;
+document.getElementById('timeEl').textContent=Math.ceil(timeLeft);
+document.getElementById('hpEl').textContent=hp;
+}
+
+function endGame(survived){
+gameOver=true;cancelAnimationFrame(animId);animId=null;
+highScore=Math.max(highScore,score);save();
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=survived?'Survived!':'Shield Broken!';
+document.getElementById('overMsg').textContent=`Score: ${score}\n${survived?'You survived 60 seconds!':'Time: '+Math.ceil(60-timeLeft)+'s'}\nBest: ${highScore}`;
+document.getElementById('overOverlay').classList.remove('hidden');
+},300);
+}
+</script>
+</body>
+</html>

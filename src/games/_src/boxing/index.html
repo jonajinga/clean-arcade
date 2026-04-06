@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boxing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Boxing</h1>
+<div class="hud">
+  <span id="roundDisp">Round 1/3</span>
+  <span id="timerDisp">30s</span>
+  <span id="pScoreDisp">You: 0</span>
+  <span id="cScoreDisp">CPU: 0</span>
+  <span id="hScore">Wins: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="350"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Boxing</h2>
+    <p>A/D or touch sides: Left/Right punch</p>
+    <p>S: Block | W: Dodge | 3 rounds of 30s</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2 id="goTitle">Fight Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="punchL()">Left</button>
+  <button onclick="block()">Block</button>
+  <button onclick="dodge()">Dodge</button>
+  <button onclick="punchR()">Right</button>
+  <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=350;
+let p1,p2,round,timer,pScore,cScore,highScore=0;
+let paused=false,running=false,interval,msg='',msgTimer=0;
+
+function fighter(x){return{x,hp:100,stamina:100,state:'idle',stateTimer:0,pts:0};}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  p1=fighter(120);p2=fighter(280);
+  round=1;timer=30;pScore=0;cScore=0;
+  paused=false;running=true;msg='';
+  clearInterval(interval);
+  interval=setInterval(tick,1000);
+  loop();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key==='a')punchL();if(e.key==='d')punchR();
+  if(e.key==='s')block();if(e.key==='w')dodge();
+});
+
+function punchL(){doAction('punchL');}
+function punchR(){doAction('punchR');}
+function block(){doAction('block');}
+function dodge(){doAction('dodge');}
+
+function doAction(act){
+  if(!running||paused||p1.stateTimer>0)return;
+  if(p1.stamina<10)return;
+  p1.state=act;p1.stateTimer=15;
+  p1.stamina-=10;
+  if(act==='punchL'||act==='punchR'){
+    if(p2.state==='block'){msg='Blocked!';msgTimer=30;}
+    else if(p2.state==='dodge'){msg='Dodged!';msgTimer=30;}
+    else{
+      const dmg=8+Math.floor(Math.random()*8);
+      p2.hp-=dmg;p1.pts+=dmg;
+      msg='Hit! -'+dmg;msgTimer=30;
+      if(p2.hp<=0){ko();return;}
+    }
+  }
+}
+
+function cpuAI(){
+  if(p2.stateTimer>0||p2.stamina<10)return;
+  const r=Math.random();
+  if(r<0.35){
+    p2.state='punchL';p2.stateTimer=15;p2.stamina-=10;
+    if(p1.state==='block'){msg='You blocked!';msgTimer=30;}
+    else if(p1.state==='dodge'){msg='You dodged!';msgTimer=30;}
+    else{const dmg=5+Math.floor(Math.random()*6);p1.hp-=dmg;p2.pts+=dmg;if(p1.hp<=0){ko();}}
+  } else if(r<0.55){p2.state='block';p2.stateTimer=20;p2.stamina-=5;}
+  else if(r<0.65){p2.state='dodge';p2.stateTimer=10;p2.stamina-=8;}
+}
+
+function ko(){
+  running=false;clearInterval(interval);
+  const winner=p1.hp>0?'You':'CPU';
+  document.getElementById('goTitle').textContent='KO! '+winner+' wins!';
+  if(p1.hp>0){pScore+=10;highScore++;saveState();}
+  document.getElementById('finalScore').textContent='';
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function tick(){
+  if(paused||!running)return;
+  timer--;
+  p1.stamina=Math.min(100,p1.stamina+3);
+  p2.stamina=Math.min(100,p2.stamina+3);
+  if(timer<=0){
+    if(round<3){round++;timer=30;p1.hp=100;p2.hp=100;
+      if(p1.pts>p2.pts)pScore++;else cScore++;
+      p1.pts=0;p2.pts=0;
+    } else {
+      if(p1.pts>p2.pts)pScore++;else cScore++;
+      running=false;clearInterval(interval);
+      const winner=pScore>cScore?'You':'CPU';
+      if(pScore>cScore){highScore++;saveState();}
+      document.getElementById('goTitle').textContent=winner+' wins on points!';
+      document.getElementById('finalScore').textContent='You: '+pScore+' - CPU: '+cScore;
+      document.getElementById('gameOverOverlay').style.display='flex';
+    }
+  }
+  updateHUD();
+}
+
+function updateHUD(){
+  document.getElementById('roundDisp').textContent='Round '+round+'/3';
+  document.getElementById('timerDisp').textContent=timer+'s';
+  document.getElementById('pScoreDisp').textContent='You: '+pScore;
+  document.getElementById('cScoreDisp').textContent='CPU: '+cScore;
+  document.getElementById('hScore').textContent='Wins: '+highScore;
+}
+
+function update(){
+  if(p1.stateTimer>0)p1.stateTimer--;else p1.state='idle';
+  if(p2.stateTimer>0)p2.stateTimer--;else p2.state='idle';
+  if(msgTimer>0)msgTimer--;
+  if(Math.random()<0.03)cpuAI();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // ring
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=3;
+  ctx.strokeRect(30,60,W-60,H-80);
+  ctx.strokeStyle='#fff';ctx.strokeRect(30,120,W-60,0);
+
+  drawBoxer(p1,'#3b82f6',true);
+  drawBoxer(p2,'#ef4444',false);
+
+  // HP bars
+  ctx.fillStyle='#1e293b';ctx.fillRect(30,20,150,15);ctx.fillRect(W-180,20,150,15);
+  ctx.fillStyle='#22c55e';ctx.fillRect(30,20,150*p1.hp/100,15);
+  ctx.fillStyle='#22c55e';ctx.fillRect(W-180,20,150*p2.hp/100,15);
+  // stamina
+  ctx.fillStyle='#1e293b';ctx.fillRect(30,38,150,8);ctx.fillRect(W-180,38,150,8);
+  ctx.fillStyle='#facc15';ctx.fillRect(30,38,150*p1.stamina/100,8);
+  ctx.fillStyle='#facc15';ctx.fillRect(W-180,38,150*p2.stamina/100,8);
+
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';
+  ctx.fillText('YOU',30,15);ctx.fillText('CPU',W-180,15);
+
+  if(msgTimer>0){
+    ctx.fillStyle='#facc15';ctx.font='bold 18px system-ui';ctx.textAlign='center';
+    ctx.fillText(msg,W/2,H-15);ctx.textAlign='start';
+  }
+}
+
+function drawBoxer(b,color,isLeft){
+  const x=b.x+(b.state==='dodge'?(isLeft?-15:15):0);
+  const y=200;
+  // body
+  ctx.fillStyle=color;ctx.fillRect(x-15,y-30,30,50);
+  // head
+  ctx.beginPath();ctx.arc(x,y-45,15,0,Math.PI*2);ctx.fill();
+  // gloves
+  ctx.fillStyle='#ef4444';
+  const punching=b.state==='punchL'||b.state==='punchR';
+  const blocking=b.state==='block';
+  const lx=isLeft?x-25:x+25;
+  const rx=isLeft?x+25:x-25;
+  if(b.state==='punchL'){
+    ctx.beginPath();ctx.arc(isLeft?x+40:x-40,y-20,10,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(rx,y-10,10,0,Math.PI*2);ctx.fill();
+  } else if(b.state==='punchR'){
+    ctx.beginPath();ctx.arc(lx,y-10,10,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(isLeft?x+40:x-40,y-20,10,0,Math.PI*2);ctx.fill();
+  } else if(blocking){
+    ctx.beginPath();ctx.arc(x-8,y-25,10,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(x+8,y-25,10,0,Math.PI*2);ctx.fill();
+  } else {
+    ctx.beginPath();ctx.arc(lx,y-10,10,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(rx,y-10,10,0,Math.PI*2);ctx.fill();
+  }
+}
+
+function loop(){
+  if(paused||!running)return;
+  update();draw();updateHUD();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'boxing',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='boxing'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

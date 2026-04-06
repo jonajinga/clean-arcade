@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crossword Builder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center;align-items:center}
+.controls input{background:#1e293b;border:1px solid #6366f1;color:#e2e8f0;padding:0.4rem 0.6rem;font-size:1rem;border-radius:0;width:150px}
+.controls select{background:#1e293b;border:1px solid #6366f1;color:#e2e8f0;padding:0.4rem;font-size:0.9rem;border-radius:0}
+.info{color:#94a3b8;font-size:0.85rem;text-align:center;margin:0.25rem}
+.score-display{color:#22c55e;font-size:1.1rem;font-weight:bold}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Crossword Builder</h1>
+<div class="score-display">Score: <span id="score">0</span></div>
+<canvas id="game" width="500" height="500"></canvas>
+<div class="controls">
+<input type="text" id="wordInput" placeholder="Type a word..." maxlength="15" autocomplete="off">
+<select id="direction"><option value="h">Horizontal</option><option value="v">Vertical</option></select>
+<button id="placeBtn">Place</button>
+<button id="clearBtn" style="background:#ef4444">Clear</button>
+</div>
+<div class="info">Click a cell, type a word, choose direction, then Place. Words must cross existing words.</div>
+<div class="info">Score: +1 per letter, +3 per intersection</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Crossword Builder</h2>
+<p>Build your own crossword puzzle!</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Place words on the grid. Each new word must intersect with an existing word. Score points for letters and intersections.</p>
+<button id="startBtn">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2>Game Over!</h2>
+<p>Final Score: <span id="finalScore">0</span></p>
+<p>Words Placed: <span id="wordsPlaced">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const GRID=15;
+let cellSize=Math.floor(canvas.width/GRID);
+let grid=[];
+let selectedCell=null;
+let score=0;
+let wordCount=0;
+let highScore=0;
+let gameActive=false;
+
+function initGrid(){
+grid=[];
+for(let r=0;r<GRID;r++){
+grid[r]=[];
+for(let c=0;c<GRID;c++) grid[r][c]={letter:'',count:0};
+}
+}
+
+function resize(){
+const s=Math.min(window.innerWidth-20,500);
+canvas.width=s;canvas.height=s;
+cellSize=Math.floor(s/GRID);
+canvas.width=cellSize*GRID;
+canvas.height=cellSize*GRID;
+draw();
+}
+
+function draw(){
+ctx.fillStyle='#1e293b';
+ctx.fillRect(0,0,canvas.width,canvas.height);
+for(let r=0;r<GRID;r++){
+for(let c=0;c<GRID;c++){
+const x=c*cellSize,y=r*cellSize;
+if(grid[r][c].letter){
+ctx.fillStyle='#0f172a';
+ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+ctx.fillStyle='#e2e8f0';
+ctx.font=`bold ${cellSize*0.55}px system-ui`;
+ctx.textAlign='center';
+ctx.textBaseline='middle';
+ctx.fillText(grid[r][c].letter.toUpperCase(),x+cellSize/2,y+cellSize/2);
+if(grid[r][c].count>1){
+ctx.fillStyle='#facc15';
+ctx.beginPath();
+ctx.arc(x+cellSize-5,y+5,3,0,Math.PI*2);
+ctx.fill();
+}
+}else{
+ctx.fillStyle='#0f172a';
+ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+}
+ctx.strokeStyle='#334155';
+ctx.strokeRect(x,y,cellSize,cellSize);
+}
+}
+if(selectedCell){
+ctx.strokeStyle='#facc15';
+ctx.lineWidth=2;
+ctx.strokeRect(selectedCell.c*cellSize,selectedCell.r*cellSize,cellSize,cellSize);
+ctx.lineWidth=1;
+}
+}
+
+canvas.addEventListener('click',e=>{
+if(!gameActive)return;
+const rect=canvas.getBoundingClientRect();
+const sx=(e.clientX-rect.left)*(canvas.width/rect.width);
+const sy=(e.clientY-rect.top)*(canvas.height/rect.height);
+const c=Math.floor(sx/cellSize),r=Math.floor(sy/cellSize);
+if(r>=0&&r<GRID&&c>=0&&c<GRID){selectedCell={r,c};draw();}
+});
+
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+const t=e.touches[0];
+const rect=canvas.getBoundingClientRect();
+const sx=(t.clientX-rect.left)*(canvas.width/rect.width);
+const sy=(t.clientY-rect.top)*(canvas.height/rect.height);
+const c=Math.floor(sx/cellSize),r=Math.floor(sy/cellSize);
+if(r>=0&&r<GRID&&c>=0&&c<GRID){selectedCell={r,c};draw();}
+},{passive:false});
+
+document.getElementById('placeBtn').addEventListener('click',placeWord);
+document.getElementById('clearBtn').addEventListener('click',()=>{
+if(gameActive&&wordCount>0){
+if(score>highScore){highScore=score;save();}
+document.getElementById('finalScore').textContent=score;
+document.getElementById('wordsPlaced').textContent=wordCount;
+document.getElementById('overOverlay').classList.remove('hidden');
+gameActive=false;
+}
+});
+
+document.getElementById('wordInput').addEventListener('keydown',e=>{
+if(e.key==='Enter')placeWord();
+});
+
+function placeWord(){
+if(!gameActive||!selectedCell)return;
+const word=document.getElementById('wordInput').value.trim().toLowerCase();
+if(!word||word.length<2)return;
+if(!/^[a-z]+$/.test(word))return;
+const dir=document.getElementById('direction').value;
+const r=selectedCell.r,c=selectedCell.c;
+if(dir==='h'&&c+word.length>GRID)return;
+if(dir==='v'&&r+word.length>GRID)return;
+let conflicts=false;
+let intersections=0;
+let touchesExisting=false;
+for(let i=0;i<word.length;i++){
+const cr=dir==='v'?r+i:r;
+const cc=dir==='h'?c+i:c;
+const cell=grid[cr][cc];
+if(cell.letter&&cell.letter!==word[i]){conflicts=true;break;}
+if(cell.letter===word[i])intersections++;
+if(cell.letter)touchesExisting=true;
+}
+if(conflicts)return;
+if(wordCount>0&&!touchesExisting)return;
+for(let i=0;i<word.length;i++){
+const cr=dir==='v'?r+i:r;
+const cc=dir==='h'?c+i:c;
+grid[cr][cc].letter=word[i];
+grid[cr][cc].count++;
+}
+score+=word.length+intersections*3;
+wordCount++;
+document.getElementById('score').textContent=score;
+document.getElementById('wordInput').value='';
+selectedCell=null;
+draw();
+}
+
+function startGame(){
+initGrid();score=0;wordCount=0;
+document.getElementById('score').textContent='0';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+selectedCell=null;
+draw();
+}
+
+function save(){
+try{parent.postMessage({type:'ca-save',slug:'crossword-builder',state:{highScore}},'*');}catch(e){}
+}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='crossword-builder'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

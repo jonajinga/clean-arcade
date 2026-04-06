@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nurikabe</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.75rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem;max-width:340px}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:340px}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+#action-btns{display:flex;gap:6px;margin-top:6px}
+#action-btns button{background:#334155;padding:8px 16px;font-size:0.8rem}
+</style>
+</head>
+<body>
+<h1>Nurikabe</h1>
+<div id="info">Tap cells to shade them (sea). Numbered cells are island seeds. Each island's size = its number. Sea must be connected. No 2x2 sea blocks.</div>
+<div id="hud"><span id="level-txt">Puzzle 1</span><span id="shaded-txt">Shaded: 0</span></div>
+<canvas id="c"></canvas>
+<div id="action-btns">
+<button onclick="clearBoard()">Clear</button>
+<button onclick="toggleMode()"><span id="mode-txt">Mode: Shade</span></button>
+</div>
+
+<div class="overlay" id="start-overlay">
+<h2>Nurikabe</h2>
+<p>Shade cells to create a connected sea around islands. Each numbered cell is part of an island whose size equals the number. Islands cannot touch diagonally. The sea has no 2x2 blocks.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Puzzle Solved!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Puzzle</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Puzzles Done!</h2>
+<p>Congratulations!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let cellSize,currentLevel=0,highScore=0,paintMode='shade'; // shade or white
+// grid: 0=unknown, 1=shaded(sea), 2=white(island marker)
+let grid=[],gridSize=0;
+
+// Puzzles: {size, clues:[{r,c,v}], solution: 2d array of 0(white)/1(shaded)}
+const LEVELS=[
+  {size:5,clues:[{r:0,c:0,v:3},{r:0,c:4,v:1},{r:2,c:2,v:3},{r:4,c:0,v:1},{r:4,c:4,v:2}],
+   solution:[[0,0,1,1,0],[0,1,1,1,1],[1,1,0,1,1],[1,1,0,0,1],[0,1,1,1,0]]},
+  {size:5,clues:[{r:0,c:0,v:2},{r:0,c:3,v:2},{r:2,c:1,v:5},{r:4,c:2,v:1},{r:4,c:4,v:3}],
+   solution:[[0,0,1,0,1],[1,1,1,0,1],[1,0,0,0,1],[1,0,1,1,0],[1,1,0,1,0]]},
+  {size:6,clues:[{r:0,c:0,v:2},{r:0,c:5,v:3},{r:2,c:2,v:4},{r:3,c:4,v:1},{r:5,c:0,v:3},{r:5,c:5,v:2}],
+   solution:[[0,0,1,1,0,0],[1,1,1,1,0,0],[1,1,0,0,0,1],[1,1,0,1,0,1],[0,1,1,1,1,1],[0,0,0,1,1,0]]},
+  {size:6,clues:[{r:0,c:0,v:1},{r:0,c:4,v:4},{r:2,c:2,v:3},{r:3,c:0,v:2},{r:5,c:1,v:1},{r:5,c:5,v:5}],
+   solution:[[0,1,1,1,0,0],[1,1,1,1,0,0],[1,1,0,1,0,1],[0,1,0,1,1,0],[0,1,0,1,1,0],[1,0,1,1,0,0]]},
+  {size:7,clues:[{r:0,c:0,v:3},{r:0,c:6,v:2},{r:2,c:3,v:5},{r:4,c:1,v:1},{r:6,c:0,v:2},{r:6,c:5,v:4}],
+   solution:[[0,0,0,1,1,1,0],[1,1,1,1,1,1,0],[1,1,1,0,0,1,1],[1,1,1,0,1,1,1],[1,0,1,0,1,1,1],[0,1,1,0,1,0,0],[0,1,1,1,1,0,0]]},
+  {size:7,clues:[{r:0,c:0,v:1},{r:0,c:3,v:3},{r:0,c:6,v:1},{r:3,c:1,v:5},{r:3,c:5,v:3},{r:6,c:0,v:3},{r:6,c:6,v:4}],
+   solution:[[0,1,1,0,0,1,0],[1,1,1,0,1,1,1],[1,0,1,1,1,0,1],[1,0,0,1,1,0,1],[1,0,1,1,1,0,0],[0,0,1,1,1,0,0],[0,0,0,1,1,1,0]]},
+  {size:5,clues:[{r:0,c:2,v:2},{r:1,c:0,v:3},{r:3,c:4,v:4},{r:4,c:1,v:2}],
+   solution:[[1,1,0,1,1],[0,0,0,1,1],[0,1,1,1,0],[1,1,1,0,0],[1,0,0,0,1]]},
+  {size:6,clues:[{r:0,c:0,v:4},{r:0,c:5,v:1},{r:2,c:3,v:2},{r:3,c:1,v:3},{r:5,c:0,v:1},{r:5,c:4,v:5}],
+   solution:[[0,0,1,1,1,0],[0,0,1,1,1,1],[0,1,1,0,0,1],[1,0,0,0,1,1],[1,0,1,1,0,0],[0,1,1,1,0,0]]}
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='nurikabe'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'nurikabe',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,380);
+  cellSize=Math.floor(maxW/gridSize);
+  canvas.width=cellSize*gridSize;
+  canvas.height=cellSize*gridSize;
+  draw();
+}
+
+function loadLevel(idx){
+  const lvl=LEVELS[idx%LEVELS.length];
+  gridSize=lvl.size;
+  grid=Array.from({length:gridSize},()=>new Array(gridSize).fill(0));
+  document.getElementById('level-txt').textContent='Puzzle '+(idx+1);
+  updateHUD();
+  resize();
+}
+
+function updateHUD(){
+  let shaded=0;
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++)if(grid[r][c]===1)shaded++;
+  document.getElementById('shaded-txt').textContent='Shaded: '+shaded;
+}
+
+function draw(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // cells
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){
+    const x=c*cellSize,y=r*cellSize;
+    if(grid[r][c]===1){
+      ctx.fillStyle='#3b82f6';
+      ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+    } else if(grid[r][c]===2){
+      ctx.fillStyle='#0f172a';
+      ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+      // dot
+      ctx.fillStyle='#22c55e';
+      ctx.beginPath();ctx.arc(x+cellSize/2,y+cellSize/2,3,0,Math.PI*2);ctx.fill();
+    }
+  }
+  // grid
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;
+  for(let r=0;r<=gridSize;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=gridSize;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // clue numbers
+  lvl.clues.forEach(cl=>{
+    const cx=cl.c*cellSize+cellSize/2,cy=cl.r*cellSize+cellSize/2;
+    // bg circle
+    ctx.fillStyle='#facc15';
+    ctx.beginPath();ctx.arc(cx,cy,cellSize*0.32,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0f172a';ctx.font='bold '+Math.floor(cellSize*0.4)+'px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(cl.v,cx,cy);
+  });
+}
+
+function isClueCell(r,c){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  return lvl.clues.some(cl=>cl.r===r&&cl.c===c);
+}
+
+canvas.addEventListener('pointerdown',handleTap);
+canvas.addEventListener('pointermove',e=>{if(e.buttons)handleTap(e)});
+
+function handleTap(e){
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const c=Math.floor(x/cellSize),r=Math.floor(y/cellSize);
+  if(r<0||r>=gridSize||c<0||c>=gridSize)return;
+  if(isClueCell(r,c))return;
+  if(paintMode==='shade'){
+    grid[r][c]=grid[r][c]===1?0:1;
+  } else {
+    grid[r][c]=grid[r][c]===2?0:2;
+  }
+  updateHUD();draw();
+  checkWin();
+}
+
+function toggleMode(){
+  paintMode=paintMode==='shade'?'white':'shade';
+  document.getElementById('mode-txt').textContent='Mode: '+(paintMode==='shade'?'Shade':'Mark White');
+}
+
+function checkWin(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  const sol=lvl.solution;
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){
+    const expected=sol[r][c];// 1=shaded, 0=white
+    const actual=grid[r][c];// 0=unknown, 1=shaded, 2=white
+    if(expected===1&&actual!==1)return;
+    if(expected===0&&actual===1)return;// shaded where should be white
+  }
+  // need all shaded cells correct and no wrong shading
+  // verify all non-shaded cells are indeed 0 in solution
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){
+    if(sol[r][c]===1&&grid[r][c]!==1)return;
+    if(sol[r][c]===0&&grid[r][c]===1)return;
+  }
+  const score=currentLevel+1;
+  if(score>highScore){highScore=score;save()}
+  setTimeout(()=>{
+    if(currentLevel>=LEVELS.length-1){
+      document.getElementById('gameover-overlay').classList.remove('hidden');
+    } else {
+      document.getElementById('win-msg').textContent='Puzzle solved correctly!';
+      document.getElementById('win-overlay').classList.remove('hidden');
+    }
+  },300);
+}
+
+function clearBoard(){
+  grid=Array.from({length:gridSize},()=>new Array(gridSize).fill(0));
+  updateHUD();draw();
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentLevel++;loadLevel(currentLevel);
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

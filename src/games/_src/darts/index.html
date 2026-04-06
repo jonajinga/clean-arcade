@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Darts</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Darts</h1>
+<div class="hud">
+  <span id="scoreDisp">301</span>
+  <span id="dartsDisp">Darts: 3</span>
+  <span id="lastDisp">Last: -</span>
+  <span id="hScore">Best Rounds: -</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Darts - 301</h2>
+    <p>Click to throw! Must finish on a double.</p>
+    <p>Bullseye = 50, Outer Bull = 25</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2 id="goTitle">Game Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,CX=W/2,CY=H/2,R=160;
+// standard dartboard order
+const SECTORS=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+let remaining,dartsLeft,totalDarts,round,highScore=Infinity,thrown=[],aimX,aimY,aiming=false;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  remaining=301;dartsLeft=3;totalDarts=0;round=0;thrown=[];
+  updateHUD();draw();
+}
+
+canvas.addEventListener('click',e=>{
+  if(remaining<=0)return;
+  if(dartsLeft<=0){dartsLeft=3;round++;thrown=[];}
+  const r=canvas.getBoundingClientRect();
+  const mx=(e.clientX-r.left)/r.width*W;
+  const my=(e.clientY-r.top)/r.height*H;
+  // add randomness for challenge
+  const jitter=15;
+  const tx=mx+(Math.random()-0.5)*jitter;
+  const ty=my+(Math.random()-0.5)*jitter;
+  const result=calcScore(tx,ty);
+  thrown.push({x:tx,y:ty});
+  dartsLeft--;totalDarts++;
+
+  if(remaining-result.total===0&&result.isDouble){
+    remaining=0;
+    if(totalDarts<highScore){highScore=totalDarts;saveState();}
+    document.getElementById('goTitle').textContent='You Win!';
+    document.getElementById('finalScore').textContent='Finished in '+totalDarts+' darts!';
+    document.getElementById('gameOverOverlay').style.display='flex';
+  } else if(remaining-result.total<0||(remaining-result.total===0&&!result.isDouble)){
+    // bust - restore
+    document.getElementById('lastDisp').textContent='BUST!';
+  } else {
+    remaining-=result.total;
+    document.getElementById('lastDisp').textContent='Last: '+result.label;
+  }
+  if(totalDarts>100&&remaining>0){
+    document.getElementById('goTitle').textContent='Too Many Darts!';
+    document.getElementById('finalScore').textContent='Score remaining: '+remaining;
+    document.getElementById('gameOverOverlay').style.display='flex';
+  }
+  updateHUD();draw();
+});
+
+function calcScore(x,y){
+  const dx=x-CX,dy=y-CY;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<=8)return{total:50,label:'Bull',isDouble:true};
+  if(dist<=20)return{total:25,label:'Outer Bull',isDouble:false};
+  if(dist>R)return{total:0,label:'Miss',isDouble:false};
+  let angle=Math.atan2(dy,dx)*180/Math.PI+90;
+  if(angle<0)angle+=360;
+  const sector=Math.floor(angle/18);
+  const num=SECTORS[sector%20];
+  const innerTriple=R*0.38,outerTriple=R*0.42;
+  const innerDouble=R*0.92,outerDouble=R;
+  if(dist>=innerDouble)return{total:num*2,label:'D'+num,isDouble:true};
+  if(dist>=innerTriple&&dist<=outerTriple)return{total:num*3,label:'T'+num,isDouble:false};
+  return{total:num,label:''+num,isDouble:false};
+}
+
+function updateHUD(){
+  document.getElementById('scoreDisp').textContent=remaining;
+  document.getElementById('dartsDisp').textContent='Darts: '+dartsLeft;
+  document.getElementById('hScore').textContent='Best: '+(highScore<Infinity?highScore+' darts':'-');
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // draw board
+  for(let i=0;i<20;i++){
+    const a1=(i*18-9)*Math.PI/180-Math.PI/2;
+    const a2=((i+1)*18-9)*Math.PI/180-Math.PI/2;
+    // outer double
+    drawWedge(a1,a2,R*0.92,R,i%2===0?'#ef4444':'#22c55e');
+    // outer single
+    drawWedge(a1,a2,R*0.42,R*0.92,i%2===0?'#1e293b':'#e2e8f0');
+    // triple
+    drawWedge(a1,a2,R*0.38,R*0.42,i%2===0?'#ef4444':'#22c55e');
+    // inner single
+    drawWedge(a1,a2,R*0.12,R*0.38,i%2===0?'#1e293b':'#e2e8f0');
+  }
+  // bull
+  ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(CX,CY,20,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(CX,CY,8,0,Math.PI*2);ctx.fill();
+  // numbers
+  ctx.fillStyle='#facc15';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+  for(let i=0;i<20;i++){
+    const a=(i*18)*Math.PI/180-Math.PI/2;
+    const nx=CX+Math.cos(a)*(R+14);
+    const ny=CY+Math.sin(a)*(R+14)+4;
+    ctx.fillText(''+SECTORS[i],nx,ny);
+  }
+  // thrown darts
+  for(let t of thrown){
+    ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(t.x,t.y,3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.beginPath();ctx.arc(t.x,t.y,5,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.textAlign='start';
+}
+
+function drawWedge(a1,a2,r1,r2,color){
+  ctx.fillStyle=color;ctx.beginPath();
+  ctx.arc(CX,CY,r2,a1,a2);ctx.arc(CX,CY,r1,a2,a1,true);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#334155';ctx.lineWidth=0.5;ctx.stroke();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'darts',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='darts'){
+    if(e.data.state&&e.data.state.highScore!=null)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fifteen Puzzle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#board{display:grid;grid-template-columns:repeat(4,1fr);border:2px solid #6366f1;gap:2px;background:#6366f1;margin:0 auto}
+.tile{display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:bold;cursor:pointer;background:#1e293b;color:#e2e8f0;user-select:none;transition:background 0.1s}
+.tile:hover{background:#334155}
+.tile.empty{background:#0f172a;cursor:default}
+.tile.correct{color:#22c55e}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.9rem;color:#94a3b8;margin:0.5rem 0}
+</style>
+</head>
+<body>
+<h1>Fifteen Puzzle</h1>
+<div id="hud"><span id="moves-txt">Moves: 0</span><span id="timer-txt">Time: 0:00</span></div>
+<div id="board"></div>
+
+<div class="overlay" id="start-overlay">
+<h2>Fifteen Puzzle</h2>
+<p>Slide numbered tiles into order 1-15.<br>Tap a tile adjacent to the empty space to move it.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>Puzzle Solved!</h2>
+<p id="go-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const SIZE=4,TOTAL=16;
+let board=[],emptyIdx=15,moves=0,timer=null,seconds=0,highScore=0,playing=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='fifteen-puzzle'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'fifteen-puzzle',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,360);
+  const ts=Math.floor(maxW/SIZE);
+  const boardEl=document.getElementById('board');
+  boardEl.style.width=ts*SIZE+SIZE*2+'px';
+  document.querySelectorAll('.tile').forEach(t=>{t.style.width=ts+'px';t.style.height=ts+'px'});
+}
+
+function shuffle(){
+  board=[];
+  for(let i=1;i<TOTAL;i++)board.push(i);
+  board.push(0);
+  emptyIdx=TOTAL-1;
+  // perform random valid moves
+  for(let i=0;i<500;i++){
+    const neighbors=getNeighbors(emptyIdx);
+    const pick=neighbors[Math.random()*neighbors.length|0];
+    board[emptyIdx]=board[pick];
+    board[pick]=0;
+    emptyIdx=pick;
+  }
+}
+
+function getNeighbors(idx){
+  const r=Math.floor(idx/SIZE),c=idx%SIZE,n=[];
+  if(r>0)n.push(idx-SIZE);
+  if(r<SIZE-1)n.push(idx+SIZE);
+  if(c>0)n.push(idx-1);
+  if(c<SIZE-1)n.push(idx+1);
+  return n;
+}
+
+function render(){
+  const boardEl=document.getElementById('board');
+  boardEl.innerHTML='';
+  board.forEach((val,i)=>{
+    const tile=document.createElement('div');
+    tile.className='tile'+(val===0?' empty':'')+(val===i+1?' correct':'');
+    tile.textContent=val===0?'':val;
+    tile.onclick=()=>tapTile(i);
+    boardEl.appendChild(tile);
+  });
+  document.getElementById('moves-txt').textContent='Moves: '+moves;
+  resize();
+}
+
+function tapTile(idx){
+  if(!playing)return;
+  if(board[idx]===0)return;
+  const neighbors=getNeighbors(idx);
+  if(!neighbors.includes(emptyIdx))return;
+  board[emptyIdx]=board[idx];
+  board[idx]=0;
+  emptyIdx=idx;
+  moves++;
+  render();
+  if(checkWin()){
+    playing=false;
+    clearInterval(timer);
+    const score=moves;
+    if(highScore===0||score<highScore){highScore=score;save()}
+    document.getElementById('go-msg').textContent='Solved in '+moves+' moves, '+formatTime(seconds)+'!\nBest: '+highScore+' moves';
+    document.getElementById('gameover-overlay').classList.remove('hidden');
+  }
+}
+
+function checkWin(){
+  for(let i=0;i<TOTAL-1;i++)if(board[i]!==i+1)return false;
+  return board[TOTAL-1]===0;
+}
+
+function formatTime(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  shuffle();moves=0;seconds=0;playing=true;
+  if(timer)clearInterval(timer);
+  timer=setInterval(()=>{seconds++;document.getElementById('timer-txt').textContent='Time: '+formatTime(seconds)},1000);
+  render();
+}
+
+window.addEventListener('resize',resize);
+</script>
+</body>
+</html>

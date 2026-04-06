@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Risk Mini</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;margin:0.25rem 0;text-align:center;min-height:2.8em;padding:0 0.5rem}
+canvas{border:2px solid #6366f1;display:block;margin:0.25rem auto}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;flex-wrap:wrap;justify-content:center}
+.controls button{padding:0.5rem 1rem;font-size:0.85rem;background:#334155}
+.controls button.active{background:#6366f1}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Risk Mini</h1>
+<div class="info" id="info">Deploy troops, then attack!</div>
+<canvas id="canvas"></canvas>
+<div class="controls" id="controls">
+<button id="btnDeploy" onclick="setPhase('deploy')" class="active">Deploy</button>
+<button id="btnAttack" onclick="setPhase('attack')">Attack</button>
+<button id="btnEnd" onclick="endTurn()">End Turn</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Risk Mini</h2>
+<p>3 continents, 9 territories. Deploy troops, attack neighbors with dice combat. Conquer all to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d'),info=document.getElementById('info');
+let territories,phase,deployLeft,selectedTerr,gameOver,turn,highScore=0,wins=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='risk-mini'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'risk-mini',state:{highScore}},'*')}catch(e){}}
+
+const CONTINENTS=[
+{name:'North',bonus:2,territories:[0,1,2]},
+{name:'Central',bonus:3,territories:[3,4,5]},
+{name:'South',bonus:2,territories:[6,7,8]}
+];
+
+const TERR_DATA=[
+{name:'NW',cx:0.17,cy:0.17,adj:[1,3]},
+{name:'NE',cx:0.5,cy:0.12,adj:[0,2,4]},
+{name:'Far East',cx:0.83,cy:0.17,adj:[1,5]},
+{name:'West',cx:0.15,cy:0.5,adj:[0,4,6]},
+{name:'Center',cx:0.5,cy:0.5,adj:[1,3,5,7]},
+{name:'East',cx:0.85,cy:0.5,adj:[2,4,8]},
+{name:'SW',cx:0.17,cy:0.83,adj:[3,7]},
+{name:'SE',cx:0.5,cy:0.88,adj:[6,8,4]},
+{name:'Far South',cx:0.83,cy:0.83,adj:[5,7]}
+];
+
+let cw,ch;
+function resize(){
+cw=Math.min(window.innerWidth-20,420);ch=cw;
+canvas.width=cw;canvas.height=ch;
+render();
+}
+window.addEventListener('resize',resize);
+
+function startGame(){
+territories=TERR_DATA.map((t,i)=>({
+...t,id:i,owner:i<5?'player':'ai',troops:2
+}));
+// Random assignment
+const ids=[0,1,2,3,4,5,6,7,8];
+for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]]}
+ids.forEach((id,i)=>{territories[id].owner=i<5?'player':'ai'});
+phase='deploy';deployLeft=3;selectedTerr=null;gameOver=false;turn='player';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('controls').classList.remove('hidden');
+info.textContent=`Deploy phase: ${deployLeft} troops to place. Click your territory.`;
+updateButtons();resize();
+}
+
+function setPhase(p){
+if(gameOver||turn!=='player')return;
+if(p==='attack'&&deployLeft>0){info.textContent='Deploy all troops first!';return}
+phase=p;selectedTerr=null;updateButtons();render();
+if(p==='deploy')info.textContent=`Deploy: ${deployLeft} troops left`;
+else info.textContent='Click your territory to attack from, then click enemy neighbor';
+}
+
+function updateButtons(){
+document.getElementById('btnDeploy').className=phase==='deploy'?'active':'';
+document.getElementById('btnAttack').className=phase==='attack'?'active':'';
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,ch);
+// Draw connections
+ctx.strokeStyle='#475569';ctx.lineWidth=2;
+for(const t of territories){
+for(const a of t.adj){
+if(a>t.id){
+const o=territories[a];
+ctx.beginPath();ctx.moveTo(t.cx*cw,t.cy*ch);ctx.lineTo(o.cx*cw,o.cy*ch);ctx.stroke();
+}
+}
+}
+// Draw territories
+for(const t of territories){
+const x=t.cx*cw,y=t.cy*ch,r=cw*0.08;
+ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+ctx.fillStyle=t.owner==='player'?'#22c55e':'#ef4444';
+if(selectedTerr===t.id)ctx.fillStyle='#facc15';
+ctx.fill();
+ctx.strokeStyle='#e2e8f0';ctx.lineWidth=2;ctx.stroke();
+ctx.fillStyle='#0f172a';ctx.font='bold '+(cw*0.04)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(t.troops,x,y);
+ctx.fillStyle='#e2e8f0';ctx.font=(cw*0.025)+'px system-ui';
+ctx.fillText(t.name,x,y-r-8);
+}
+// Continent labels
+ctx.fillStyle='rgba(226,232,240,0.3)';ctx.font=(cw*0.03)+'px system-ui';ctx.textAlign='center';
+ctx.fillText('North (+2)',cw*0.5,ch*0.04);
+ctx.fillText('Central (+3)',cw*0.5,ch*0.42);
+ctx.fillText('South (+2)',cw*0.5,ch*0.97);
+}
+
+canvas.addEventListener('click',e=>{
+if(gameOver||turn!=='player')return;
+const rect=canvas.getBoundingClientRect();
+const mx=(e.clientX-rect.left)*(cw/rect.width),my=(e.clientY-rect.top)*(ch/rect.height);
+let clicked=null;
+for(const t of territories){
+if(Math.hypot(mx-t.cx*cw,my-t.cy*ch)<cw*0.08){clicked=t.id;break}
+}
+if(clicked===null)return;
+
+if(phase==='deploy'){
+if(territories[clicked].owner!=='player')return;
+territories[clicked].troops++;deployLeft--;
+info.textContent=deployLeft>0?`Deploy: ${deployLeft} troops left`:'All deployed! Attack or End Turn.';
+if(deployLeft<=0)setPhase('attack');
+render();
+}else if(phase==='attack'){
+if(selectedTerr===null){
+if(territories[clicked].owner==='player'&&territories[clicked].troops>1){
+selectedTerr=clicked;info.textContent='Now click an adjacent enemy territory to attack';render();
+}
+}else{
+if(clicked===selectedTerr){selectedTerr=null;render();return}
+const src=territories[selectedTerr],dst=territories[clicked];
+if(!src.adj.includes(clicked)||dst.owner==='player'){selectedTerr=null;render();return}
+// Dice battle
+const atkDice=Math.min(src.troops-1,3),defDice=Math.min(dst.troops,2);
+const atk=Array.from({length:atkDice},()=>Math.ceil(Math.random()*6)).sort((a,b)=>b-a);
+const def=Array.from({length:defDice},()=>Math.ceil(Math.random()*6)).sort((a,b)=>b-a);
+let aLoss=0,dLoss=0;
+for(let i=0;i<Math.min(atk.length,def.length);i++){
+if(atk[i]>def[i])dLoss++;else aLoss++;
+}
+src.troops-=aLoss;dst.troops-=dLoss;
+info.textContent=`Attack: ${atk.join(',')} vs ${def.join(',')} | You lost ${aLoss}, enemy lost ${dLoss}`;
+if(dst.troops<=0){
+dst.owner='player';dst.troops=1;src.troops--;
+info.textContent+=' - Territory captured!';
+}
+selectedTerr=null;render();
+if(territories.every(t=>t.owner==='player')){endGame(true);return}
+}
+}
+});
+
+function endTurn(){
+if(gameOver||turn!=='player')return;
+turn='ai';selectedTerr=null;phase='deploy';
+info.textContent='AI turn...';render();
+setTimeout(aiTurn,500);
+}
+
+function aiTurn(){
+if(gameOver)return;
+// AI deploy
+let aiTerrs=territories.filter(t=>t.owner==='ai');
+if(!aiTerrs.length){endGame(true);return}
+let bonus=Math.max(3,Math.floor(aiTerrs.length/3));
+for(const cont of CONTINENTS){
+if(cont.territories.every(id=>territories[id].owner==='ai'))bonus+=cont.bonus;
+}
+for(let i=0;i<bonus;i++){
+const t=aiTerrs[Math.floor(Math.random()*aiTerrs.length)];
+t.troops++;
+}
+render();
+// AI attack
+setTimeout(()=>{
+let attacks=0;
+const doAttack=()=>{
+if(gameOver)return;
+aiTerrs=territories.filter(t=>t.owner==='ai'&&t.troops>1);
+let best=null,bestScore=-1;
+for(const t of aiTerrs){
+for(const adj of t.adj){
+if(territories[adj].owner==='player'){
+const sc=t.troops-territories[adj].troops;
+if(sc>bestScore){bestScore=sc;best={from:t.id,to:adj}}
+}
+}
+}
+if(best&&bestScore>=-1&&attacks<5){
+attacks++;
+const src=territories[best.from],dst=territories[best.to];
+const atkDice=Math.min(src.troops-1,3),defDice=Math.min(dst.troops,2);
+const atk=Array.from({length:atkDice},()=>Math.ceil(Math.random()*6)).sort((a,b)=>b-a);
+const def=Array.from({length:defDice},()=>Math.ceil(Math.random()*6)).sort((a,b)=>b-a);
+let aLoss=0,dLoss=0;
+for(let i=0;i<Math.min(atk.length,def.length);i++){if(atk[i]>def[i])dLoss++;else aLoss++}
+src.troops-=aLoss;dst.troops-=dLoss;
+if(dst.troops<=0){dst.owner='ai';dst.troops=1;src.troops--}
+render();
+if(territories.every(t=>t.owner==='ai')){endGame(false);return}
+setTimeout(doAttack,400);
+}else{
+// End AI turn, start player turn
+turn='player';
+let pBonus=Math.max(3,Math.floor(territories.filter(t=>t.owner==='player').length/3));
+for(const cont of CONTINENTS){
+if(cont.territories.every(id=>territories[id].owner==='player'))pBonus+=cont.bonus;
+}
+deployLeft=pBonus;phase='deploy';
+info.textContent=`Your turn! Deploy ${deployLeft} troops.`;
+updateButtons();render();
+}
+};
+doAttack();
+},300);
+}
+
+function endGame(won){
+gameOver=true;
+if(won){wins++;highScore=Math.max(highScore,wins);save()}
+document.getElementById('controls').classList.add('hidden');
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=won?'Victory!':'Defeat';
+document.getElementById('overMsg').textContent=won?'You conquered all territories!\nWins: '+wins:'AI conquered all territories.';
+document.getElementById('overOverlay').classList.remove('hidden');
+},600);
+}
+</script>
+</body>
+</html>

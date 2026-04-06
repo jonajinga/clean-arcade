@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fruit Ninja</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.hud{display:flex;gap:2rem;font-size:0.9rem;margin:0.25rem}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+.pause-btn{background:#334155;margin:0.25rem;padding:0.5rem 1rem;font-size:0.85rem}
+</style>
+</head>
+<body>
+<h1>Fruit Ninja</h1>
+<div class="hud"><span>Score: <strong id="scoreEl">0</strong></span><span>Time: <strong id="timeEl">60</strong></span><span>Combo: <strong id="comboEl">0</strong></span></div>
+<canvas id="canvas"></canvas>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+
+<div class="overlay" id="startOverlay">
+<h2>Fruit Ninja</h2>
+<p>Swipe or click-drag to slice fruits! Avoid bombs. 60 seconds. Combos for bonus points!</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Time's Up!</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const FRUITS=['🍎','🍊','🍋','🍇','🍉','🍓','🍑','🍌'];
+const BOMB='💣';
+let fruits,sliceTrail,score,timeLeft,combo,paused,gameOver,animId,lastTime,spawnTimer,highScore=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+let cw,ch,mouseDown=false,lastMX=0,lastMY=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='fruit-ninja'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'fruit-ninja',state:{highScore}},'*')}catch(e){}}
+
+document.addEventListener('keydown',e=>{if(e.key==='P'||e.key==='p')togglePause()});
+
+function resize(){
+cw=Math.min(window.innerWidth-4,500);ch=Math.min(window.innerHeight-120,600);
+canvas.width=cw;canvas.height=ch;
+}
+window.addEventListener('resize',resize);
+
+function startGame(){
+resize();
+fruits=[];sliceTrail=[];score=0;timeLeft=60;combo=0;paused=false;gameOver=false;spawnTimer=0;
+lastTime=performance.now();
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+updateHUD();
+gameLoop(performance.now());
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)gameLoop(performance.now())}
+
+function spawnFruit(){
+const isBomb=Math.random()<0.15;
+const x=Math.random()*cw*0.8+cw*0.1;
+const vx=(Math.random()-0.5)*3;
+const vy=-(8+Math.random()*5);
+fruits.push({
+x,y:ch+20,vx,vy,
+emoji:isBomb?BOMB:FRUITS[Math.floor(Math.random()*FRUITS.length)],
+isBomb,sliced:false,size:40+Math.random()*15,
+halves:null,fadeOut:0
+});
+}
+
+function gameLoop(now){
+if(paused||gameOver)return;
+const dt=Math.min(now-(lastTime||now),50)/16.67;
+lastTime=now;
+timeLeft-=dt/60;
+if(timeLeft<=0){endGame();return}
+spawnTimer+=dt;
+if(spawnTimer>30-Math.min(timeLeft,30)*0.5){spawnTimer=0;const count=1+Math.floor((60-timeLeft)/15);for(let i=0;i<count;i++)setTimeout(()=>spawnFruit(),i*200)}
+// Physics
+for(const f of fruits){
+f.vy+=0.3*dt;f.x+=f.vx*dt;f.y+=f.vy*dt;
+if(f.halves){f.halves.forEach(h=>{h.vy+=0.3*dt;h.x+=h.vx*dt;h.y+=h.vy*dt;h.rot+=h.vr*dt})}
+}
+fruits=fruits.filter(f=>f.y<ch+100&&(!f.halves||f.halves[0].y<ch+100));
+// Slice trail fade
+sliceTrail=sliceTrail.filter(s=>{s.life-=dt;return s.life>0});
+updateHUD();render();
+animId=requestAnimationFrame(gameLoop);
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,ch);
+// Slice trail
+if(sliceTrail.length>1){
+ctx.strokeStyle='rgba(250,204,21,0.6)';ctx.lineWidth=3;ctx.beginPath();
+sliceTrail.forEach((s,i)=>{i===0?ctx.moveTo(s.x,s.y):ctx.lineTo(s.x,s.y)});
+ctx.stroke();
+}
+// Fruits
+for(const f of fruits){
+if(f.halves){
+for(const h of f.halves){
+ctx.save();ctx.translate(h.x,h.y);ctx.rotate(h.rot);ctx.globalAlpha=Math.max(0,h.life/20);
+ctx.font=f.size+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(f.emoji,0,0);
+ctx.restore();
+}
+}else{
+ctx.font=f.size+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(f.emoji,f.x,f.y);
+}
+}
+}
+
+function checkSlice(x,y){
+for(const f of fruits){
+if(f.sliced||f.halves)continue;
+if(Math.hypot(x-f.x,y-f.y)<f.size*0.6){
+f.sliced=true;
+if(f.isBomb){score=Math.max(0,score-20);combo=0;
+// Flash red
+ctx.fillStyle='rgba(239,68,68,0.3)';ctx.fillRect(0,0,cw,ch);
+}else{
+combo++;score+=10+(combo>2?combo*5:0);
+}
+f.halves=[
+{x:f.x-10,y:f.y,vx:f.vx-2,vy:f.vy-1,rot:0,vr:0.1,life:30},
+{x:f.x+10,y:f.y,vx:f.vx+2,vy:f.vy-1,rot:0,vr:-0.1,life:30}
+];
+}
+}
+}
+
+canvas.addEventListener('mousedown',e=>{mouseDown=true;const r=canvas.getBoundingClientRect();lastMX=(e.clientX-r.left)*(cw/r.width);lastMY=(e.clientY-r.top)*(ch/r.height)});
+canvas.addEventListener('mousemove',e=>{
+if(!mouseDown)return;
+const r=canvas.getBoundingClientRect();
+const mx=(e.clientX-r.left)*(cw/r.width),my=(e.clientY-r.top)*(ch/r.height);
+sliceTrail.push({x:mx,y:my,life:10});
+checkSlice(mx,my);lastMX=mx;lastMY=my;
+});
+canvas.addEventListener('mouseup',()=>{mouseDown=false;combo=0;sliceTrail=[]});
+
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];const r=canvas.getBoundingClientRect();lastMX=(t.clientX-r.left)*(cw/r.width);lastMY=(t.clientY-r.top)*(ch/r.height);mouseDown=true},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+e.preventDefault();if(!mouseDown)return;
+const t=e.touches[0];const r=canvas.getBoundingClientRect();
+const mx=(t.clientX-r.left)*(cw/r.width),my=(t.clientY-r.top)*(ch/r.height);
+sliceTrail.push({x:mx,y:my,life:10});
+checkSlice(mx,my);
+},{passive:false});
+canvas.addEventListener('touchend',()=>{mouseDown=false;combo=0;sliceTrail=[]});
+
+function updateHUD(){
+document.getElementById('scoreEl').textContent=score;
+document.getElementById('timeEl').textContent=Math.ceil(Math.max(0,timeLeft));
+document.getElementById('comboEl').textContent=combo>1?'x'+combo:'';
+}
+
+function endGame(){
+gameOver=true;cancelAnimationFrame(animId);
+highScore=Math.max(highScore,score);save();
+updateHUD();
+setTimeout(()=>{
+document.getElementById('overTitle').textContent="Time's Up!";
+document.getElementById('overMsg').textContent=`Score: ${score}\nBest: ${highScore}`;
+document.getElementById('overOverlay').classList.remove('hidden');
+},300);
+}
+</script>
+</body>
+</html>

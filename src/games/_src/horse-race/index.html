@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Horse Race</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:10px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 20px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.bet-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.horse-btn{padding:8px 14px;font-size:.9rem}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Horse Race</h1>
+<div class="wrap">
+<canvas id="c" width="500" height="300"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Horse Race</h2>
+<p>Pick a horse and watch the race! Win = 5x your bet.</p>
+<div id="bet-section">
+<p>Coins: <span id="coins-display">100</span> | Bet: 10</p>
+<p style="font-size:.85rem;color:#94a3b8">Pick your horse:</p>
+<div class="bet-row" id="horse-btns"></div>
+</div>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Race Over!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="showBetting()">Race Again</button>
+</div>
+</div>
+<div id="info">Pick a horse to start!</div>
+<script>
+const SLUG='horse-race';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=500,H=300;
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#a855f7','#f97316'];
+const NAMES=['Red','Blue','Green','Gold','Purple','Orange'];
+let horses,coins,bet,picked,running,highScore=0;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(500,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*300/500)+'px'}
+resize();window.addEventListener('resize',resize);
+
+function showBetting(){
+  document.getElementById('over-overlay').style.display='none';
+  document.getElementById('start-overlay').style.display='flex';
+  if(coins<=0)coins=100;
+  document.getElementById('coins-display').textContent=coins;
+  let btns=document.getElementById('horse-btns');
+  btns.innerHTML=NAMES.map((n,i)=>`<button class="btn-secondary horse-btn" style="border-left:4px solid ${COLORS[i]}" onclick="pickHorse(${i})">${n}</button>`).join('');
+}
+
+function pickHorse(i){
+  picked=i;bet=Math.min(10,coins);coins-=bet;
+  document.getElementById('start-overlay').style.display='none';
+  startRace();
+}
+
+function draw(){
+  ctx.fillStyle='#1a4d1a';ctx.fillRect(0,0,W,H);
+  let laneH=H/6;
+  // lanes
+  for(let i=0;i<6;i++){
+    let y=i*laneH;
+    ctx.fillStyle=i%2===0?'#1e5e1e':'#1a4d1a';
+    ctx.fillRect(0,y,W,laneH);
+    // finish line
+    ctx.strokeStyle='#ffffff44';ctx.lineWidth=1;
+    ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(W-30,y);ctx.lineTo(W-30,y+laneH);ctx.stroke();
+    ctx.setLineDash([]);
+    // horse
+    let hx=horses[i].x;
+    let hy=y+laneH/2;
+    ctx.fillStyle=COLORS[i];
+    // body
+    ctx.fillRect(hx-12,hy-8,24,12);
+    // head
+    ctx.fillRect(hx+12,hy-12,8,8);
+    // legs
+    let legOff=Math.sin(horses[i].anim)*4;
+    ctx.fillRect(hx-8,hy+4,4,6+legOff);
+    ctx.fillRect(hx+4,hy+4,4,6-legOff);
+    // label
+    ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';
+    ctx.fillText((i+1)+'. '+NAMES[i],4,y+12);
+    if(i===picked){ctx.fillStyle='#facc15';ctx.fillText('★',hx-4,hy-14)}
+  }
+  // finish pole
+  ctx.fillStyle='#fff';ctx.fillRect(W-32,0,2,H);
+}
+
+function startRace(){
+  horses=NAMES.map(()=>({x:40,speed:0,anim:0}));
+  running=true;
+  requestAnimationFrame(raceLoop);
+}
+
+let lt=0;
+function raceLoop(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  let winner=-1;
+  for(let i=0;i<6;i++){
+    let h=horses[i];
+    h.speed=1+Math.random()*2.5;
+    h.x+=h.speed*dt*80;
+    h.anim+=dt*10;
+    if(h.x>=W-40&&winner===-1)winner=i;
+  }
+  draw();
+  document.getElementById('info').textContent=`Your horse: ${NAMES[picked]} | Coins: ${coins} | Bet: ${bet}`;
+  if(winner>=0){
+    running=false;
+    let won=winner===picked;
+    if(won)coins+=bet*5;
+    if(coins>highScore)highScore=coins;
+    document.getElementById('over-overlay').style.display='flex';
+    document.getElementById('over-title').textContent=won?'Your Horse Won!':'Better Luck Next Time';
+    document.getElementById('over-msg').textContent=`Winner: ${NAMES[winner]}! ${won?'You won '+(bet*5)+' coins!':'You lost '+bet+' coins.'}\nCoins: ${coins} | Best: ${highScore}`;
+    save();return;
+  }
+  requestAnimationFrame(raceLoop);
+}
+
+showBetting();draw();
+</script>
+</body>
+</html>

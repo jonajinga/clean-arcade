@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swimming Race</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Swimming Race</h1>
+<div class="hud">
+  <span id="distDisp">0.0m / 50m</span>
+  <span id="staminaDisp">Stamina: 100%</span>
+  <span id="timeDisp">Time: 0.0s</span>
+  <span id="hScore">Best: --</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="250"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Swimming Race</h2>
+    <p>Tap Left/Right alternately to swim!</p>
+    <p>Press Space at the wall to breathe.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Race Complete!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="strokeLeft()" id="leftBtn" style="display:none;background:#3b82f6">Left</button>
+  <button onclick="breathe()" id="breatheBtn" style="display:none;background:#22c55e">Breathe</button>
+  <button onclick="strokeRight()" id="rightBtn" style="display:none;background:#ef4444">Right</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=250;
+let dist,stamina,time,lastStroke,highScore=Infinity,running=false;
+let swimmerX,armPhase,breatheZone;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  ['leftBtn','rightBtn','breatheBtn'].forEach(id=>document.getElementById(id).style.display='inline-block');
+  dist=0;stamina=100;time=0;lastStroke='none';armPhase=0;
+  running=true;
+  loop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')strokeLeft();
+  if(e.key==='ArrowRight'||e.key==='d')strokeRight();
+  if(e.key===' '){breathe();e.preventDefault();}
+});
+
+function strokeLeft(){
+  if(!running)return;
+  if(lastStroke==='left'){stamina-=5;} // penalty for same arm
+  const power=stamina>20?1:0.4;
+  dist+=0.8*power;stamina=Math.max(0,stamina-2);
+  lastStroke='left';armPhase=-1;
+  checkFinish();
+}
+
+function strokeRight(){
+  if(!running)return;
+  if(lastStroke==='right'){stamina-=5;}
+  const power=stamina>20?1:0.4;
+  dist+=0.8*power;stamina=Math.max(0,stamina-2);
+  lastStroke='right';armPhase=1;
+  checkFinish();
+}
+
+function breathe(){
+  if(!running)return;
+  // breathing at wall (every 25m) gives bonus
+  const atWall=dist%25<2||dist%25>23;
+  if(atWall){stamina=Math.min(100,stamina+30);}
+  else{stamina=Math.min(100,stamina+10);}
+}
+
+function checkFinish(){
+  if(dist>=50){
+    running=false;
+    if(time<highScore){highScore=time;saveState();}
+    document.getElementById('finalScore').textContent='Time: '+time.toFixed(1)+'s';
+    document.getElementById('gameOverOverlay').style.display='flex';
+  }
+}
+
+let lastTime=0;
+function loop(ts){
+  if(!running)return;
+  if(lastTime)time+=(ts-lastTime)/1000;
+  lastTime=ts;
+  stamina=Math.max(0,stamina-0.05);// passive drain
+  updateHUD();draw();
+  requestAnimationFrame(loop);
+}
+
+function updateHUD(){
+  document.getElementById('distDisp').textContent=dist.toFixed(1)+'m / 50m';
+  document.getElementById('staminaDisp').textContent='Stamina: '+Math.round(stamina)+'%';
+  document.getElementById('timeDisp').textContent='Time: '+time.toFixed(1)+'s';
+  document.getElementById('hScore').textContent='Best: '+(highScore<Infinity?highScore.toFixed(1)+'s':'--');
+}
+
+function draw(){
+  // water
+  ctx.fillStyle='#0c4a6e';ctx.fillRect(0,0,W,H);
+  // lane lines
+  for(let i=0;i<5;i++){
+    ctx.strokeStyle='#facc15';ctx.lineWidth=1;ctx.setLineDash([10,5]);
+    ctx.beginPath();ctx.moveTo(0,50+i*40);ctx.lineTo(W,50+i*40);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // walls
+  const wallX1=20,wallX2=W-20;
+  ctx.fillStyle='#334155';ctx.fillRect(0,0,wallX1,H);ctx.fillRect(wallX2,0,20,H);
+  // swimmer position
+  const laneY=H/2;
+  const pct=dist/50;
+  // swimmer goes right then left (25m each way)
+  let sx;
+  if(dist<25){sx=wallX1+10+pct*2*(wallX2-wallX1-20);}
+  else{sx=wallX2-10-(pct*2-1)*(wallX2-wallX1-20);}
+  // swimmer body
+  ctx.fillStyle='#e2e8f0';
+  ctx.beginPath();ctx.ellipse(sx,laneY,18,8,0,0,Math.PI*2);ctx.fill();
+  // arms
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=3;
+  const aOff=armPhase*15;
+  ctx.beginPath();ctx.moveTo(sx,laneY);ctx.lineTo(sx+aOff,laneY-15);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sx,laneY);ctx.lineTo(sx-aOff,laneY+10);ctx.stroke();
+  // head
+  ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(sx+(dist<25?12:-12),laneY,6,0,Math.PI*2);ctx.fill();
+  // wake
+  ctx.fillStyle='rgba(255,255,255,0.2)';
+  for(let i=0;i<5;i++){
+    ctx.beginPath();ctx.arc(sx-(dist<25?1:-1)*(20+i*8),laneY+Math.random()*6-3,2,0,Math.PI*2);ctx.fill();
+  }
+  // stamina bar
+  ctx.fillStyle='#1e293b';ctx.fillRect(50,H-25,W-100,12);
+  ctx.fillStyle=stamina>30?'#22c55e':'#ef4444';ctx.fillRect(50,H-25,(W-100)*stamina/100,12);
+  // progress
+  ctx.fillStyle='#facc15';ctx.font='10px system-ui';
+  ctx.fillText('0m',wallX1,H-5);ctx.fillText('25m',W/2-10,H-5);ctx.fillText('50m',wallX2-15,H-5);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'swimming-race',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='swimming-race'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

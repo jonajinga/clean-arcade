@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tamagotchi</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+.bar{width:60px;height:8px;background:#1e293b;display:inline-block;vertical-align:middle}
+.bar-fill{height:100%;transition:width 0.3s}
+</style>
+</head>
+<body>
+<h1>Tamagotchi</h1>
+<div class="hud">
+  <span>Hunger: <span class="bar"><span class="bar-fill" id="hungerBar" style="width:100%;background:#22c55e"></span></span></span>
+  <span>Happy: <span class="bar"><span class="bar-fill" id="happyBar" style="width:100%;background:#facc15"></span></span></span>
+  <span>Clean: <span class="bar"><span class="bar-fill" id="cleanBar" style="width:100%;background:#3b82f6"></span></span></span>
+  <span>Age: <span id="ageDisp">0</span></span>
+  <span id="hScore">Best Age: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="300" height="300"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Tamagotchi</h2>
+    <p>Care for your virtual pet!</p>
+    <p>Feed, play, and clean to keep it alive.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Pet Passed Away</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="feed()" style="background:#22c55e">Feed</button>
+  <button onclick="play()" style="background:#facc15;color:#0f172a">Play</button>
+  <button onclick="clean()" style="background:#3b82f6">Clean</button>
+  <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=300,H=300;
+let hunger=100,happy=100,cleanness=100,age=0,highScore=0;
+let paused=false,running=false,interval,stage=0;
+const stages=['Egg','Baby','Child','Teen','Adult'];
+const stageAges=[0,5,15,30,50];
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  hunger=100;happy=100;cleanness=100;age=0;stage=0;
+  paused=false;running=true;
+  clearInterval(interval);
+  interval=setInterval(()=>{
+    if(paused||!running)return;
+    hunger-=2;happy-=1.5;cleanness-=1;
+    age++;
+    for(let i=stageAges.length-1;i>=0;i--){if(age>=stageAges[i]){stage=i;break;}}
+    if(hunger<=0||happy<=0||cleanness<=0){endGame();return;}
+    hunger=Math.max(0,hunger);happy=Math.max(0,happy);cleanness=Math.max(0,cleanness);
+    updateHUD();draw();
+  },1000);
+  updateHUD();draw();
+}
+
+function feed(){if(!running||paused)return;hunger=Math.min(100,hunger+25);updateHUD();draw();}
+function play(){if(!running||paused)return;happy=Math.min(100,happy+25);updateHUD();draw();}
+function clean(){if(!running||paused)return;cleanness=Math.min(100,cleanness+25);updateHUD();draw();}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function endGame(){
+  running=false;clearInterval(interval);
+  if(age>highScore){highScore=age;saveState();}
+  document.getElementById('finalScore').textContent='Your pet lived '+age+' seconds! Stage: '+stages[stage];
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('hungerBar').style.width=hunger+'%';
+  document.getElementById('hungerBar').style.background=hunger<30?'#ef4444':'#22c55e';
+  document.getElementById('happyBar').style.width=happy+'%';
+  document.getElementById('happyBar').style.background=happy<30?'#ef4444':'#facc15';
+  document.getElementById('cleanBar').style.width=cleanness+'%';
+  document.getElementById('cleanBar').style.background=cleanness<30?'#ef4444':'#3b82f6';
+  document.getElementById('ageDisp').textContent=age;
+  document.getElementById('hScore').textContent='Best Age: '+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  const cx=W/2,cy=H/2;
+  // draw pet based on stage
+  ctx.fillStyle='#facc15';
+  if(stage===0){
+    ctx.beginPath();ctx.ellipse(cx,cy,20,25,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0f172a';ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText('?',cx,cy+4);
+  } else {
+    const sz=20+stage*10;
+    // body
+    ctx.beginPath();ctx.ellipse(cx,cy+10,sz,sz+10,0,0,Math.PI*2);ctx.fill();
+    // head
+    ctx.beginPath();ctx.arc(cx,cy-sz-5,sz*0.7,0,Math.PI*2);ctx.fill();
+    // eyes
+    ctx.fillStyle='#0f172a';
+    const mood=happy>50?'happy':'sad';
+    ctx.beginPath();ctx.arc(cx-10,cy-sz-8,4,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx+10,cy-sz-8,4,0,Math.PI*2);ctx.fill();
+    // mouth
+    ctx.strokeStyle='#0f172a';ctx.lineWidth=2;ctx.beginPath();
+    if(mood==='happy'){ctx.arc(cx,cy-sz,8,0,Math.PI);}
+    else{ctx.arc(cx,cy-sz+6,8,Math.PI,0);}
+    ctx.stroke();
+    // arms
+    ctx.strokeStyle='#facc15';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(cx-sz,cy+5);ctx.lineTo(cx-sz-15,cy+20);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+sz,cy+5);ctx.lineTo(cx+sz+15,cy+20);ctx.stroke();
+  }
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';ctx.textAlign='center';
+  ctx.fillText(stages[stage],cx,H-20);
+  if(cleanness<30){ctx.fillStyle='#6b7280';ctx.font='20px system-ui';ctx.fillText('~ ~ ~',cx,cy+60);}
+  ctx.textAlign='start';
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'tamagotchi',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tamagotchi'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

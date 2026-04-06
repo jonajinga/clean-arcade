@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Untangle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;cursor:grab}
+canvas:active{cursor:grabbing}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{color:#94a3b8;font-size:0.85rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Untangle</h1>
+<div class="score-display">Level: <span id="level">1</span> | Crossings: <span id="crossings">0</span></div>
+<canvas id="game" width="400" height="400"></canvas>
+<div class="controls">
+<button onclick="scramble()">Scramble</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg">Drag dots to untangle all lines (0 crossings)</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Untangle</h2>
+<p>Drag dots so no lines cross</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Move the dots by dragging them until no lines intersect. Each level adds more dots.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Level Complete!</h2>
+<p>Moving to level <span id="nextLevel">2</span></p>
+<button id="againBtn">Next Level</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+let W=400,H=400;
+let dots=[];
+let edges=[];
+let level=1;
+let dragging=null;
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function resize(){
+const s=Math.min(window.innerWidth-20,400);
+canvas.width=s;canvas.height=s;
+W=s;H=s;
+draw();
+}
+
+function segmentsIntersect(x1,y1,x2,y2,x3,y3,x4,y4){
+const d=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+if(Math.abs(d)<1e-10)return false;
+const t=((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/d;
+const u=-((x1-x2)*(y1-y3)-(y1-y2)*(x1-x3))/d;
+return t>0.01&&t<0.99&&u>0.01&&u<0.99;
+}
+
+function countCrossings(){
+let count=0;
+for(let i=0;i<edges.length;i++){
+for(let j=i+1;j<edges.length;j++){
+const a=edges[i],b=edges[j];
+if(a[0]===b[0]||a[0]===b[1]||a[1]===b[0]||a[1]===b[1])continue;
+if(segmentsIntersect(
+dots[a[0]].x,dots[a[0]].y,dots[a[1]].x,dots[a[1]].y,
+dots[b[0]].x,dots[b[0]].y,dots[b[1]].x,dots[b[1]].y
+))count++;
+}
+}
+return count;
+}
+
+function generateLevel(){
+const n=Math.min(4+level,15);
+dots=[];
+edges=[];
+// Place dots in a circle (solution position)
+const cx=W/2,cy=H/2,r=Math.min(W,H)*0.35;
+for(let i=0;i<n;i++){
+const a=Math.PI*2*i/n-Math.PI/2;
+dots.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});
+}
+// Create edges (connect adjacent + some cross edges)
+for(let i=0;i<n;i++){
+edges.push([i,(i+1)%n]);
+}
+// Add some extra edges
+const extra=Math.min(Math.floor(n/2),level);
+for(let e=0;e<extra;e++){
+const a=Math.floor(Math.random()*n);
+let b=(a+2+Math.floor(Math.random()*(n-3)))%n;
+const exists=edges.some(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
+if(!exists&&a!==b)edges.push([a,b]);
+}
+// Scramble positions
+scramble();
+}
+
+function scramble(){
+const margin=30;
+dots.forEach(d=>{
+d.x=margin+Math.random()*(W-2*margin);
+d.y=margin+Math.random()*(H-2*margin);
+});
+draw();
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';
+ctx.fillRect(0,0,W,H);
+const crossings=countCrossings();
+document.getElementById('crossings').textContent=crossings;
+// Draw edges
+edges.forEach(([a,b])=>{
+const crosses=edges.some(([c,d])=>{
+if((a===c&&b===d)||(a===d&&b===c))return false;
+if(a===c||a===d||b===c||b===d)return false;
+return segmentsIntersect(dots[a].x,dots[a].y,dots[b].x,dots[b].y,dots[c].x,dots[c].y,dots[d].x,dots[d].y);
+});
+ctx.strokeStyle=crosses?'#ef4444':'#22c55e';
+ctx.lineWidth=2;
+ctx.beginPath();
+ctx.moveTo(dots[a].x,dots[a].y);
+ctx.lineTo(dots[b].x,dots[b].y);
+ctx.stroke();
+});
+// Draw dots
+dots.forEach((d,i)=>{
+ctx.fillStyle=i===dragging?'#facc15':'#6366f1';
+ctx.beginPath();
+ctx.arc(d.x,d.y,10,0,Math.PI*2);
+ctx.fill();
+ctx.strokeStyle='#e2e8f0';
+ctx.lineWidth=1;
+ctx.stroke();
+});
+if(gameActive&&crossings===0&&dots.length>0){
+gameActive=false;
+if(level>highScore){highScore=level;save();}
+document.getElementById('nextLevel').textContent=level+1;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),500);
+}
+}
+
+function getPos(e){
+const rect=canvas.getBoundingClientRect();
+const t=e.touches?e.touches[0]:e;
+return{x:(t.clientX-rect.left)*(W/rect.width),y:(t.clientY-rect.top)*(H/rect.height)};
+}
+
+function findDot(x,y){
+for(let i=0;i<dots.length;i++){
+const dx=dots[i].x-x,dy=dots[i].y-y;
+if(dx*dx+dy*dy<400)return i;
+}
+return -1;
+}
+
+canvas.addEventListener('mousedown',e=>{
+if(!gameActive||paused)return;
+const p=getPos(e);
+dragging=findDot(p.x,p.y);
+});
+canvas.addEventListener('mousemove',e=>{
+if(dragging===null||dragging<0||!gameActive||paused)return;
+const p=getPos(e);
+dots[dragging].x=Math.max(10,Math.min(W-10,p.x));
+dots[dragging].y=Math.max(10,Math.min(H-10,p.y));
+draw();
+});
+canvas.addEventListener('mouseup',()=>{dragging=null;});
+
+canvas.addEventListener('touchstart',e=>{
+if(!gameActive||paused)return;
+e.preventDefault();
+const p=getPos(e);
+dragging=findDot(p.x,p.y);
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+if(dragging===null||dragging<0||!gameActive||paused)return;
+e.preventDefault();
+const p=getPos(e);
+dots[dragging].x=Math.max(10,Math.min(W-10,p.x));
+dots[dragging].y=Math.max(10,Math.min(H-10,p.y));
+draw();
+},{passive:false});
+canvas.addEventListener('touchend',()=>{dragging=null;});
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+level=1;
+document.getElementById('level').textContent=level;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+generateLevel();
+}
+
+function nextLevel(){
+level++;
+document.getElementById('level').textContent=level;
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+generateLevel();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'untangle',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='untangle'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',nextLevel);
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

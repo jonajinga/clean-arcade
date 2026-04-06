@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Picross</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-wrap{display:flex;margin:0.5rem;border:2px solid #6366f1}
+.col-clues{display:flex;flex-direction:row}
+.col-clue{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:2px}
+.col-clue span{font-size:0.65rem;line-height:1.1;color:#94a3b8}
+.row-clues{display:flex;flex-direction:column}
+.row-clue{display:flex;justify-content:flex-end;align-items:center;padding:0 4px;gap:2px}
+.row-clue span{font-size:0.65rem;color:#94a3b8}
+.grid{display:grid;gap:1px;background:#334155}
+.cell{width:28px;height:28px;background:#1e293b;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.9rem;font-weight:bold;user-select:none}
+.cell.filled{background:#6366f1}
+.cell.marked{background:#1e293b;color:#ef4444}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center;align-items:center}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.mode-toggle{display:flex;gap:0}
+.mode-toggle button{font-size:0.85rem;padding:0.4rem 0.8rem}
+.mode-toggle button.active{background:#22c55e}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Picross</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/5 | Errors: <span id="errors">0</span></div>
+<div id="gameContainer"></div>
+<div class="controls">
+<div class="mode-toggle">
+<button id="fillMode" class="active" onclick="setMode('fill')">Fill</button>
+<button id="markMode" onclick="setMode('mark')">Mark X</button>
+</div>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="info">Left-click to fill/mark cells. Match the row and column clues.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Picross</h2>
+<p>Nonogram puzzle - 10x10</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Fill cells to match the row and column number clues. Numbers indicate groups of consecutive filled cells.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Solved!</h2>
+<p>Total Errors: <span id="finalErrors">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SIZE=10;
+const PUZZLES=[
+// Heart
+[
+[0,0,1,1,0,0,1,1,0,0],
+[0,1,1,1,1,1,1,1,1,0],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[0,1,1,1,1,1,1,1,1,0],
+[0,0,1,1,1,1,1,1,0,0],
+[0,0,0,1,1,1,1,0,0,0],
+[0,0,0,0,1,1,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0]
+],
+// Smiley
+[
+[0,0,1,1,1,1,1,1,0,0],
+[0,1,0,0,0,0,0,0,1,0],
+[1,0,1,0,0,0,1,0,0,1],
+[1,0,0,0,0,0,0,0,0,1],
+[1,0,0,0,0,0,0,0,0,1],
+[1,0,1,0,0,0,0,1,0,1],
+[1,0,0,1,0,0,1,0,0,1],
+[0,1,0,0,1,1,0,0,1,0],
+[0,0,1,1,1,1,1,1,0,0],
+[0,0,0,0,0,0,0,0,0,0]
+],
+// Arrow
+[
+[0,0,0,0,1,0,0,0,0,0],
+[0,0,0,1,1,0,0,0,0,0],
+[0,0,1,1,1,0,0,0,0,0],
+[0,1,1,1,1,0,0,0,0,0],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[0,1,1,1,1,0,0,0,0,0],
+[0,0,1,1,1,0,0,0,0,0],
+[0,0,0,1,1,0,0,0,0,0],
+[0,0,0,0,1,0,0,0,0,0]
+],
+// Cross
+[
+[0,0,0,1,1,1,1,0,0,0],
+[0,0,0,1,1,1,1,0,0,0],
+[0,0,0,1,1,1,1,0,0,0],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[1,1,1,1,1,1,1,1,1,1],
+[0,0,0,1,1,1,1,0,0,0],
+[0,0,0,1,1,1,1,0,0,0],
+[0,0,0,1,1,1,1,0,0,0]
+],
+// Star
+[
+[0,0,0,0,1,1,0,0,0,0],
+[0,0,0,1,1,1,1,0,0,0],
+[1,1,1,1,1,1,1,1,1,1],
+[0,1,1,1,1,1,1,1,1,0],
+[0,0,1,1,1,1,1,1,0,0],
+[0,0,1,1,1,1,1,1,0,0],
+[0,1,1,1,0,0,1,1,1,0],
+[0,1,1,0,0,0,0,1,1,0],
+[1,1,0,0,0,0,0,0,1,1],
+[1,0,0,0,0,0,0,0,0,1]
+]
+];
+
+let solution=[];
+let playerGrid=[];
+let mode='fill';
+let currentPuzzle=0;
+let totalErrors=0;
+let paused=false;
+let gameActive=false;
+let highScore=0;
+
+function getClues(line){
+const clues=[];let count=0;
+for(let i=0;i<line.length;i++){
+if(line[i]===1){count++;}
+else{if(count>0)clues.push(count);count=0;}
+}
+if(count>0)clues.push(count);
+return clues.length?clues:[0];
+}
+
+function setMode(m){
+mode=m;
+document.getElementById('fillMode').classList.toggle('active',m==='fill');
+document.getElementById('markMode').classList.toggle('active',m==='mark');
+}
+
+function buildGrid(){
+solution=PUZZLES[currentPuzzle];
+playerGrid=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+const container=document.getElementById('gameContainer');
+container.innerHTML='';
+const wrap=document.createElement('div');
+wrap.className='game-wrap';
+wrap.style.display='grid';
+wrap.style.gridTemplateColumns='auto auto';
+wrap.style.gridTemplateRows='auto auto';
+// top-left corner
+const corner=document.createElement('div');
+corner.style.background='#0f172a';
+wrap.appendChild(corner);
+// col clues
+const colCluesDiv=document.createElement('div');
+colCluesDiv.className='col-clues';
+for(let c=0;c<SIZE;c++){
+const col=solution.map(r=>r[c]);
+const clues=getClues(col);
+const div=document.createElement('div');
+div.className='col-clue';
+div.style.width='28px';
+clues.forEach(n=>{const s=document.createElement('span');s.textContent=n;div.appendChild(s);});
+colCluesDiv.appendChild(div);
+}
+wrap.appendChild(colCluesDiv);
+// row clues
+const rowCluesDiv=document.createElement('div');
+rowCluesDiv.className='row-clues';
+for(let r=0;r<SIZE;r++){
+const clues=getClues(solution[r]);
+const div=document.createElement('div');
+div.className='row-clue';
+div.style.height='28px';
+clues.forEach(n=>{const s=document.createElement('span');s.textContent=n;div.appendChild(s);});
+rowCluesDiv.appendChild(div);
+}
+wrap.appendChild(rowCluesDiv);
+// grid
+const grid=document.createElement('div');
+grid.className='grid';
+grid.style.gridTemplateColumns=`repeat(${SIZE},28px)`;
+grid.id='grid';
+for(let r=0;r<SIZE;r++){
+for(let c=0;c<SIZE;c++){
+const cell=document.createElement('div');
+cell.className='cell';
+cell.dataset.r=r;cell.dataset.c=c;
+cell.addEventListener('click',()=>clickCell(r,c));
+cell.addEventListener('contextmenu',e=>{e.preventDefault();clickCell(r,c,true);});
+grid.appendChild(cell);
+}
+}
+wrap.appendChild(grid);
+container.appendChild(wrap);
+}
+
+function clickCell(r,c,rightClick=false){
+if(!gameActive||paused)return;
+const useMode=rightClick?'mark':mode;
+if(useMode==='fill'){
+playerGrid[r][c]=playerGrid[r][c]===1?0:1;
+}else{
+playerGrid[r][c]=playerGrid[r][c]===2?0:2;
+}
+renderGrid();
+}
+
+function renderGrid(){
+const cells=document.querySelectorAll('#grid .cell');
+cells.forEach(cell=>{
+const r=parseInt(cell.dataset.r),c=parseInt(cell.dataset.c);
+cell.className='cell';
+cell.textContent='';
+if(playerGrid[r][c]===1){cell.classList.add('filled');}
+else if(playerGrid[r][c]===2){cell.classList.add('marked');cell.textContent='X';}
+});
+}
+
+function checkSolution(){
+if(!gameActive||paused)return;
+let correct=true;
+let errors=0;
+for(let r=0;r<SIZE;r++){
+for(let c=0;c<SIZE;c++){
+const filled=playerGrid[r][c]===1;
+if(filled!==!!solution[r][c]){correct=false;errors++;}
+}
+}
+const msg=document.getElementById('errors');
+if(correct){
+totalErrors+=0;
+currentPuzzle++;
+if(currentPuzzle>=PUZZLES.length){
+gameActive=false;
+document.getElementById('finalErrors').textContent=totalErrors;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+}else{
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+buildGrid();
+}
+}else{
+totalErrors+=errors;
+msg.textContent=totalErrors;
+}
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+currentPuzzle=0;totalErrors=0;paused=false;
+document.getElementById('puzzleNum').textContent='1';
+document.getElementById('errors').textContent='0';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+document.getElementById('pauseBtn').textContent='⏸';
+gameActive=true;
+buildGrid();
+}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P')togglePause();
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'picross',state:{highScore:totalErrors}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='picross'){
+if(e.data.state&&e.data.state.highScore!==undefined)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

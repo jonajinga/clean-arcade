@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mancala</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+</style>
+</head>
+<body>
+<h1>Mancala</h1>
+<div id="info"><span id="hud-turn">Your turn - click a pit</span> | <span id="hud-wins">Wins: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="420" height="200"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Mancala</h2>
+<p>Click your pits (bottom row) to sow stones</p>
+<p>Land in your store for extra turn</p>
+<p>Capture opposite pit if landing in empty pit</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">You Win!</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=420,H=200;
+// Board: indices 0-5 = player pits (left to right), 6 = player store
+// 7-12 = AI pits (right to left from AI perspective), 13 = AI store
+let board,playerTurn,gameRunning=false,wins=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,420)/420;canvas.style.width=(420*s)+'px';canvas.style.height=(200*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='mancala'&&e.data.state)wins=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'mancala',state:{highScore:wins}},'*');}catch(e){}}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  board=[4,4,4,4,4,4,0,4,4,4,4,4,4,0];
+  playerTurn=true;gameRunning=true;
+  updateInfo();draw();
+}
+
+function updateInfo(){
+  document.getElementById('hud-turn').textContent=playerTurn?'Your turn':'AI thinking';
+  document.getElementById('hud-wins').textContent='Wins: '+wins;
+}
+
+function sow(pit){
+  let stones=board[pit];
+  board[pit]=0;
+  let idx=pit;
+  while(stones>0){
+    idx=(idx+1)%14;
+    // Skip opponent's store
+    if(playerTurn&&idx===13)continue;
+    if(!playerTurn&&idx===6)continue;
+    board[idx]++;
+    stones--;
+  }
+  return idx;
+}
+
+function checkCapture(lastIdx){
+  if(playerTurn&&lastIdx>=0&&lastIdx<=5&&board[lastIdx]===1){
+    let opposite=12-lastIdx;
+    if(board[opposite]>0){
+      board[6]+=board[opposite]+1;
+      board[opposite]=0;board[lastIdx]=0;
+    }
+  }
+  if(!playerTurn&&lastIdx>=7&&lastIdx<=12&&board[lastIdx]===1){
+    let opposite=12-lastIdx;
+    if(board[opposite]>0){
+      board[13]+=board[opposite]+1;
+      board[opposite]=0;board[lastIdx]=0;
+    }
+  }
+}
+
+function isGameOver(){
+  let pEmpty=board.slice(0,6).every(v=>v===0);
+  let aEmpty=board.slice(7,13).every(v=>v===0);
+  return pEmpty||aEmpty;
+}
+
+function finishGame(){
+  // Collect remaining stones
+  for(let i=0;i<6;i++){board[6]+=board[i];board[i]=0;}
+  for(let i=7;i<13;i++){board[13]+=board[i];board[i]=0;}
+  gameRunning=false;
+  let msg;
+  if(board[6]>board[13]){wins++;msg='You Win!';}
+  else if(board[6]<board[13])msg='AI Wins';
+  else msg='Draw';
+  document.getElementById('win-msg').textContent=msg;
+  document.getElementById('win-detail').textContent='You: '+board[6]+' | AI: '+board[13]+' | Wins: '+wins;
+  document.getElementById('over-overlay').classList.remove('hidden');
+  saveState();
+}
+
+canvas.addEventListener('click',e=>{
+  if(!gameRunning||!playerTurn)return;
+  let rect=canvas.getBoundingClientRect();
+  let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+
+  // Bottom row pits: 0-5
+  if(my>H/2){
+    for(let i=0;i<6;i++){
+      let px=55+i*52,py=H*0.72;
+      if(Math.sqrt((mx-px)**2+(my-py)**2)<22&&board[i]>0){
+        doMove(i,true);
+        return;
+      }
+    }
+  }
+});
+
+function doMove(pit,isPlayer){
+  let last=sow(pit);
+  checkCapture(last);
+  draw();
+
+  if(isGameOver()){finishGame();return;}
+
+  // Extra turn if last stone in own store
+  let extraTurn=(isPlayer&&last===6)||(!isPlayer&&last===13);
+  if(extraTurn){
+    if(!isPlayer)setTimeout(aiMove,400);
+    else updateInfo();
+  } else {
+    playerTurn=!playerTurn;
+    updateInfo();
+    if(!playerTurn)setTimeout(aiMove,500);
+  }
+  draw();
+}
+
+function aiMove(){
+  if(!gameRunning)return;
+  // AI: prefer moves that land in store, then captures, then most stones
+  let bestPit=-1,bestScore=-999;
+  for(let i=7;i<=12;i++){
+    if(board[i]===0)continue;
+    // Simulate
+    let sim=[...board];
+    let stones=sim[i];sim[i]=0;
+    let idx=i;
+    while(stones>0){idx=(idx+1)%14;if(idx===6)continue;sim[idx]++;stones--;}
+    let sc=0;
+    if(idx===13)sc+=20; // extra turn
+    if(idx>=7&&idx<=12&&sim[idx]===1){let opp=12-idx;if(sim[opp]>0)sc+=sim[opp]+5;} // capture
+    sc+=sim[13]-board[13]; // stones gained
+    if(sc>bestScore){bestScore=sc;bestPit=i;}
+  }
+  if(bestPit>=0)doMove(bestPit,false);
+  else{playerTurn=true;updateInfo();draw();}
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+
+  // Board outline
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=2;
+  ctx.strokeRect(5,5,W-10,H-10);
+
+  // Stores
+  ctx.fillStyle='#334155';
+  ctx.fillRect(8,20,36,H-40); // AI store (left)
+  ctx.fillRect(W-44,20,36,H-40); // Player store (right)
+  ctx.fillStyle='#facc15';ctx.font='bold 20px system-ui';ctx.textAlign='center';
+  ctx.fillText(board[13],26,H/2+7);
+  ctx.fillText(board[6],W-26,H/2+7);
+
+  // Labels
+  ctx.fillStyle='#ef4444';ctx.font='11px system-ui';ctx.fillText('AI',26,16);
+  ctx.fillStyle='#3b82f6';ctx.fillText('YOU',W-26,16);
+
+  // Pits
+  for(let i=0;i<6;i++){
+    // AI pits (top row, indices 12-7 left to right)
+    let ai=12-i;
+    let px=55+i*52,py=H*0.28;
+    ctx.fillStyle='#334155';
+    ctx.beginPath();ctx.arc(px,py,22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ef4444';ctx.font='16px system-ui';
+    ctx.fillText(board[ai],px,py+6);
+
+    // Player pits (bottom row, indices 0-5)
+    py=H*0.72;
+    ctx.fillStyle='#334155';
+    ctx.beginPath();ctx.arc(px,py,22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=playerTurn&&board[i]>0?'#facc15':'#3b82f6';
+    ctx.font='16px system-ui';
+    ctx.fillText(board[i],px,py+6);
+  }
+
+  // Draw stones as dots
+  for(let i=0;i<6;i++){
+    let px=55+i*52;
+    // Player pits
+    let py=H*0.72;
+    drawStones(px,py,board[i],18);
+    // AI pits
+    py=H*0.28;
+    drawStones(px,py,board[12-i],18);
+  }
+}
+
+function drawStones(cx,cy,count,radius){
+  if(count<=0)return;
+  let shown=Math.min(count,10);
+  ctx.fillStyle='#e2e8f0';
+  for(let i=0;i<shown;i++){
+    let a=(i/shown)*Math.PI*2;
+    let r=count<=4?8:radius*0.6;
+    let sx=cx+Math.cos(a)*r,sy=cy+Math.sin(a)*r;
+    ctx.beginPath();ctx.arc(sx,sy,3,0,Math.PI*2);ctx.fill();
+  }
+}
+
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paint by Numbers</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.85rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem}
+#grid-wrap{border:2px solid #6366f1;display:inline-block;margin:0 auto}
+#palette{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap;justify-content:center}
+.pal-btn{width:36px;height:36px;border:2px solid transparent;cursor:pointer;border-radius:0;position:relative}
+.pal-btn.active{border-color:#facc15;box-shadow:0 0 6px #facc1580}
+.pal-label{font-size:0.6rem;color:#fff;position:absolute;top:1px;left:2px;font-weight:bold;text-shadow:0 0 2px #000}
+canvas{display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+</style>
+</head>
+<body>
+<h1>Paint by Numbers</h1>
+<div id="hud"><span id="level-txt">Picture 1/5</span><span id="progress">0%</span></div>
+<div id="palette"></div>
+<div id="grid-wrap"><canvas id="c"></canvas></div>
+
+<div class="overlay" id="start-overlay">
+<h2>Paint by Numbers</h2>
+<p>Select a color from the palette,<br>then tap cells with that number to paint them.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Picture Complete!</h2>
+<p id="win-msg"></p>
+<button onclick="nextPic()">Next Picture</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Pictures Done!</h2>
+<p>You completed all 5 pictures!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const GRID=8;
+let cellSize,selectedColor=0,currentPic=0,highScore=0;
+let solution=[],painted=[];
+
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#a855f7','#f97316'];
+
+// 5 pictures - 8x8 grids, values 0-5 (index into COLORS)
+const PICTURES=[
+  // Heart
+  [0,0,0,0,0,0,0,0,
+   0,1,1,0,0,1,1,0,
+   1,1,1,1,1,1,1,1,
+   1,1,1,1,1,1,1,1,
+   1,1,1,1,1,1,1,1,
+   0,1,1,1,1,1,1,0,
+   0,0,1,1,1,1,0,0,
+   0,0,0,1,1,0,0,0],
+  // Star
+  [5,5,5,3,3,5,5,5,
+   5,5,5,3,3,5,5,5,
+   5,5,3,3,3,3,5,5,
+   3,3,3,3,3,3,3,3,
+   3,3,3,3,3,3,3,3,
+   5,5,3,3,3,3,5,5,
+   5,3,3,5,5,3,3,5,
+   3,3,5,5,5,5,3,3],
+  // Tree
+  [5,5,5,1,1,5,5,5,
+   5,5,1,1,1,1,5,5,
+   5,1,1,1,1,1,1,5,
+   1,1,1,1,1,1,1,1,
+   5,5,1,1,1,1,5,5,
+   5,1,1,1,1,1,1,5,
+   5,5,5,0,0,5,5,5,
+   5,5,5,0,0,5,5,5],
+  // Smiley
+  [5,5,3,3,3,3,5,5,
+   5,3,3,3,3,3,3,5,
+   3,3,2,3,3,2,3,3,
+   3,3,2,3,3,2,3,3,
+   3,3,3,3,3,3,3,3,
+   3,0,3,3,3,3,0,3,
+   5,3,0,0,0,0,3,5,
+   5,5,3,3,3,3,5,5],
+  // House
+  [5,5,5,0,0,5,5,5,
+   5,5,0,0,0,0,5,5,
+   5,0,0,0,0,0,0,5,
+   0,0,0,0,0,0,0,0,
+   2,2,2,2,2,2,2,2,
+   2,3,3,2,5,5,2,2,
+   2,3,3,2,5,5,2,2,
+   2,2,2,2,2,2,2,2]
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='paint-by-numbers'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'paint-by-numbers',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,400);
+  cellSize=Math.floor(maxW/GRID);
+  canvas.width=cellSize*GRID;
+  canvas.height=cellSize*GRID;
+  draw();
+}
+
+function loadPicture(idx){
+  solution=PICTURES[idx%PICTURES.length].slice();
+  painted=new Array(GRID*GRID).fill(-1);
+  selectedColor=0;
+  buildPalette();
+  document.getElementById('level-txt').textContent='Picture '+(idx+1)+'/'+PICTURES.length;
+  updateProgress();
+}
+
+function buildPalette(){
+  const pal=document.getElementById('palette');
+  pal.innerHTML='';
+  const usedColors=new Set(solution);
+  usedColors.forEach(ci=>{
+    const btn=document.createElement('button');
+    btn.className='pal-btn'+(selectedColor===ci?' active':'');
+    btn.style.background=COLORS[ci];
+    btn.innerHTML='<span class="pal-label">'+(ci+1)+'</span>';
+    btn.onclick=()=>{selectedColor=ci;buildPalette()};
+    pal.appendChild(btn);
+  });
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    const i=r*GRID+c;
+    const x=c*cellSize,y=r*cellSize;
+    if(painted[i]>=0){
+      ctx.fillStyle=COLORS[painted[i]];
+      ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+    } else {
+      ctx.fillStyle='#334155';
+      ctx.fillRect(x+1,y+1,cellSize-2,cellSize-2);
+      ctx.fillStyle='#94a3b8';
+      ctx.font='bold '+Math.floor(cellSize*0.4)+'px system-ui';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(solution[i]+1,x+cellSize/2,y+cellSize/2);
+    }
+  }
+  // grid lines
+  ctx.strokeStyle='#0f172a';ctx.lineWidth=1;
+  for(let r=0;r<=GRID;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=GRID;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+}
+
+function updateProgress(){
+  let correct=0,total=GRID*GRID;
+  for(let i=0;i<total;i++)if(painted[i]===solution[i])correct++;
+  const pct=Math.round(correct/total*100);
+  document.getElementById('progress').textContent=pct+'%';
+  return pct===100;
+}
+
+canvas.addEventListener('pointerdown',handleTap);
+canvas.addEventListener('pointermove',e=>{if(e.buttons)handleTap(e)});
+
+function handleTap(e){
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const c=Math.floor(x/cellSize),r=Math.floor(y/cellSize);
+  if(c<0||c>=GRID||r<0||r>=GRID)return;
+  const i=r*GRID+c;
+  painted[i]=selectedColor;
+  draw();
+  if(updateProgress()){
+    setTimeout(()=>{
+      if(currentPic>=PICTURES.length-1){
+        highScore=PICTURES.length;save();
+        document.getElementById('gameover-overlay').classList.remove('hidden');
+      } else {
+        document.getElementById('win-msg').textContent='Great work!';
+        document.getElementById('win-overlay').classList.remove('hidden');
+      }
+    },300);
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentPic=0;loadPicture(0);resize();
+}
+function nextPic(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentPic++;loadPicture(currentPic);draw();
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentPic=0;loadPicture(0);draw();
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

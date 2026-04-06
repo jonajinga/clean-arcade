@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hearts</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(600px,95vw);background:#1e293b;position:relative;padding:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.hand{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.card{width:44px;height:66px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;cursor:pointer;user-select:none}
+.card.red{color:#ef4444}.card.face-down{background:#6366f1;color:transparent}
+.card.playable{border-color:#22c55e;cursor:pointer}
+.card:hover{border-color:#facc15}
+.label{font-size:.75rem;color:#94a3b8;text-align:center;margin:3px 0}
+.trick{display:flex;gap:12px;justify-content:center;margin:8px 0;min-height:70px;align-items:center}
+.trick .card{cursor:default}
+.scores{display:flex;justify-content:space-between;font-size:.85rem;padding:4px 0}
+#msg{text-align:center;color:#22c55e;min-height:1.3em;font-size:.85rem;margin:4px 0;font-weight:600}
+</style>
+</head>
+<body>
+<h1>Hearts</h1>
+<div id="game-area">
+<div class="scores"><span id="sc-you">You: 0 pts</span><span id="sc-cpu">CPU: 0 pts</span></div>
+<div class="label">CPU Hand</div>
+<div class="hand" id="cpu-hand"></div>
+<div class="label">Trick</div>
+<div class="trick" id="trick"></div>
+<div id="msg"></div>
+<div class="label">Your Hand (click to play)</div>
+<div class="hand" id="player-hand"></div>
+<div class="overlay" id="start-overlay">
+<h2>Hearts</h2>
+<p>2-player Hearts. Avoid taking hearts (1pt each) and Queen of Spades (13pts). Lowest score wins!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Game Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♣','♦','♠','♥'],RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const SLUG='hearts';
+let pHand,cHand,pScore,cScore,trickCards,leadSuit,turn,heartsBroken,highScore=0;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function makeDeck(){let d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}return d}
+function rv(c){return RANKS.indexOf(c.rank)}
+function isRed(s){return s==='♥'||s==='♦'}
+function pts(c){if(c.suit==='♥')return 1;if(c.rank==='Q'&&c.suit==='♠')return 13;return 0}
+
+function canPlay(c,hand){
+  if(!leadSuit)return !(!heartsBroken&&c.suit==='♥'&&hand.some(x=>x.suit!=='♥'));
+  if(hand.some(x=>x.suit===leadSuit))return c.suit===leadSuit;
+  return true;
+}
+
+function cardHTML(c,fd,playable,onclick){
+  let cls='card'+(isRed(c.suit)?' red':'')+(fd?' face-down':'')+(playable?' playable':'');
+  return `<div class="${cls}" ${onclick||''}>${fd?'':c.rank+c.suit}</div>`;
+}
+
+function render(){
+  document.getElementById('cpu-hand').innerHTML=cHand.map(c=>cardHTML(c,true)).join('');
+  document.getElementById('player-hand').innerHTML=pHand.map((c,i)=>{
+    let p=turn==='player'&&canPlay(c,pHand);
+    return cardHTML(c,false,p,`onclick="playCard(${i})"`);
+  }).join('');
+  document.getElementById('trick').innerHTML=trickCards.map(c=>cardHTML(c,false)).join('');
+  document.getElementById('sc-you').textContent='You: '+pScore+' pts';
+  document.getElementById('sc-cpu').textContent='CPU: '+cScore+' pts';
+}
+
+function playCard(i){
+  if(turn!=='player')return;
+  let c=pHand[i];
+  if(!canPlay(c,pHand))return;
+  if(c.suit==='♥')heartsBroken=true;
+  pHand.splice(i,1);
+  trickCards.push({...c,player:'p'});
+  if(!leadSuit)leadSuit=c.suit;
+  if(trickCards.length===1){turn='cpu';render();setTimeout(cpuPlay,600)}
+  else{resolveTrick()}
+}
+
+function cpuPlay(){
+  let playable=cHand.filter(c=>canPlay(c,cHand));
+  if(playable.length===0)playable=cHand;
+  // Simple AI: play lowest that follows suit, dump high hearts/QS
+  playable.sort((a,b)=>rv(a)-rv(b));
+  let pick=playable[0];
+  // If not leading, try to dump QS or high hearts
+  if(leadSuit){
+    let dump=playable.filter(c=>c.suit!==leadSuit&&(pts(c)>0));
+    if(dump.length)pick=dump[dump.length-1];
+    else{
+      let follow=playable.filter(c=>c.suit===leadSuit);
+      if(follow.length){
+        let pCard=trickCards[0];
+        let under=follow.filter(c=>rv(c)<rv(pCard));
+        pick=under.length?under[under.length-1]:follow[0];
+      }
+    }
+  }
+  if(pick.suit==='♥')heartsBroken=true;
+  let idx=cHand.findIndex(c=>c.rank===pick.rank&&c.suit===pick.suit);
+  cHand.splice(idx,1);
+  trickCards.push({...pick,player:'c'});
+  if(!leadSuit)leadSuit=pick.suit;
+  if(trickCards.length===1){turn='player';render()}
+  else{resolveTrick()}
+}
+
+function resolveTrick(){
+  render();
+  let lead=trickCards[0];
+  let winner=lead;
+  trickCards.forEach(c=>{if(c.suit===leadSuit&&rv(c)>rv(winner))winner=c});
+  let trickPts=trickCards.reduce((s,c)=>s+pts(c),0);
+  let msg='';
+  if(winner.player==='p'){pScore+=trickPts;msg='You take the trick'+(trickPts?' (+'+trickPts+')':'')}
+  else{cScore+=trickPts;msg='CPU takes the trick'+(trickPts?' (+'+trickPts+')':'')}
+  document.getElementById('msg').textContent=msg;
+  setTimeout(()=>{
+    trickCards=[];leadSuit=null;
+    if(pHand.length===0&&cHand.length===0){endGame();return}
+    turn=winner.player==='p'?'player':'cpu';
+    render();
+    if(turn==='cpu')setTimeout(cpuPlay,600);
+  },1000);
+}
+
+function endGame(){
+  let won=pScore<cScore;
+  if(won)highScore++;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent=won?'You Win!':'CPU Wins!';
+  document.getElementById('over-msg').textContent=`You: ${pScore} pts | CPU: ${cScore} pts | Wins: ${highScore}`;
+  save();
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  let deck=makeDeck();
+  pHand=deck.slice(0,26);cHand=deck.slice(26);
+  pHand.sort((a,b)=>SUITS.indexOf(a.suit)-SUITS.indexOf(b.suit)||rv(a)-rv(b));
+  pScore=0;cScore=0;trickCards=[];leadSuit=null;heartsBroken=false;
+  turn='player';
+  document.getElementById('msg').textContent='Play a card to lead';
+  render();
+}
+</script>
+</body>
+</html>

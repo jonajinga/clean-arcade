@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5x5 Tic-Tac-Toe</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.9rem;margin:0.25rem 0;text-align:center;min-height:1.4em}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;border:2px solid #6366f1;width:min(90vw,400px);height:min(90vw,400px);background:#6366f1}
+.cell{background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:bold;cursor:pointer;user-select:none;transition:background .15s}
+.cell:hover{background:#334155}
+.cell.x{color:#3b82f6}
+.cell.o{color:#ef4444}
+.cell.win{background:#6366f1}
+.score{display:flex;gap:2rem;margin:0.5rem 0;font-size:0.9rem}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>5x5 Tic-Tac-Toe</h1>
+<div class="info" id="info">Get 4 in a row to win!</div>
+<div class="score"><span>You (X): <strong id="pScore">0</strong></span><span>AI (O): <strong id="aScore">0</strong></span></div>
+<div class="board" id="board"></div>
+
+<div class="overlay" id="startOverlay">
+<h2>5x5 Tic-Tac-Toe</h2>
+<p>Get 4 in a row to win vs AI</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const SIZE=5,WIN=4;
+let board,turn,gameOver,highScore=0,pScore=0,aScore=0;
+const boardEl=document.getElementById('board'),info=document.getElementById('info');
+const startOv=document.getElementById('startOverlay'),overOv=document.getElementById('overOverlay');
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tictactoe-5x5'){const s=e.data.state;if(s&&s.highScore!=null)highScore=s.highScore}});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'tictactoe-5x5',state:{highScore}},'*')}catch(e){}}
+
+function buildBoard(){
+boardEl.innerHTML='';
+for(let i=0;i<SIZE*SIZE;i++){
+const c=document.createElement('div');
+c.className='cell';c.dataset.i=i;
+c.onclick=()=>playerMove(i);
+boardEl.appendChild(c);
+}
+}
+
+function startGame(){
+board=Array(SIZE*SIZE).fill(0);turn=1;gameOver=false;
+startOv.classList.add('hidden');overOv.classList.add('hidden');
+info.textContent="Your turn (X)";
+buildBoard();
+}
+
+function playerMove(i){
+if(gameOver||board[i]||turn!==1)return;
+board[i]=1;turn=2;renderBoard();
+const w=checkWin(1);
+if(w){endGame('You win!',w);pScore++;document.getElementById('pScore').textContent=pScore;return}
+if(board.every(v=>v)){endGame('Draw!',null);return}
+info.textContent="AI thinking...";
+setTimeout(aiMove,200);
+}
+
+function aiMove(){
+if(gameOver)return;
+const move=bestMove();
+board[move]=2;turn=1;renderBoard();
+const w=checkWin(2);
+if(w){endGame('AI wins!',w);aScore++;document.getElementById('aScore').textContent=aScore;return}
+if(board.every(v=>v)){endGame('Draw!',null);return}
+info.textContent="Your turn (X)";
+}
+
+function bestMove(){
+// Check if AI can win
+for(let i=0;i<25;i++){if(!board[i]){board[i]=2;if(checkWin(2)){board[i]=0;return i}board[i]=0}}
+// Block player win
+for(let i=0;i<25;i++){if(!board[i]){board[i]=1;if(checkWin(1)){board[i]=0;return i}board[i]=0}}
+// Evaluate positions
+let best=-Infinity,bestI=0;
+for(let i=0;i<25;i++){
+if(!board[i]){
+board[i]=2;
+let sc=evaluate(2)-evaluate(1);
+// Center preference
+const r=Math.floor(i/5),c=i%5;
+sc+=Math.max(0,2-Math.abs(r-2))+Math.max(0,2-Math.abs(c-2));
+board[i]=0;
+if(sc>best){best=sc;bestI=i}
+}
+}
+return bestI;
+}
+
+function evaluate(p){
+let score=0;
+const lines=getLines();
+for(const line of lines){
+let count=0,empty=0;
+for(const idx of line){if(board[idx]===p)count++;else if(!board[idx])empty++}
+if(count+empty>=WIN){
+if(count===3)score+=100;
+else if(count===2)score+=10;
+else if(count===1)score+=1;
+}
+}
+return score;
+}
+
+function getLines(){
+const lines=[];
+for(let r=0;r<SIZE;r++)for(let c=0;c<=SIZE-WIN;c++){
+const h=[],v=[];
+for(let k=0;k<WIN;k++){h.push(r*SIZE+c+k);v.push((c+k)*SIZE+r)}
+lines.push(h);lines.push(v);
+}
+for(let r=0;r<=SIZE-WIN;r++)for(let c=0;c<=SIZE-WIN;c++){
+const d1=[],d2=[];
+for(let k=0;k<WIN;k++){d1.push((r+k)*SIZE+c+k);d2.push((r+k)*SIZE+(c+WIN-1-k))}
+lines.push(d1);lines.push(d2);
+}
+return lines;
+}
+
+function checkWin(p){
+const lines=getLines();
+for(const line of lines){if(line.every(i=>board[i]===p))return line}
+return null;
+}
+
+function renderBoard(){
+const cells=boardEl.children;
+for(let i=0;i<25;i++){
+cells[i].textContent=board[i]===1?'X':board[i]===2?'O':'';
+cells[i].className='cell'+(board[i]===1?' x':'')+(board[i]===2?' o':'');
+}
+}
+
+function endGame(msg,winCells){
+gameOver=true;info.textContent=msg;
+if(winCells){const cells=boardEl.children;winCells.forEach(i=>cells[i].classList.add('win'))}
+highScore=Math.max(highScore,pScore);save();
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=msg;
+document.getElementById('overMsg').textContent=`Score: You ${pScore} - AI ${aScore}`;
+overOv.classList.remove('hidden');
+},800);
+}
+</script>
+</body>
+</html>

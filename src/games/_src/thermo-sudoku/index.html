@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thermo Sudoku</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.75rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem;max-width:340px}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+#numpad{display:flex;gap:4px;margin:8px 0;justify-content:center;flex-wrap:wrap}
+.num-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#334155;color:#e2e8f0;font-size:1.1rem;font-weight:bold;border:none;cursor:pointer;border-radius:0;font-family:inherit}
+.num-btn:hover{background:#475569}
+.num-btn.active{background:#6366f1;color:#fff}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+</style>
+</head>
+<body>
+<h1>Thermo Sudoku</h1>
+<div id="info">6x6 Sudoku. Numbers on thermometers must increase from bulb (circle) to tip.</div>
+<div id="hud"><span id="level-txt">Puzzle 1</span><span id="errors-txt"></span></div>
+<canvas id="c"></canvas>
+<div id="numpad"></div>
+
+<div class="overlay" id="start-overlay">
+<h2>Thermo Sudoku</h2>
+<p>Fill the 6x6 grid with numbers 1-6. Each row, column, and 2x3 box must contain 1-6. Numbers along thermometers must strictly increase from the bulb to the tip.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Puzzle Solved!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Puzzle</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Puzzles Done!</h2>
+<p>You mastered all thermo sudoku puzzles!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const GRID=6,BOX_R=2,BOX_C=3;
+let cellSize,selectedCell=null,selectedNum=0,currentLevel=0,highScore=0;
+let puzzle=[],playerGrid=[],given=[];
+
+// Puzzles: {grid: solution 6x6, thermos: [[{r,c},...]], clues: [{r,c,v}]}
+const LEVELS=[
+  {solution:[
+    [3,1,6,4,5,2],
+    [5,4,2,6,1,3],
+    [1,6,3,5,2,4],
+    [4,2,5,1,3,6],
+    [6,3,4,2,4,1],
+    [2,5,1,3,6,5]
+  ],
+  // We'll use pre-validated puzzles instead
+  grid:[[0,0,0,4,0,0],[5,0,0,0,0,3],[0,6,0,0,2,0],[0,0,5,0,0,0],[0,3,0,0,0,1],[2,0,0,0,6,0]],
+  thermos:[
+    [{r:0,c:0},{r:1,c:0},{r:2,c:0}],
+    [{r:3,c:5},{r:4,c:5},{r:5,c:5}],
+    [{r:0,c:3},{r:0,c:4},{r:0,c:5}]
+  ],
+  answer:[[3,1,6,4,5,2],[5,4,2,6,1,3],[1,6,3,5,2,4],[4,2,5,1,3,6],[6,3,4,2,4,1],[2,5,1,3,6,5]]
+  },
+  {grid:[[0,0,6,0,0,0],[0,4,0,0,1,0],[1,0,0,5,0,0],[0,0,5,0,0,6],[0,3,0,0,4,0],[0,0,0,3,0,0]],
+  thermos:[
+    [{r:0,c:0},{r:0,c:1},{r:0,c:2}],
+    [{r:5,c:5},{r:4,c:5},{r:3,c:5}],
+    [{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0}]
+  ]},
+  {grid:[[0,1,0,0,5,0],[0,0,2,6,0,0],[0,0,0,0,0,4],[4,0,0,0,0,0],[0,0,6,2,0,0],[0,5,0,0,1,0]],
+  thermos:[
+    [{r:0,c:0},{r:1,c:0},{r:2,c:0}],
+    [{r:3,c:5},{r:4,c:5},{r:5,c:5}],
+    [{r:2,c:2},{r:2,c:3},{r:2,c:4}]
+  ]},
+  {grid:[[0,0,0,0,0,2],[5,0,0,0,0,0],[0,6,0,0,2,0],[0,0,5,0,0,0],[0,0,0,0,0,1],[2,0,0,0,0,0]],
+  thermos:[
+    [{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:3,c:0}],
+    [{r:0,c:3},{r:1,c:3},{r:2,c:3}],
+    [{r:5,c:5},{r:5,c:4},{r:5,c:3}]
+  ]},
+  {grid:[[3,0,0,0,0,0],[0,0,0,6,0,0],[0,0,3,0,0,4],[4,0,0,0,0,0],[0,0,0,2,0,0],[0,0,0,0,0,5]],
+  thermos:[
+    [{r:0,c:4},{r:0,c:5}],
+    [{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0}],
+    [{r:5,c:2},{r:5,c:3},{r:5,c:4}]
+  ]},
+  {grid:[[0,0,0,0,5,0],[0,4,0,0,0,3],[0,0,0,5,0,0],[0,0,5,0,0,0],[3,0,0,0,4,0],[0,5,0,0,0,0]],
+  thermos:[
+    [{r:0,c:0},{r:1,c:0},{r:2,c:0}],
+    [{r:3,c:5},{r:4,c:5},{r:5,c:5}],
+    [{r:3,c:0},{r:3,c:1},{r:3,c:2}]
+  ]}
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='thermo-sudoku'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'thermo-sudoku',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,360);
+  cellSize=Math.floor(maxW/GRID);
+  canvas.width=cellSize*GRID;
+  canvas.height=cellSize*GRID;
+  draw();
+}
+
+function loadLevel(idx){
+  const lvl=LEVELS[idx%LEVELS.length];
+  puzzle=lvl.grid.map(r=>r.slice());
+  playerGrid=lvl.grid.map(r=>r.slice());
+  given=lvl.grid.map(r=>r.map(v=>v!==0));
+  selectedCell=null;selectedNum=0;
+  document.getElementById('level-txt').textContent='Puzzle '+(idx+1);
+  buildNumpad();
+  resize();
+}
+
+function buildNumpad(){
+  const np=document.getElementById('numpad');
+  np.innerHTML='';
+  for(let i=1;i<=GRID;i++){
+    const btn=document.createElement('button');
+    btn.className='num-btn'+(selectedNum===i?' active':'');
+    btn.textContent=i;
+    btn.onclick=()=>{
+      if(selectedNum===i){selectedNum=0}else{selectedNum=i}
+      if(selectedCell&&selectedNum>0&&!given[selectedCell.r][selectedCell.c]){
+        playerGrid[selectedCell.r][selectedCell.c]=selectedNum;
+        draw();checkWin();
+      }
+      buildNumpad();
+    };
+    np.appendChild(btn);
+  }
+  const clr=document.createElement('button');
+  clr.className='num-btn';clr.textContent='X';
+  clr.onclick=()=>{
+    if(selectedCell&&!given[selectedCell.r][selectedCell.c]){
+      playerGrid[selectedCell.r][selectedCell.c]=0;
+      draw();
+    }
+    selectedNum=0;buildNumpad();
+  };
+  np.appendChild(clr);
+}
+
+function draw(){
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // box borders
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=2;
+  for(let br=0;br<GRID/BOX_R;br++)for(let bc=0;bc<GRID/BOX_C;bc++){
+    ctx.strokeRect(bc*BOX_C*cellSize,br*BOX_R*cellSize,BOX_C*cellSize,BOX_R*cellSize);
+  }
+  // thermos
+  lvl.thermos.forEach(thermo=>{
+    if(thermo.length<2)return;
+    // draw line
+    ctx.strokeStyle='#475569';ctx.lineWidth=cellSize*0.25;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(thermo[0].c*cellSize+cellSize/2,thermo[0].r*cellSize+cellSize/2);
+    for(let i=1;i<thermo.length;i++){
+      ctx.lineTo(thermo[i].c*cellSize+cellSize/2,thermo[i].r*cellSize+cellSize/2);
+    }
+    ctx.stroke();
+    // bulb
+    ctx.fillStyle='#475569';
+    ctx.beginPath();
+    ctx.arc(thermo[0].c*cellSize+cellSize/2,thermo[0].r*cellSize+cellSize/2,cellSize*0.28,0,Math.PI*2);
+    ctx.fill();
+  });
+  // grid lines
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let r=0;r<=GRID;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=GRID;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // selected cell
+  if(selectedCell){
+    ctx.fillStyle='#6366f130';
+    ctx.fillRect(selectedCell.c*cellSize,selectedCell.r*cellSize,cellSize,cellSize);
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+    ctx.strokeRect(selectedCell.c*cellSize,selectedCell.r*cellSize,cellSize,cellSize);
+  }
+  // numbers
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    if(playerGrid[r][c]===0)continue;
+    const cx=c*cellSize+cellSize/2,cy=r*cellSize+cellSize/2;
+    ctx.fillStyle=given[r][c]?'#e2e8f0':'#3b82f6';
+    ctx.font=(given[r][c]?'bold ':'')+Math.floor(cellSize*0.5)+'px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(playerGrid[r][c],cx,cy);
+  }
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const c=Math.floor(x/cellSize),r=Math.floor(y/cellSize);
+  if(r<0||r>=GRID||c<0||c>=GRID)return;
+  selectedCell={r,c};
+  if(selectedNum>0&&!given[r][c]){
+    playerGrid[r][c]=selectedNum;
+    checkWin();
+  }
+  draw();
+});
+
+function checkWin(){
+  // all cells filled?
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(playerGrid[r][c]===0)return;
+  // rows
+  for(let r=0;r<GRID;r++){const s=new Set(playerGrid[r]);if(s.size!==GRID)return}
+  // cols
+  for(let c=0;c<GRID;c++){const s=new Set();for(let r=0;r<GRID;r++)s.add(playerGrid[r][c]);if(s.size!==GRID)return}
+  // boxes
+  for(let br=0;br<GRID/BOX_R;br++)for(let bc=0;bc<GRID/BOX_C;bc++){
+    const s=new Set();
+    for(let r=br*BOX_R;r<(br+1)*BOX_R;r++)for(let c=bc*BOX_C;c<(bc+1)*BOX_C;c++)s.add(playerGrid[r][c]);
+    if(s.size!==GRID)return;
+  }
+  // thermos
+  const lvl=LEVELS[currentLevel%LEVELS.length];
+  for(const thermo of lvl.thermos){
+    for(let i=1;i<thermo.length;i++){
+      if(playerGrid[thermo[i].r][thermo[i].c]<=playerGrid[thermo[i-1].r][thermo[i-1].c])return;
+    }
+  }
+  // win!
+  const score=currentLevel+1;
+  if(score>highScore){highScore=score;save()}
+  setTimeout(()=>{
+    if(currentLevel>=LEVELS.length-1){
+      document.getElementById('gameover-overlay').classList.remove('hidden');
+    } else {
+      document.getElementById('win-msg').textContent='Solved!';
+      document.getElementById('win-overlay').classList.remove('hidden');
+    }
+  },300);
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentLevel++;loadLevel(currentLevel);
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Defender</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:420px;padding:0.25rem 0;font-size:0.85rem}
+.touch-row{display:flex;gap:0.5rem;margin:0.25rem 0}
+.touch-row button{width:60px;height:50px;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>Defender</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-humans">Humans: 5</span></div>
+<div id="game-wrap">
+<canvas id="c" width="420" height="300"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Defender</h2>
+<p>Arrows to fly, Space to shoot</p>
+<p>Defend humans from alien abduction!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-row">
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowUp=true" ontouchend="event.preventDefault();keys.ArrowUp=false">▲</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowDown=true" ontouchend="event.preventDefault();keys.ArrowDown=false">▼</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+<button class="btn-primary" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false" style="width:80px;font-size:0.8rem">FIRE</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=420,H=300,WORLD_W=2000;
+let gameRunning=false,paused=false,animId;
+let ship,bullets,aliens,humans,particles,score,lives,level,highScore=0,camX=0;
+let keys={},shootCd=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,420)/420;canvas.style.width=(420*s)+'px';canvas.style.height=(300*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='defender'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'defender',state:{highScore}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;
+  ship={x:200,y:H/2,w:24,h:12,dir:1,speed:0};
+  bullets=[];aliens=[];particles=[];
+  humans=[];
+  for(let i=0;i<5;i++)humans.push({x:200+i*300,y:H-20,w:8,h:14,alive:true,carried:false,carriedBy:null});
+  spawnWave();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function spawnWave(){
+  let count=5+level*3;
+  for(let i=0;i<count;i++){
+    aliens.push({x:Math.random()*WORLD_W,y:20+Math.random()*(H-80),w:16,h:12,
+      vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5),
+      type:Math.random()<0.3?'lander':'basic',
+      target:null,alive:true,shootCd:60+Math.random()*120});
+  }
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-humans').textContent='Humans: '+humans.filter(h=>h.alive).length;
+}
+
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function update(){
+  // Ship
+  if(keys.ArrowUp)ship.y-=3;
+  if(keys.ArrowDown)ship.y+=3;
+  if(keys.ArrowRight){ship.dir=1;ship.x+=4;}
+  if(keys.ArrowLeft){ship.dir=-1;ship.x-=4;}
+  ship.y=Math.max(10,Math.min(H-20,ship.y));
+  // Wrap world
+  if(ship.x<0)ship.x+=WORLD_W;
+  if(ship.x>WORLD_W)ship.x-=WORLD_W;
+  camX=ship.x-W/2;
+
+  if(keys[' ']){shootCd--;if(shootCd<=0){bullets.push({x:ship.x+ship.dir*12,y:ship.y,vx:ship.dir*8,w:8,h:2});shootCd=6;}}
+
+  // Bullets
+  bullets.forEach(b=>{b.x+=b.vx;});
+  bullets=bullets.filter(b=>Math.abs(b.x-ship.x)<W);
+
+  // Aliens
+  aliens.forEach(a=>{
+    if(!a.alive)return;
+    a.x+=a.vx;a.y+=a.vy;
+    if(a.y<10||a.y>H-30)a.vy*=-1;
+    if(a.x<0)a.x+=WORLD_W;
+    if(a.x>WORLD_W)a.x-=WORLD_W;
+
+    // Landers try to grab humans
+    if(a.type==='lander'&&!a.target){
+      let h=humans.find(h=>h.alive&&!h.carried&&Math.abs(h.x-a.x)<100);
+      if(h)a.target=h;
+    }
+    if(a.target){
+      let dx=a.target.x-a.x,dy=a.target.y-a.y;
+      let d=Math.sqrt(dx*dx+dy*dy);
+      if(d>3){a.x+=dx/d*1.5;a.y+=dy/d*1.5;}
+      else if(!a.target.carried){a.target.carried=true;a.target.carriedBy=a;}
+      if(a.target.carried){a.y-=1;a.target.x=a.x;a.target.y=a.y+14;
+        if(a.y<-20){a.target.alive=false;a.target.carried=false;updateHUD();}
+      }
+    }
+
+    // Shoot at player
+    a.shootCd--;
+    if(a.shootCd<=0&&Math.abs(a.x-ship.x)<300){
+      a.shootCd=80+Math.random()*100;
+      let dx=ship.x-a.x,dy=ship.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+      bullets.push({x:a.x,y:a.y,vx:dx/d*3,vy:dy/d*3,w:4,h:4,enemy:true});
+    }
+  });
+
+  // Bullet collisions
+  bullets.forEach(b=>{
+    if(b.enemy){
+      if(Math.abs(b.x-ship.x)<14&&Math.abs(b.y-ship.y)<10){b.vx=99;loseLife();}
+      b.x+=b.vx||0;b.y+=b.vy||0;
+    } else {
+      aliens.forEach(a=>{
+        if(a.alive&&Math.abs(b.x-a.x)<14&&Math.abs(b.y-a.y)<10){
+          a.alive=false;b.vx=99;score+=a.type==='lander'?150:100;
+          if(a.target&&a.target.carried){a.target.carried=false;a.target.carriedBy=null;}
+          for(let i=0;i<5;i++)particles.push({x:a.x,y:a.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:20});
+          updateHUD();
+        }
+      });
+    }
+  });
+
+  // Humans fall if carrier died
+  humans.forEach(h=>{
+    if(h.alive&&!h.carried&&h.y<H-20){h.y+=2;if(h.y>=H-20)h.y=H-20;}
+  });
+
+  // Particles
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;});
+  particles=particles.filter(p=>p.life>0);
+
+  // Wave clear
+  if(aliens.filter(a=>a.alive).length===0){level++;spawnWave();updateHUD();}
+  bullets=bullets.filter(b=>Math.abs(b.vx)<50);
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{ship.y=H/2;}
+}
+
+function worldToScreen(wx){let sx=wx-camX;while(sx<-WORLD_W/2)sx+=WORLD_W;while(sx>WORLD_W/2)sx-=WORLD_W;return sx;}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Ground
+  ctx.fillStyle='#334155';
+  ctx.fillRect(0,H-8,W,8);
+
+  // Terrain dots
+  for(let i=0;i<40;i++){
+    let wx=(i*50)%WORLD_W;
+    let sx=worldToScreen(wx);
+    if(sx>-10&&sx<W+10){ctx.fillStyle='#22c55e';ctx.fillRect(sx,H-10-Math.sin(i)*4,4,4);}
+  }
+
+  // Humans
+  humans.forEach(h=>{
+    if(!h.alive)return;
+    let sx=worldToScreen(h.x);
+    if(sx<-20||sx>W+20)return;
+    ctx.fillStyle='#facc15';
+    ctx.fillRect(sx-4,h.y,h.w,h.h);
+  });
+
+  // Ship
+  let sx=W/2;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();
+  if(ship.dir>0){ctx.moveTo(sx+12,ship.y);ctx.lineTo(sx-12,ship.y-6);ctx.lineTo(sx-12,ship.y+6);}
+  else{ctx.moveTo(sx-12,ship.y);ctx.lineTo(sx+12,ship.y-6);ctx.lineTo(sx+12,ship.y+6);}
+  ctx.closePath();ctx.fill();
+
+  // Aliens
+  aliens.forEach(a=>{
+    if(!a.alive)return;
+    let asx=worldToScreen(a.x);
+    if(asx<-20||asx>W+20)return;
+    ctx.fillStyle=a.type==='lander'?'#ef4444':'#22c55e';
+    ctx.fillRect(asx-8,a.y-6,16,12);
+    ctx.fillStyle='#facc15';ctx.fillRect(asx-3,a.y-2,2,2);ctx.fillRect(asx+1,a.y-2,2,2);
+  });
+
+  // Bullets
+  bullets.forEach(b=>{
+    let bsx=worldToScreen(b.x);
+    if(bsx<-20||bsx>W+20)return;
+    ctx.fillStyle=b.enemy?'#ef4444':'#facc15';
+    ctx.fillRect(bsx,b.y-1,b.w,b.h);
+  });
+
+  // Particles
+  particles.forEach(p=>{
+    let psx=worldToScreen(p.x);
+    ctx.fillStyle=`rgba(250,204,21,${p.life/20})`;
+    ctx.fillRect(psx,p.y,3,3);
+  });
+
+  // Minimap
+  ctx.fillStyle='rgba(51,65,85,0.5)';ctx.fillRect(W/2-100,2,200,12);
+  ctx.fillStyle='#3b82f6';ctx.fillRect(W/2-100+ship.x/WORLD_W*200,3,3,10);
+  aliens.forEach(a=>{if(a.alive){ctx.fillStyle='#ef4444';ctx.fillRect(W/2-100+a.x/WORLD_W*200,5,2,6);}});
+  humans.forEach(h=>{if(h.alive){ctx.fillStyle='#facc15';ctx.fillRect(W/2-100+h.x/WORLD_W*200,8,2,4);}});
+}
+</script>
+</body>
+</html>

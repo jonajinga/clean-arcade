@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drag Boat Racing</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+.controls{display:flex;gap:8px;margin:6px 0}
+</style>
+</head>
+<body>
+<h1>Drag Boat Racing</h1>
+<div class="wrap">
+<canvas id="c" width="500" height="250"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Drag Boat Racing</h2>
+<p>Quarter-mile drag race! Shift gears at the right RPM. Green = go, red = too high! Watch the light tree.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Race Over!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Wait for green...</div>
+<div class="controls">
+<button class="btn-primary" id="shift-btn" onclick="shiftGear()">Shift Up!</button>
+</div>
+<script>
+const SLUG='drag-boat';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=500,H=250;
+let rpm,gear,speed,dist,raceTime,phase,reactionTime,greenTime,running,highScore=Infinity;
+const QUARTER=402.336;// meters
+const GEARS=[{max:3000,power:2},{max:3500,power:1.8},{max:4000,power:1.5},{max:4500,power:1.2},{max:5000,power:1}];
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||Infinity});
+
+function resize(){let w=Math.min(500,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*250/500)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' ')shiftGear();
+  if(e.key==='Enter'&&phase==='wait')goGreen();
+});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();if(phase==='staging')goReady();else shiftGear()});
+
+function shiftGear(){
+  if(phase==='ready'){phase='racing';reactionTime=(Date.now()-greenTime)/1000;return}
+  if(phase!=='racing')return;
+  if(gear<GEARS.length-1){gear++;rpm=rpm*0.5}
+}
+
+function draw(){
+  // water bg
+  ctx.fillStyle='#0c4a6e';ctx.fillRect(0,0,W,H);
+  // waves
+  let wy=H*0.5;
+  ctx.fillStyle='#1e3a5f';ctx.fillRect(0,wy,W,H-wy);
+  for(let x=0;x<W;x+=20){
+    let y=wy+Math.sin((x+dist*2)*0.05)*4;
+    ctx.fillStyle='#3b82f644';ctx.fillRect(x,y,12,2);
+  }
+  // boat
+  let bx=30+dist/QUARTER*(W-100);
+  let by=wy+20;
+  ctx.fillStyle='#ef4444';
+  ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+40,by);ctx.lineTo(bx+48,by+6);ctx.lineTo(bx-8,by+6);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#facc15';ctx.fillRect(bx+5,by-6,15,6);
+  // wake
+  if(speed>5){
+    ctx.strokeStyle='#ffffff44';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(bx-8,by+8);ctx.lineTo(bx-30,by+16);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(bx-8,by+4);ctx.lineTo(bx-25,by+12);ctx.stroke();
+  }
+  // RPM meter
+  let mw=150,mh=20,mx=W-mw-20,my=20;
+  ctx.fillStyle='#1e293b';ctx.fillRect(mx,my,mw,mh);
+  let rpmPct=rpm/(GEARS[gear]?.max||5000);
+  ctx.fillStyle=rpmPct>0.85?'#ef4444':rpmPct>0.6?'#facc15':'#22c55e';
+  ctx.fillRect(mx,my,mw*rpmPct,mh);
+  ctx.strokeStyle='#e2e8f0';ctx.strokeRect(mx,my,mw,mh);
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';
+  ctx.fillText(`Gear ${gear+1}/5 | RPM ${Math.floor(rpm)}`,mx,my-4);
+  // light tree
+  if(phase==='staging'||phase==='wait'||phase==='ready'){
+    let lx=W/2-15;
+    ctx.fillStyle='#1e293b';ctx.fillRect(lx,50,30,50);
+    ctx.fillStyle=phase==='staging'?'#ef4444':'#333';
+    ctx.beginPath();ctx.arc(lx+15,60,8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=phase==='wait'?'#facc15':'#333';
+    ctx.beginPath();ctx.arc(lx+15,78,8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=phase==='ready'?'#22c55e':'#333';
+    ctx.beginPath();ctx.arc(lx+15,96,8,0,Math.PI*2);ctx.fill();
+  }
+  // finish
+  ctx.fillStyle='#facc15';
+  let fx=W-50;
+  ctx.fillRect(fx,wy-10,3,40);
+  ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';ctx.fillText('1/4 mi',fx-10,wy-14);
+  // distance
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+  ctx.fillText(`${Math.floor(dist)}m / ${Math.floor(QUARTER)}m`,10,20);
+  ctx.fillText(`Speed: ${Math.floor(speed)} mph`,10,38);
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(phase==='racing'){
+    raceTime+=dt;
+    let g=GEARS[gear];
+    rpm+=g.power*2000*dt;
+    if(rpm>g.max){rpm=g.max;speed=Math.max(speed-dt*5,speed*0.99)}// rev limit
+    else speed+=g.power*30*dt;
+    dist+=speed*0.44704*dt;// mph to m/s
+    if(dist>=QUARTER){
+      running=false;
+      let total=raceTime;
+      if(total<highScore)highScore=total;
+      document.getElementById('over-overlay').style.display='flex';
+      document.getElementById('over-title').textContent='Race Complete!';
+      document.getElementById('over-msg').textContent=`Time: ${total.toFixed(3)}s | Reaction: ${reactionTime.toFixed(3)}s | Top Speed: ${Math.floor(speed)} mph\nBest: ${highScore===Infinity?'-':highScore.toFixed(3)+'s'}`;
+      save();
+    }
+  }
+  document.getElementById('info').textContent=`Gear ${gear+1}/5 | ${Math.floor(dist)}m / ${Math.floor(QUARTER)}m | Time: ${raceTime.toFixed(2)}s`;
+  draw();requestAnimationFrame(update);
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  rpm=800;gear=0;speed=0;dist=0;raceTime=0;reactionTime=0;
+  phase='staging';running=true;lt=0;
+  draw();
+  // Light tree sequence
+  setTimeout(()=>{phase='wait';draw();
+    setTimeout(()=>{phase='ready';greenTime=Date.now();draw();requestAnimationFrame(update)},1000+Math.random()*1500);
+  },1500);
+}
+draw();
+</script>
+</body>
+</html>

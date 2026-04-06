@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skateboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Skateboard</h1>
+<div class="hud">
+  <span id="scoreDisp">Score: 0</span>
+  <span id="distDisp">Dist: 0m</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="250"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Skateboard</h2>
+    <p>Tap/Space to ollie (jump)!</p>
+    <p>Hold for higher jumps. Grind rails!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Wipeout!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=250,GROUND=H-40;
+let player,obstacles,stars,score,dist,highScore=0,speed;
+let paused=false,running=false,holdStart=0,jumping=false;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('pauseBtn').style.display='inline-block';
+  player={x:60,y:GROUND,vy:0,grinding:false};
+  obstacles=[];stars=[];score=0;dist=0;speed=4;
+  paused=false;running=true;jumping=false;
+  loop();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key===' '&&running&&!paused&&player.y>=GROUND-2&&!jumping){holdStart=Date.now();jumping=true;e.preventDefault();}
+});
+document.addEventListener('keyup',e=>{
+  if(e.key===' '&&jumping){doJump();jumping=false;}
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(running&&!paused&&player.y>=GROUND-2){holdStart=Date.now();jumping=true;}
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  if(jumping){doJump();jumping=false;}
+},{passive:false});
+
+function doJump(){
+  const held=Math.min(Date.now()-holdStart,500);
+  player.vy=-(8+held/50);
+}
+
+function spawnObs(){
+  const r=Math.random();
+  if(r<0.4){
+    obstacles.push({x:W+20,y:GROUND,w:20,h:25,type:'cone'});
+  } else if(r<0.7){
+    obstacles.push({x:W+20,y:GROUND-15,w:80,h:5,type:'rail'});
+  } else {
+    stars.push({x:W+20,y:GROUND-50-Math.random()*40,collected:false});
+  }
+}
+
+function update(){
+  speed=4+dist/500;
+  dist+=speed/10;
+  player.vy+=0.5;
+  player.y+=player.vy;
+  player.grinding=false;
+
+  if(player.y>=GROUND){player.y=GROUND;player.vy=0;}
+
+  // spawn
+  if(Math.random()<0.02+dist/10000)spawnObs();
+
+  for(let o of obstacles){
+    o.x-=speed;
+    // rail grinding
+    if(o.type==='rail'&&player.y<=o.y+5&&player.y>=o.y-10&&player.x+15>=o.x&&player.x<=o.x+o.w&&player.vy>=0){
+      player.y=o.y-10;player.vy=0;player.grinding=true;score+=1;
+    }
+    // collision with cone
+    if(o.type==='cone'&&player.x+12>o.x&&player.x<o.x+o.w&&player.y+20>o.y-o.h&&player.y<o.y){
+      endGame();return;
+    }
+  }
+
+  for(let s of stars){
+    s.x-=speed;
+    if(!s.collected&&Math.abs(player.x-s.x)<20&&Math.abs(player.y-s.y)<20){
+      s.collected=true;score+=10;
+    }
+  }
+
+  obstacles=obstacles.filter(o=>o.x>-100);
+  stars=stars.filter(s=>s.x>-20);
+  updateHUD();
+}
+
+function endGame(){
+  running=false;
+  if(score>highScore){highScore=score;saveState();}
+  document.getElementById('finalScore').textContent='Score: '+score+' | Distance: '+Math.floor(dist)+'m';
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('scoreDisp').textContent='Score: '+score;
+  document.getElementById('distDisp').textContent='Dist: '+Math.floor(dist)+'m';
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // ground
+  ctx.fillStyle='#334155';ctx.fillRect(0,GROUND,W,H-GROUND);
+  // ground line
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,GROUND);ctx.lineTo(W,GROUND);ctx.stroke();
+
+  // obstacles
+  for(let o of obstacles){
+    if(o.type==='cone'){
+      ctx.fillStyle='#ef4444';
+      ctx.beginPath();ctx.moveTo(o.x+10,o.y-o.h);ctx.lineTo(o.x,o.y);ctx.lineTo(o.x+20,o.y);ctx.fill();
+    } else if(o.type==='rail'){
+      ctx.fillStyle='#6b7280';ctx.fillRect(o.x,o.y,o.w,o.h);
+      // rail legs
+      ctx.fillRect(o.x+5,o.y,3,GROUND-o.y);
+      ctx.fillRect(o.x+o.w-8,o.y,3,GROUND-o.y);
+    }
+  }
+
+  // stars
+  for(let s of stars){
+    if(s.collected)continue;
+    ctx.fillStyle='#facc15';ctx.font='20px system-ui';ctx.fillText('\u2605',s.x-10,s.y+7);
+  }
+
+  // skater
+  const sx=player.x,sy=player.y;
+  // board
+  ctx.fillStyle=player.grinding?'#facc15':'#78350f';
+  ctx.fillRect(sx-12,sy,24,5);
+  // wheels
+  ctx.fillStyle='#6b7280';
+  ctx.beginPath();ctx.arc(sx-8,sy+7,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(sx+8,sy+7,3,0,Math.PI*2);ctx.fill();
+  // body
+  ctx.fillStyle='#3b82f6';ctx.fillRect(sx-5,sy-25,10,25);
+  // head
+  ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(sx,sy-30,6,0,Math.PI*2);ctx.fill();
+}
+
+function loop(){
+  if(paused||!running)return;
+  update();draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'skateboard',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='skateboard'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

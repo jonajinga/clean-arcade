@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logic Grid</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding-bottom:2rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;padding:0.75rem;width:95%;max-width:600px;margin:0.5rem auto;overflow-x:auto}
+.clues{margin:0.5rem 0;padding:0.5rem;background:#1e293b;border:1px solid #334155;width:95%;max-width:600px}
+.clues h3{color:#facc15;font-size:0.9rem;margin-bottom:0.25rem}
+.clues ol{padding-left:1.2rem;font-size:0.8rem;color:#94a3b8}
+.clues li{margin:0.15rem 0}
+.grid-table{border-collapse:collapse;font-size:0.75rem}
+.grid-table th{padding:3px 6px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-weight:normal;white-space:nowrap}
+.grid-table td{width:28px;height:28px;text-align:center;border:1px solid #334155;cursor:pointer;font-size:0.9rem;background:#0f172a}
+.grid-table td:hover{background:#334155}
+.grid-table td.yes{background:#22c55e;color:#0f172a}
+.grid-table td.no{background:#1e293b;color:#ef4444}
+.grid-table .section-border{border-right:3px solid #6366f1}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{font-size:0.9rem;min-height:1.1rem;text-align:center;margin:0.25rem}
+</style>
+</head>
+<body>
+<h1>Logic Grid</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/5</div>
+<div class="game-area" id="gameArea"></div>
+<div class="clues" id="clues"></div>
+<div class="controls">
+<button onclick="clearGrid()">Clear</button>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+</div>
+<div class="msg" id="msg"></div>
+
+<div class="overlay" id="startOverlay">
+<h2>Logic Grid</h2>
+<p>Solve the logic puzzle</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Read the clues and fill the grid with Yes/No to match each person with their attributes. Click to cycle: empty, Yes (green), No (red).</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Solved!</h2>
+<p>Great deductive reasoning!</p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const PUZZLES=[
+{
+people:['Alice','Bob','Carol','Dave'],
+categories:[
+{name:'Color',items:['Red','Blue','Green','Yellow']},
+{name:'Pet',items:['Cat','Dog','Fish','Bird']}
+],
+solution:{Alice:{Color:'Red',Pet:'Cat'},Bob:{Color:'Blue',Pet:'Dog'},Carol:{Color:'Green',Pet:'Fish'},Dave:{Color:'Yellow',Pet:'Bird'}},
+clues:[
+'Alice likes the color Red.',
+'The person who likes Blue has a Dog.',
+'Carol does not have a Cat or a Bird.',
+'Dave has a Bird.',
+'Bob likes Blue.',
+'The person with the Fish likes Green.'
+]
+},
+{
+people:['Emma','Frank','Grace','Henry'],
+categories:[
+{name:'Drink',items:['Coffee','Tea','Juice','Water']},
+{name:'Sport',items:['Tennis','Soccer','Golf','Swim']}
+],
+solution:{Emma:{Drink:'Tea',Sport:'Tennis'},Frank:{Drink:'Coffee',Sport:'Soccer'},Grace:{Drink:'Juice',Sport:'Golf'},Henry:{Drink:'Water',Sport:'Swim'}},
+clues:[
+'Frank drinks Coffee.',
+'The tea drinker plays Tennis.',
+'Grace does not play Tennis or Soccer.',
+'Henry plays Swim.',
+'Emma does not drink Coffee or Juice.',
+'The Juice drinker plays Golf.'
+]
+},
+{
+people:['Ivy','Jack','Kate','Leo'],
+categories:[
+{name:'Food',items:['Pizza','Pasta','Sushi','Tacos']},
+{name:'City',items:['Paris','Tokyo','London','Rome']}
+],
+solution:{Ivy:{Food:'Sushi',City:'Tokyo'},Jack:{Food:'Pizza',City:'Rome'},Kate:{Food:'Pasta',City:'Paris'},Leo:{Food:'Tacos',City:'London'}},
+clues:[
+'Ivy likes Sushi and lives in Tokyo.',
+'Jack does not like Pasta or Sushi.',
+'Kate lives in Paris.',
+'The person in Rome likes Pizza.',
+'Leo likes Tacos.',
+'Kate likes Pasta.'
+]
+},
+{
+people:['Mia','Noah','Olivia','Pete'],
+categories:[
+{name:'Instrument',items:['Piano','Guitar','Drums','Violin']},
+{name:'Subject',items:['Math','Art','Science','History']}
+],
+solution:{Mia:{Instrument:'Violin',Subject:'Art'},Noah:{Instrument:'Guitar',Subject:'Math'},Olivia:{Instrument:'Piano',Subject:'Science'},Pete:{Instrument:'Drums',Subject:'History'}},
+clues:[
+'Noah plays Guitar.',
+'The Piano player studies Science.',
+'Pete plays Drums.',
+'Mia studies Art.',
+'Olivia does not play Guitar or Drums.',
+'Pete studies History.'
+]
+},
+{
+people:['Quinn','Rosa','Sam','Tina'],
+categories:[
+{name:'Season',items:['Spring','Summer','Fall','Winter']},
+{name:'Hobby',items:['Reading','Cooking','Hiking','Painting']}
+],
+solution:{Quinn:{Season:'Summer',Hobby:'Hiking'},Rosa:{Season:'Fall',Hobby:'Cooking'},Sam:{Season:'Winter',Hobby:'Reading'},Tina:{Season:'Spring',Hobby:'Painting'}},
+clues:[
+'Quinn loves Summer and goes Hiking.',
+'Rosa likes Fall.',
+'Sam reads in Winter.',
+'Tina paints.',
+'The person who likes Spring does Painting.',
+'Rosa enjoys Cooking.'
+]
+}
+];
+
+let currentPuzzle=0;
+let grid={};
+let gameActive=false;
+let highScore=0;
+
+function buildGrid(){
+const p=PUZZLES[currentPuzzle];
+grid={};
+const area=document.getElementById('gameArea');
+area.innerHTML='';
+const table=document.createElement('table');
+table.className='grid-table';
+// Header rows
+const thead=document.createElement('thead');
+const hr1=document.createElement('tr');
+hr1.appendChild(document.createElement('th'));
+p.categories.forEach((cat,ci)=>{
+const th=document.createElement('th');
+th.colSpan=4;th.textContent=cat.name;
+th.style.color='#facc15';th.style.textAlign='center';
+if(ci<p.categories.length-1)th.classList.add('section-border');
+hr1.appendChild(th);
+});
+thead.appendChild(hr1);
+const hr2=document.createElement('tr');
+hr2.appendChild(document.createElement('th'));
+p.categories.forEach((cat,ci)=>{
+cat.items.forEach((item,ii)=>{
+const th=document.createElement('th');
+th.textContent=item;
+th.style.writingMode='vertical-lr';th.style.transform='rotate(180deg)';
+th.style.height='60px';th.style.fontSize='0.65rem';
+if(ci<p.categories.length-1&&ii===3)th.classList.add('section-border');
+hr2.appendChild(th);
+});
+});
+thead.appendChild(hr2);
+table.appendChild(thead);
+// Body
+const tbody=document.createElement('tbody');
+p.people.forEach(person=>{
+const tr=document.createElement('tr');
+const th=document.createElement('th');
+th.textContent=person;tr.appendChild(th);
+p.categories.forEach((cat,ci)=>{
+cat.items.forEach((item,ii)=>{
+const td=document.createElement('td');
+const key=`${person}_${cat.name}_${item}`;
+grid[key]=0;
+td.dataset.key=key;
+td.addEventListener('click',()=>toggleCell(td,key));
+if(ci<p.categories.length-1&&ii===3)td.classList.add('section-border');
+tr.appendChild(td);
+});
+});
+tbody.appendChild(tr);
+});
+table.appendChild(tbody);
+area.appendChild(table);
+// Clues
+const cluesDiv=document.getElementById('clues');
+cluesDiv.innerHTML='<h3>Clues</h3>';
+const ol=document.createElement('ol');
+p.clues.forEach(c=>{const li=document.createElement('li');li.textContent=c;ol.appendChild(li);});
+cluesDiv.appendChild(ol);
+}
+
+function toggleCell(td,key){
+if(!gameActive)return;
+grid[key]=(grid[key]+1)%3;
+td.className='';td.textContent='';
+if(grid[key]===1){td.className='yes';td.textContent='✓';}
+else if(grid[key]===2){td.className='no';td.textContent='✗';}
+}
+
+function clearGrid(){
+if(!gameActive)return;
+for(const k in grid)grid[k]=0;
+document.querySelectorAll('.grid-table td').forEach(td=>{td.className='';td.textContent='';});
+}
+
+function checkSolution(){
+if(!gameActive)return;
+const p=PUZZLES[currentPuzzle];
+const msg=document.getElementById('msg');
+let correct=true;
+p.people.forEach(person=>{
+p.categories.forEach(cat=>{
+const correctItem=p.solution[person][cat.name];
+cat.items.forEach(item=>{
+const key=`${person}_${cat.name}_${item}`;
+const shouldBeYes=item===correctItem;
+if(shouldBeYes&&grid[key]!==1)correct=false;
+if(!shouldBeYes&&grid[key]===1)correct=false;
+});
+});
+});
+if(correct){
+msg.textContent='Correct!';msg.style.color='#22c55e';
+currentPuzzle++;
+if(currentPuzzle>=PUZZLES.length){
+gameActive=false;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+}else{
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+setTimeout(()=>{buildGrid();msg.textContent='';},1000);
+}
+}else{
+msg.textContent='Not correct yet. Keep trying!';msg.style.color='#ef4444';
+}
+}
+
+function startGame(){
+currentPuzzle=0;
+document.getElementById('puzzleNum').textContent='1';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+buildGrid();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'logic-grid',state:{highScore:currentPuzzle}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='logic-grid'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stock Trader</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.stocks{display:flex;flex-wrap:wrap;gap:0.3rem;margin:0.3rem 0;justify-content:center;max-width:420px}
+.stock-card{background:#1e293b;padding:0.3rem 0.5rem;font-size:0.75rem;display:flex;gap:0.3rem;align-items:center}
+.stock-card span{min-width:40px}
+</style>
+</head>
+<body>
+<h1>Stock Trader</h1>
+<div class="hud">
+  <span id="cashDisp">Cash: $1000</span>
+  <span id="dayDisp">Day: 1/30</span>
+  <span id="portDisp">Portfolio: $1000</span>
+  <span id="hScore">Best: $1000</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="250"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Stock Trader</h2>
+    <p>Buy low, sell high over 30 days!</p>
+    <p>Start with $1000. 5 companies.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Market Closed!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="stocks" id="stockPanel"></div>
+<div><button onclick="nextDay()" id="nextBtn" style="display:none">Next Day</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=250;
+const names=['TECH','FOOD','BANK','ENRG','HLTH'];
+const colors=['#6366f1','#22c55e','#ef4444','#facc15','#3b82f6'];
+let stocks,cash,day,highScore=1000,holdings;
+
+function initStocks(){
+  stocks=names.map(()=>{
+    const p=50+Math.random()*150;
+    return{prices:[p]};
+  });
+  holdings=[0,0,0,0,0];
+  cash=1000;day=0;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('nextBtn').style.display='inline-block';
+  initStocks();
+  buildPanel();updateHUD();draw();
+}
+
+function getPortfolio(){
+  let v=cash;
+  for(let i=0;i<5;i++)v+=holdings[i]*stocks[i].prices[stocks[i].prices.length-1];
+  return v;
+}
+
+function buildPanel(){
+  const p=document.getElementById('stockPanel');
+  p.innerHTML='';
+  for(let i=0;i<5;i++){
+    const d=document.createElement('div');d.className='stock-card';
+    const price=stocks[i].prices[stocks[i].prices.length-1].toFixed(0);
+    d.innerHTML=`<span style="color:${colors[i]}">${names[i]}</span><span>$${price}</span><span>Own:${holdings[i]}</span>
+    <button onclick="buyStock(${i})">Buy</button><button onclick="sellStock(${i})">Sell</button>`;
+    p.appendChild(d);
+  }
+}
+
+window.buyStock=function(i){
+  const price=stocks[i].prices[stocks[i].prices.length-1];
+  if(cash>=price){cash-=price;holdings[i]++;buildPanel();updateHUD();}
+};
+window.sellStock=function(i){
+  if(holdings[i]>0){
+    const price=stocks[i].prices[stocks[i].prices.length-1];
+    cash+=price;holdings[i]--;buildPanel();updateHUD();
+  }
+};
+
+function nextDay(){
+  day++;
+  for(let i=0;i<5;i++){
+    const prev=stocks[i].prices[stocks[i].prices.length-1];
+    const change=prev*(1+(Math.random()-0.48)*0.15);
+    stocks[i].prices.push(Math.max(5,change));
+  }
+  if(day>=29){
+    const port=getPortfolio();
+    if(port>highScore){highScore=port;saveState();}
+    document.getElementById('finalScore').textContent='Portfolio: $'+port.toFixed(0);
+    document.getElementById('gameOverOverlay').style.display='flex';
+    document.getElementById('nextBtn').style.display='none';
+    document.getElementById('stockPanel').innerHTML='';
+  }
+  buildPanel();updateHUD();draw();
+}
+
+function updateHUD(){
+  document.getElementById('cashDisp').textContent='Cash: $'+cash.toFixed(0);
+  document.getElementById('dayDisp').textContent='Day: '+(day+1)+'/30';
+  document.getElementById('portDisp').textContent='Portfolio: $'+getPortfolio().toFixed(0);
+  document.getElementById('hScore').textContent='Best: $'+highScore.toFixed(0);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  const gx=40,gy=10,gw=W-50,gh=H-30;
+  ctx.strokeStyle='#334155';ctx.strokeRect(gx,gy,gw,gh);
+  for(let i=0;i<5;i++){
+    const ps=stocks[i].prices;if(ps.length<2)continue;
+    let mn=Infinity,mx=0;
+    for(let s of stocks)for(let p of s.prices){mn=Math.min(mn,p);mx=Math.max(mx,p);}
+    const range=mx-mn||1;
+    ctx.strokeStyle=colors[i];ctx.lineWidth=2;ctx.beginPath();
+    for(let j=0;j<ps.length;j++){
+      const x=gx+(j/(29))*gw;
+      const y=gy+gh-(ps[j]-mn)/range*gh;
+      j===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  ctx.font='10px system-ui';
+  for(let i=0;i<5;i++){ctx.fillStyle=colors[i];ctx.fillText(names[i],gx+i*55,H-5);}
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'stock-trader',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='stock-trader'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+  }
+});
+</script>
+</body>
+</html>

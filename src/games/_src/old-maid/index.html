@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Old Maid</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(600px,95vw);background:#1e293b;position:relative;padding:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.hand{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.card{width:42px;height:62px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;cursor:pointer;user-select:none}
+.card.red{color:#ef4444}.card.face-down{background:#6366f1;color:transparent;cursor:pointer}
+.card:hover{border-color:#facc15}
+.label{font-size:.75rem;color:#94a3b8;text-align:center;margin:3px 0}
+#msg{text-align:center;color:#22c55e;min-height:1.5em;font-size:.9rem;margin:6px 0;font-weight:600}
+.info{font-size:.85rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Old Maid</h1>
+<div id="game-area">
+<div class="label">CPU Hand (click to draw)</div>
+<div class="hand" id="cpu-hand"></div>
+<div id="msg"></div>
+<div class="info" id="info"></div>
+<div class="label">Your Hand</div>
+<div class="hand" id="player-hand"></div>
+<div class="overlay" id="start-overlay">
+<h2>Old Maid</h2>
+<p>Remove pairs from your hand. Take turns drawing from each other. Don't get stuck with the Queen of Spades (Old Maid)!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Game Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SLUG='old-maid';
+let pHand,cHand,turn,highScore=0,gameOver;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function isRed(s){return s==='♥'||s==='♦'}
+
+function makeDeck(){
+  let d=[];
+  SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));
+  // Remove Queen of Hearts (Old Maid = Queen of Spades has no match)
+  d=d.filter(c=>!(c.rank==='Q'&&c.suit==='♥'));
+  for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}
+  return d;
+}
+
+function removePairs(hand){
+  let removed=[];
+  for(let i=0;i<hand.length;i++){
+    for(let j=i+1;j<hand.length;j++){
+      if(hand[i]&&hand[j]&&hand[i].rank===hand[j].rank){
+        removed.push(hand[i],hand[j]);
+        hand[i]=null;hand[j]=null;
+        break;
+      }
+    }
+  }
+  return hand.filter(c=>c!==null);
+}
+
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){let j=Math.random()*i+1|0;[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
+
+function render(){
+  let cpu=document.getElementById('cpu-hand');
+  cpu.innerHTML=cHand.map((c,i)=>`<div class="card face-down" onclick="drawFromCPU(${i})"></div>`).join('');
+  let pl=document.getElementById('player-hand');
+  pl.innerHTML=pHand.map((c,i)=>{
+    let cls='card'+(isRed(c.suit)?' red':'');
+    return `<div class="${cls}">${c.rank}${c.suit}</div>`;
+  }).join('');
+  document.getElementById('info').textContent=`Your cards: ${pHand.length} | CPU cards: ${cHand.length}`;
+}
+
+function checkWin(){
+  if(pHand.length===0){endGame(true);return true}
+  if(cHand.length===0){endGame(false);return true}
+  // If only one card left in one hand and it's the old maid
+  if(pHand.length===1&&cHand.length===0){endGame(pHand[0].rank!=='Q'||pHand[0].suit!=='♠');return true}
+  if(cHand.length===1&&pHand.length===0){endGame(true);return true}
+  return false;
+}
+
+function drawFromCPU(i){
+  if(turn!=='player'||gameOver)return;
+  let card=cHand.splice(i,1)[0];
+  pHand.push(card);
+  pHand=removePairs(pHand);
+  document.getElementById('msg').textContent='Drew '+card.rank+card.suit;
+  render();
+  if(checkWin())return;
+  turn='cpu';
+  setTimeout(cpuTurn,1000);
+}
+
+function cpuTurn(){
+  if(gameOver)return;
+  if(pHand.length===0){checkWin();return}
+  shuffle(pHand);
+  let idx=Math.floor(Math.random()*pHand.length);
+  let card=pHand.splice(idx,1)[0];
+  cHand.push(card);
+  cHand=removePairs(cHand);
+  document.getElementById('msg').textContent='CPU drew '+card.rank+card.suit;
+  render();
+  if(checkWin())return;
+  turn='player';
+  document.getElementById('msg').textContent+=' — Your turn! Click a CPU card.';
+}
+
+function endGame(won){
+  gameOver=true;
+  let sc=won?1:0;
+  if(won)highScore++;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent=won?'You Win!':'Old Maid!';
+  document.getElementById('over-msg').textContent=won?'You got rid of all cards! Wins: '+highScore:'You got stuck with the Old Maid! Wins: '+highScore;
+  save();
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  let deck=makeDeck();// 51 cards
+  pHand=deck.slice(0,26);cHand=deck.slice(26);
+  pHand=removePairs(pHand);cHand=removePairs(cHand);
+  turn='player';gameOver=false;
+  document.getElementById('msg').textContent='Click a CPU card to draw';
+  render();
+}
+</script>
+</body>
+</html>

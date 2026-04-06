@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shut the Box</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+#tiles{display:flex;gap:6px;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.tile{width:44px;height:56px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:bold;cursor:pointer;border:2px solid #6366f1;background:#1e293b;color:#e2e8f0}
+.tile.shut{background:#334155;color:#475569;border-color:#475569;cursor:default}
+.tile.selected{background:#6366f1;border-color:#facc15;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Shut the Box</h1>
+<div id="info">Roll: <span id="hud-roll">-</span> | Selected: <span id="hud-sel">0</span> | Best: <span id="hud-best">-</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="160"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Shut the Box</h2>
+<p>Roll dice, then flip tiles that sum to your roll</p>
+<p>Shut all 9 tiles to win!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">Game Over</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="tiles"></div>
+<div id="controls">
+<button class="btn-primary" id="roll-btn" onclick="rollDice()">Roll Dice</button>
+<button class="btn-secondary" id="confirm-btn" onclick="confirmFlip()">Confirm</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=160;
+let tiles,dice,selectedTiles,phase,bestScore=999,gameRunning=false;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=(400*s)+'px';canvas.style.height=(160*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='shut-the-box'&&e.data.state)bestScore=e.data.state.highScore||999;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'shut-the-box',state:{highScore:bestScore}},'*');}catch(e){}}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  tiles=[false,false,false,false,false,false,false,false,false]; // false = open
+  dice=[0,0];selectedTiles=[];phase='roll';
+  gameRunning=true;
+  renderTiles();updateInfo();draw();
+}
+
+function updateInfo(){
+  let sum=selectedTiles.reduce((s,i)=>s+(i+1),0);
+  let rollSum=dice[0]+dice[1];
+  document.getElementById('hud-roll').textContent=phase==='roll'?'-':rollSum;
+  document.getElementById('hud-sel').textContent=sum;
+  document.getElementById('hud-best').textContent=bestScore>=999?'-':bestScore;
+}
+
+function renderTiles(){
+  let el=document.getElementById('tiles');
+  el.innerHTML='';
+  for(let i=0;i<9;i++){
+    let d=document.createElement('button');
+    d.className='tile';
+    if(tiles[i])d.classList.add('shut');
+    if(selectedTiles.includes(i))d.classList.add('selected');
+    d.textContent=i+1;
+    d.onclick=()=>toggleTile(i);
+    el.appendChild(d);
+  }
+}
+
+function toggleTile(i){
+  if(!gameRunning||phase!=='select'||tiles[i])return;
+  let idx=selectedTiles.indexOf(i);
+  if(idx>=0)selectedTiles.splice(idx,1);
+  else selectedTiles.push(i);
+  renderTiles();updateInfo();
+}
+
+function rollDice(){
+  if(!gameRunning||phase!=='roll')return;
+  // If only tiles 1-6 remain, roll one die
+  let remaining=tiles.map((shut,i)=>shut?0:i+1).filter(v=>v>0);
+  let maxOpen=Math.max(...remaining);
+  if(maxOpen<=6){
+    dice=[1+Math.floor(Math.random()*6),0];
+  } else {
+    dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)];
+  }
+  selectedTiles=[];phase='select';
+  // Check if any valid moves exist
+  if(!hasValidCombination()){
+    endGame();
+    return;
+  }
+  renderTiles();updateInfo();draw();
+}
+
+function hasValidCombination(){
+  let target=dice[0]+dice[1];
+  let open=[];
+  for(let i=0;i<9;i++)if(!tiles[i])open.push(i+1);
+  // Check all subsets
+  let n=open.length;
+  for(let mask=1;mask<(1<<n);mask++){
+    let sum=0;
+    for(let j=0;j<n;j++)if(mask&(1<<j))sum+=open[j];
+    if(sum===target)return true;
+  }
+  return false;
+}
+
+function confirmFlip(){
+  if(!gameRunning||phase!=='select'||selectedTiles.length===0)return;
+  let sum=selectedTiles.reduce((s,i)=>s+(i+1),0);
+  let target=dice[0]+dice[1];
+  if(sum!==target)return; // Must equal roll
+
+  selectedTiles.forEach(i=>tiles[i]=true);
+  selectedTiles=[];
+
+  // Check win
+  if(tiles.every(t=>t)){
+    let sc=0;
+    if(sc<bestScore)bestScore=sc;
+    document.getElementById('win-msg').textContent='Shut the Box!';
+    document.getElementById('win-detail').textContent='Perfect! All tiles shut! Best: '+bestScore;
+    document.getElementById('over-overlay').classList.remove('hidden');
+    gameRunning=false;saveState();
+    renderTiles();draw();return;
+  }
+
+  phase='roll';
+  renderTiles();updateInfo();draw();
+}
+
+function endGame(){
+  gameRunning=false;
+  let remaining=0;
+  for(let i=0;i<9;i++)if(!tiles[i])remaining+=(i+1);
+  if(remaining<bestScore)bestScore=remaining;
+  document.getElementById('win-msg').textContent='No Valid Moves';
+  document.getElementById('win-detail').textContent='Remaining: '+remaining+' | Best: '+(bestScore>=999?remaining:bestScore);
+  document.getElementById('over-overlay').classList.remove('hidden');
+  saveState();draw();
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+
+  // Draw box
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=3;
+  ctx.strokeRect(20,20,W-40,80);
+
+  // Tiles in box
+  let tw=34,gap=6;
+  let startX=(W-9*(tw+gap))/2;
+  for(let i=0;i<9;i++){
+    let x=startX+i*(tw+gap);
+    ctx.fillStyle=tiles[i]?'#334155':selectedTiles.includes(i)?'#6366f1':'#e2e8f0';
+    ctx.fillRect(x,30,tw,60);
+    ctx.fillStyle=tiles[i]?'#475569':'#0f172a';
+    ctx.font='bold 24px system-ui';ctx.textAlign='center';
+    ctx.fillText(i+1,x+tw/2,68);
+  }
+
+  // Dice
+  if(dice[0]>0){
+    drawDie(W/2-30,115,dice[0]);
+    if(dice[1]>0)drawDie(W/2+5,115,dice[1]);
+  }
+}
+
+function drawDie(x,y,val){
+  ctx.fillStyle='#facc15';ctx.fillRect(x,y,28,28);
+  ctx.fillStyle='#0f172a';ctx.font='bold 16px system-ui';ctx.textAlign='center';
+  ctx.fillText(val,x+14,y+20);
+}
+
+draw();
+</script>
+</body>
+</html>

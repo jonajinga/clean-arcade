@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chess 10x10</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;margin:0.25rem 0;text-align:center;min-height:1.4em}
+canvas{border:2px solid #6366f1;display:block;margin:0.25rem auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:0.95rem;text-align:center;max-width:350px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Chess 10x10</h1>
+<div class="info" id="info">White's turn</div>
+<canvas id="canvas"></canvas>
+
+<div class="overlay" id="startOverlay">
+<h2>Chess 10x10</h2>
+<p>10x10 chess with Chancellor (R+N) and Archbishop (B+N). Full move validation. Click piece then click destination.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const N=10;
+// Pieces: K,Q,C(chancellor=R+N),A(archbishop=B+N),R,B,N,P
+const SYMBOLS={K:'♔',Q:'♕',C:'♖',A:'♗',R:'♜',B:'♝',N:'♞',P:'♟'};
+const BSYMBOLS={K:'♚',Q:'♛',C:'♜',A:'♝',R:'♜',B:'♝',N:'♞',P:'♟'};
+let board,selected,validMoves,turn,gameOver,highScore=0,wins=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d'),info=document.getElementById('info');
+let cs,cw;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='four-player-chess'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'four-player-chess',state:{highScore}},'*')}catch(e){}}
+
+function resize(){cw=Math.min(window.innerWidth-20,450);canvas.width=cw;canvas.height=cw;cs=cw/N;render()}
+window.addEventListener('resize',resize);
+
+const INIT_ROW=['R','N','B','Q','K','A','C','B','N','R'];
+
+function startGame(){
+board=Array.from({length:N},()=>Array(N).fill(null));
+// Black (top)
+for(let c=0;c<N;c++){board[0][c]={type:INIT_ROW[c],color:'b'};board[1][c]={type:'P',color:'b'}}
+// White (bottom)
+for(let c=0;c<N;c++){board[N-1][c]={type:INIT_ROW[c],color:'w'};board[N-2][c]={type:'P',color:'w'}}
+selected=null;validMoves=[];turn='w';gameOver=false;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+info.textContent="White's turn";resize();
+}
+
+function getMoves(r,c){
+const p=board[r][c];if(!p)return[];
+const moves=[],col=p.color,t=p.type;
+const addSlide=(dirs)=>{
+for(const[dr,dc]of dirs){
+let nr=r+dr,nc=c+dc;
+while(nr>=0&&nr<N&&nc>=0&&nc<N){
+if(board[nr][nc]){if(board[nr][nc].color!==col)moves.push([nr,nc]);break}
+moves.push([nr,nc]);nr+=dr;nc+=dc;
+}
+}
+};
+const addJump=(offsets)=>{
+for(const[dr,dc]of offsets){
+const nr=r+dr,nc=c+dc;
+if(nr>=0&&nr<N&&nc>=0&&nc<N&&(!board[nr][nc]||board[nr][nc].color!==col))moves.push([nr,nc]);
+}
+};
+const knightOffs=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+if(t==='P'){
+const dir=col==='w'?-1:1;const start=col==='w'?N-2:1;
+if(!board[r+dir]?.[c]){moves.push([r+dir,c]);if(r===start&&!board[r+2*dir]?.[c])moves.push([r+2*dir,c])}
+for(const dc of[-1,1]){const nc=c+dc;if(nc>=0&&nc<N&&board[r+dir]?.[nc]&&board[r+dir][nc].color!==col)moves.push([r+dir,nc])}
+}
+if(t==='R')addSlide([[-1,0],[1,0],[0,-1],[0,1]]);
+if(t==='B')addSlide([[-1,-1],[-1,1],[1,-1],[1,1]]);
+if(t==='Q')addSlide([[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]);
+if(t==='N')addJump(knightOffs);
+if(t==='K')addJump([[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]);
+if(t==='C'){addSlide([[-1,0],[1,0],[0,-1],[0,1]]);addJump(knightOffs)} // Rook+Knight
+if(t==='A'){addSlide([[-1,-1],[-1,1],[1,-1],[1,1]]);addJump(knightOffs)} // Bishop+Knight
+return moves;
+}
+
+function isInCheck(b,color){
+const kingPos=findKing(b,color);if(!kingPos)return true;
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+if(b[r][c]&&b[r][c].color!==color){
+const orig=board;board=b;
+const m=getMoves(r,c);board=orig;
+if(m.some(([mr,mc])=>mr===kingPos[0]&&mc===kingPos[1]))return true;
+}
+}
+return false;
+}
+
+function findKing(b,color){
+for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(b[r][c]&&b[r][c].type==='K'&&b[r][c].color===color)return[r,c];
+return null;
+}
+
+function getLegalMoves(r,c){
+const raw=getMoves(r,c);
+const legal=[];
+for(const[tr,tc]of raw){
+const nb=board.map(row=>row.map(cell=>cell?{...cell}:null));
+nb[tr][tc]=nb[r][c];nb[r][c]=null;
+if(!isInCheck(nb,board[r][c].color))legal.push([tr,tc]);
+}
+return legal;
+}
+
+function hasLegalMoves(color){
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+if(board[r][c]&&board[r][c].color===color&&getLegalMoves(r,c).length)return true;
+}
+return false;
+}
+
+canvas.addEventListener('click',e=>{
+if(gameOver)return;
+const rect=canvas.getBoundingClientRect();
+const mx=(e.clientX-rect.left)*(cw/rect.width),my=(e.clientY-rect.top)*(cw/rect.height);
+const c=Math.floor(mx/cs),r=Math.floor(my/cs);
+if(r<0||r>=N||c<0||c>=N)return;
+
+if(selected){
+const[sr,sc]=selected;
+if(validMoves.some(([mr,mc])=>mr===r&&mc===c)){
+// Promote pawn
+const piece=board[sr][sc];
+board[r][c]=piece;board[sr][sc]=null;
+if(piece.type==='P'&&(r===0||r===N-1))piece.type='Q';
+selected=null;validMoves=[];
+turn=turn==='w'?'b':'w';
+render();
+// Check game state
+if(!hasLegalMoves(turn)){
+const inCheck=isInCheck(board,turn);
+endGame(inCheck?(turn==='w'?'Black':'White')+' wins by checkmate!':'Stalemate!',inCheck&&turn==='b');
+}else{
+info.textContent=(turn==='w'?"White":"Black")+"'s turn"+(isInCheck(board,turn)?' - CHECK!':'');
+if(turn==='b')setTimeout(aiMove,300);
+}
+return;
+}
+selected=null;validMoves=[];
+}
+if(board[r][c]&&board[r][c].color===turn){
+selected=[r,c];validMoves=getLegalMoves(r,c);
+}
+render();
+});
+
+function aiMove(){
+if(gameOver)return;
+let bestScore=-Infinity,bestFrom=null,bestTo=null;
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+if(!board[r][c]||board[r][c].color!=='b')continue;
+const moves=getLegalMoves(r,c);
+for(const[tr,tc]of moves){
+let sc=0;
+if(board[tr][tc]){sc+=pieceVal(board[tr][tc].type)*10}
+sc-=pieceVal(board[r][c].type)*0.1;
+// Center control
+sc+=Math.max(0,4-Math.abs(tr-4.5))+Math.max(0,4-Math.abs(tc-4.5));
+sc+=Math.random()*2;
+if(sc>bestScore){bestScore=sc;bestFrom=[r,c];bestTo=[tr,tc]}
+}
+}
+if(!bestFrom){endGame('White wins!',true);return}
+const piece=board[bestFrom[0]][bestFrom[1]];
+board[bestTo[0]][bestTo[1]]=piece;board[bestFrom[0]][bestFrom[1]]=null;
+if(piece.type==='P'&&bestTo[0]===N-1)piece.type='Q';
+turn='w';render();
+if(!hasLegalMoves('w')){
+endGame(isInCheck(board,'w')?'Black wins by checkmate!':'Stalemate!',false);
+}else{
+info.textContent="White's turn"+(isInCheck(board,'w')?' - CHECK!':'');
+}
+}
+
+function pieceVal(t){return{P:1,N:3,B:3,R:5,A:7,C:7,Q:9,K:100}[t]||0}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,cw);
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+const light=(r+c)%2===0;
+let fill=light?'#334155':'#1e293b';
+if(selected&&selected[0]===r&&selected[1]===c)fill='#4f46e5';
+if(validMoves.some(([mr,mc])=>mr===r&&mc===c))fill=board[r][c]?'#7f1d1d':'#1e3a5f';
+ctx.fillStyle=fill;ctx.fillRect(c*cs,r*cs,cs,cs);
+if(board[r][c]){
+const p=board[r][c];
+ctx.font=(cs*0.7)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillStyle=p.color==='w'?'#e2e8f0':'#ef4444';
+const sym={K:p.color==='w'?'♔':'♚',Q:p.color==='w'?'♕':'♛',R:p.color==='w'?'♖':'♜',B:p.color==='w'?'♗':'♝',N:p.color==='w'?'♘':'♞',P:p.color==='w'?'♙':'♟',C:p.color==='w'?'C':'C',A:p.color==='w'?'A':'A'};
+ctx.fillText(sym[p.type]||p.type,c*cs+cs/2,r*cs+cs/2);
+}
+}
+}
+
+function endGame(msg,won){
+gameOver=true;
+if(won){wins++;highScore=Math.max(highScore,wins);save()}
+info.textContent=msg;
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=msg;
+document.getElementById('overMsg').textContent='Wins: '+wins;
+document.getElementById('overOverlay').classList.remove('hidden');
+},600);
+}
+</script>
+</body>
+</html>

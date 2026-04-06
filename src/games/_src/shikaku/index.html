@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shikaku</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.8rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+#clear-btn{background:#334155;padding:8px 16px;font-size:0.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Shikaku</h1>
+<div id="info">Drag to draw rectangles. Each must contain exactly one number equal to its area.</div>
+<div id="hud"><span id="level-txt">Puzzle 1</span><span id="rects-txt">0 rectangles</span></div>
+<canvas id="c"></canvas>
+<button id="clear-btn" onclick="clearRects()">Clear All</button>
+
+<div class="overlay" id="start-overlay">
+<h2>Shikaku</h2>
+<p>Divide the grid into rectangles. Each rectangle must contain exactly one number, and that number equals the rectangle's area.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Puzzle Solved!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Puzzle</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Puzzles Done!</h2>
+<p>Congratulations!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const GRID=6;
+const RECT_COLORS=['#ef444460','#22c55e60','#3b82f660','#facc1560','#a855f760','#f9731660','#06b6d460','#ec489960','#84cc1660','#f43f5e60'];
+let cellSize,currentLevel=0,highScore=0;
+let numbers=[],rects=[],dragStart=null,dragEnd=null;
+
+// Puzzles: array of {r,c,val}
+const LEVELS=[
+  [{r:0,c:0,v:6},{r:0,c:3,v:4},{r:0,c:5,v:2},{r:2,c:0,v:3},{r:2,c:3,v:6},{r:3,c:1,v:3},{r:4,c:0,v:2},{r:4,c:4,v:6},{r:5,c:2,v:3}],
+  [{r:0,c:0,v:4},{r:0,c:2,v:2},{r:0,c:4,v:6},{r:1,c:0,v:2},{r:2,c:1,v:6},{r:3,c:4,v:4},{r:4,c:0,v:6},{r:5,c:3,v:3},{r:5,c:5,v:3}],
+  [{r:0,c:0,v:3},{r:0,c:3,v:3},{r:1,c:1,v:4},{r:1,c:5,v:2},{r:2,c:3,v:6},{r:4,c:0,v:6},{r:4,c:2,v:4},{r:5,c:4,v:3},{r:5,c:0,v:3}],
+  [{r:0,c:0,v:2},{r:0,c:2,v:4},{r:0,c:5,v:3},{r:1,c:0,v:4},{r:2,c:3,v:3},{r:3,c:0,v:6},{r:3,c:5,v:3},{r:4,c:2,v:6},{r:5,c:0,v:2},{r:5,c:5,v:2}],
+  [{r:0,c:0,v:6},{r:0,c:4,v:2},{r:1,c:2,v:4},{r:2,c:0,v:2},{r:2,c:5,v:6},{r:3,c:1,v:3},{r:4,c:3,v:4},{r:5,c:0,v:6},{r:5,c:5,v:3}],
+  [{r:0,c:0,v:3},{r:0,c:2,v:6},{r:1,c:5,v:2},{r:2,c:0,v:3},{r:2,c:3,v:4},{r:3,c:5,v:4},{r:4,c:0,v:4},{r:4,c:3,v:6},{r:5,c:2,v:3}],
+  [{r:0,c:0,v:4},{r:0,c:4,v:6},{r:1,c:2,v:2},{r:2,c:0,v:6},{r:3,c:3,v:3},{r:3,c:5,v:3},{r:4,c:1,v:4},{r:5,c:0,v:2},{r:5,c:3,v:6}],
+  [{r:0,c:0,v:2},{r:0,c:3,v:6},{r:1,c:1,v:4},{r:2,c:0,v:2},{r:2,c:5,v:3},{r:3,c:2,v:6},{r:4,c:0,v:4},{r:4,c:5,v:3},{r:5,c:3,v:6}]
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='shikaku'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'shikaku',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,360);
+  cellSize=Math.floor(maxW/GRID);
+  canvas.width=cellSize*GRID;
+  canvas.height=cellSize*GRID;
+  draw();
+}
+
+function loadLevel(idx){
+  numbers=LEVELS[idx%LEVELS.length];
+  rects=[];
+  document.getElementById('level-txt').textContent='Puzzle '+(idx+1);
+  updateHUD();
+  resize();
+}
+
+function updateHUD(){
+  document.getElementById('rects-txt').textContent=rects.length+' rectangles';
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // drawn rectangles
+  rects.forEach((rect,i)=>{
+    ctx.fillStyle=RECT_COLORS[i%RECT_COLORS.length];
+    const x=rect.c1*cellSize,y=rect.r1*cellSize;
+    const w=(rect.c2-rect.c1+1)*cellSize,h=(rect.r2-rect.r1+1)*cellSize;
+    ctx.fillRect(x+1,y+1,w-2,h-2);
+    ctx.strokeStyle=RECT_COLORS[i%RECT_COLORS.length].replace('60','ff');
+    ctx.lineWidth=2;
+    ctx.strokeRect(x+1,y+1,w-2,h-2);
+  });
+  // drag preview
+  if(dragStart&&dragEnd){
+    const r1=Math.min(dragStart.r,dragEnd.r),c1=Math.min(dragStart.c,dragEnd.c);
+    const r2=Math.max(dragStart.r,dragEnd.r),c2=Math.max(dragStart.c,dragEnd.c);
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.setLineDash([4,4]);
+    ctx.strokeRect(c1*cellSize+1,r1*cellSize+1,(c2-c1+1)*cellSize-2,(r2-r1+1)*cellSize-2);
+    ctx.setLineDash([]);
+  }
+  // grid
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;
+  for(let r=0;r<=GRID;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=GRID;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // numbers
+  numbers.forEach(n=>{
+    const cx=n.c*cellSize+cellSize/2,cy=n.r*cellSize+cellSize/2;
+    ctx.fillStyle='#fff';ctx.font='bold '+Math.floor(cellSize*0.45)+'px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(n.v,cx,cy);
+  });
+}
+
+function getCell(e){
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  return{r:Math.min(Math.max(Math.floor(y/cellSize),0),GRID-1),c:Math.min(Math.max(Math.floor(x/cellSize),0),GRID-1)};
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const cell=getCell(e);
+  // check if clicking on existing rect to remove it
+  const idx=rects.findIndex(r=>cell.r>=r.r1&&cell.r<=r.r2&&cell.c>=r.c1&&cell.c<=r.c2);
+  if(idx>=0&&e.detail===2){rects.splice(idx,1);updateHUD();draw();return}
+  dragStart=cell;dragEnd=cell;
+  draw();
+});
+
+canvas.addEventListener('pointermove',e=>{
+  if(!dragStart)return;
+  dragEnd=getCell(e);
+  draw();
+});
+
+canvas.addEventListener('pointerup',e=>{
+  if(!dragStart||!dragEnd){dragStart=null;dragEnd=null;return}
+  const r1=Math.min(dragStart.r,dragEnd.r),c1=Math.min(dragStart.c,dragEnd.c);
+  const r2=Math.max(dragStart.r,dragEnd.r),c2=Math.max(dragStart.c,dragEnd.c);
+  const area=(r2-r1+1)*(c2-c1+1);
+  // check: contains exactly one number equal to area
+  let nums=numbers.filter(n=>n.r>=r1&&n.r<=r2&&n.c>=c1&&n.c<=c2);
+  if(nums.length===1&&nums[0].v===area){
+    // remove overlapping rects
+    rects=rects.filter(r=>!(r.r1<=r2&&r.r2>=r1&&r.c1<=c2&&r.c2>=c1));
+    rects.push({r1,c1,r2,c2});
+    updateHUD();
+    draw();
+    checkWin();
+  }
+  dragStart=null;dragEnd=null;
+  draw();
+});
+
+function checkWin(){
+  // every cell must be covered exactly once
+  const covered=Array.from({length:GRID},()=>new Array(GRID).fill(false));
+  for(const r of rects){
+    for(let row=r.r1;row<=r.r2;row++)for(let col=r.c1;col<=r.c2;col++){
+      if(covered[row][col])return;// overlap
+      covered[row][col]=true;
+    }
+  }
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(!covered[r][c])return;
+  const score=currentLevel+1;
+  if(score>highScore){highScore=score;save()}
+  setTimeout(()=>{
+    if(currentLevel>=LEVELS.length-1){
+      document.getElementById('gameover-overlay').classList.remove('hidden');
+    } else {
+      document.getElementById('win-msg').textContent='All cells covered correctly!';
+      document.getElementById('win-overlay').classList.remove('hidden');
+    }
+  },300);
+}
+
+function clearRects(){rects=[];updateHUD();draw()}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentLevel++;loadLevel(currentLevel);
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

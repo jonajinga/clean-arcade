@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Subway Surfer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+.controls{display:flex;gap:8px;margin:6px 0}
+</style>
+</head>
+<body>
+<h1>Subway Surfer</h1>
+<div class="wrap">
+<canvas id="c" width="360" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Subway Surfer</h2>
+<p>3-lane endless runner! Swipe or use arrow keys to change lanes. Up to jump, Down to slide. Collect coins!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Game Over!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Score: 0 | Coins: 0</div>
+<div class="controls">
+<button class="btn-secondary" onclick="moveLeft()">◀</button>
+<button class="btn-secondary" onclick="doJump()">▲ Jump</button>
+<button class="btn-secondary" onclick="doSlide()">▼ Slide</button>
+<button class="btn-secondary" onclick="moveRight()">▶</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const SLUG='subway-surfer';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=360,H=500;
+const LANES=[W/6,W/2,W*5/6];
+const LANE_W=W/3;
+let lane,playerY,jumping,sliding,jumpVY,obstacles,coins,score,coinCount,speed,dist,running,paused,highScore=0;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(360,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*500/360)+'px'}
+resize();window.addEventListener('resize',resize);
+
+function moveLeft(){if(!running||paused)return;if(lane>0)lane--}
+function moveRight(){if(!running||paused)return;if(lane<2)lane++}
+function doJump(){if(!running||paused||jumping||sliding)return;jumping=true;jumpVY=-400}
+function doSlide(){if(!running||paused||jumping||sliding)return;sliding=true;setTimeout(()=>sliding=false,500)}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')moveLeft();
+  if(e.key==='ArrowRight')moveRight();
+  if(e.key==='ArrowUp')doJump();
+  if(e.key==='ArrowDown')doSlide();
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+
+// Swipe
+let touchStartX=0,touchStartY=0;
+canvas.addEventListener('touchstart',e=>{e.preventDefault();touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY});
+canvas.addEventListener('touchend',e=>{
+  e.preventDefault();
+  let dx=e.changedTouches[0].clientX-touchStartX;
+  let dy=e.changedTouches[0].clientY-touchStartY;
+  if(Math.abs(dx)>Math.abs(dy)){
+    if(dx>30)moveRight();else if(dx<-30)moveLeft();
+  } else {
+    if(dy<-30)doJump();else if(dy>30)doSlide();
+  }
+});
+
+function spawnObstacle(){
+  let l=Math.floor(Math.random()*3);
+  let type=Math.random()<0.3?'low':'tall';// low = slide under, tall = jump over
+  obstacles.push({lane:l,y:-40,type,w:LANE_W*0.6,h:type==='tall'?30:50});
+}
+function spawnCoin(){
+  let l=Math.floor(Math.random()*3);
+  coins.push({lane:l,y:-40,collected:false});
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // lanes
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i===1?'#252f3f':'#1e293b';
+    ctx.fillRect(i*LANE_W,0,LANE_W,H);
+  }
+  // lane dividers
+  ctx.strokeStyle='#facc1544';ctx.lineWidth=2;ctx.setLineDash([10,10]);
+  ctx.beginPath();ctx.moveTo(LANE_W,0);ctx.lineTo(LANE_W,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(LANE_W*2,0);ctx.lineTo(LANE_W*2,H);ctx.stroke();
+  ctx.setLineDash([]);
+  // scrolling track marks
+  let off=(dist*3)%40;
+  ctx.strokeStyle='#ffffff11';ctx.lineWidth=3;
+  for(let y=off;y<H;y+=40){
+    for(let i=0;i<3;i++){
+      ctx.beginPath();ctx.moveTo(LANES[i],y);ctx.lineTo(LANES[i],y+15);ctx.stroke();
+    }
+  }
+  // obstacles
+  obstacles.forEach(o=>{
+    let ox=LANES[o.lane];
+    ctx.fillStyle=o.type==='tall'?'#ef4444':'#f97316';
+    if(o.type==='tall'){
+      ctx.fillRect(ox-o.w/2,o.y,o.w,o.h);
+    } else {
+      // low barrier (slide under)
+      ctx.fillRect(ox-o.w/2,o.y,o.w,8);
+      ctx.fillRect(ox-o.w/2,o.y,4,o.h);
+      ctx.fillRect(ox+o.w/2-4,o.y,4,o.h);
+    }
+  });
+  // coins
+  coins.forEach(c=>{
+    if(c.collected)return;
+    let cx=LANES[c.lane];
+    ctx.fillStyle='#facc15';
+    ctx.beginPath();ctx.arc(cx,c.y,8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#eab308';ctx.font='bold 10px system-ui';ctx.textAlign='center';
+    ctx.fillText('$',cx,c.y+4);ctx.textAlign='start';
+  });
+  // player
+  let px=LANES[lane],py=playerY;
+  if(sliding){
+    ctx.fillStyle='#3b82f6';ctx.fillRect(px-12,py+10,24,10);
+    ctx.fillStyle='#60a5fa';ctx.fillRect(px-10,py+12,20,6);
+  } else {
+    ctx.fillStyle='#3b82f6';
+    // body
+    ctx.fillRect(px-8,py-10,16,24);
+    // head
+    ctx.beginPath();ctx.arc(px,py-16,8,0,Math.PI*2);ctx.fill();
+    // legs
+    let la=Math.sin(dist*0.3)*4;
+    ctx.fillRect(px-6,py+14,5,10+la);
+    ctx.fillRect(px+1,py+14,5,10-la);
+  }
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start'}
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(!paused){
+    speed=3+dist/1000;
+    dist+=speed;
+    score=Math.floor(dist/10);
+    // jump physics
+    if(jumping){
+      jumpVY+=900*dt;
+      playerY+=jumpVY*dt;
+      if(playerY>=H-60){playerY=H-60;jumping=false;jumpVY=0}
+    }
+    // spawn
+    if(Math.random()<0.02)spawnObstacle();
+    if(Math.random()<0.03)spawnCoin();
+    let scrollAmt=speed*2;
+    obstacles.forEach(o=>o.y+=scrollAmt);
+    coins.forEach(c=>c.y+=scrollAmt);
+    // collision
+    let px=LANES[lane],py=playerY;
+    for(let o of obstacles){
+      if(o.lane!==lane)continue;
+      let ox=LANES[o.lane];
+      if(o.y+o.h>py-10&&o.y<py+24){
+        if(o.type==='tall'&&!jumping){crash();return}
+        if(o.type==='low'&&!sliding&&!jumping){crash();return}
+      }
+    }
+    // coins
+    coins.forEach(c=>{
+      if(c.collected||c.lane!==lane)return;
+      if(Math.abs(c.y-py)<25){c.collected=true;coinCount++}
+    });
+    obstacles=obstacles.filter(o=>o.y<H+50);
+    coins=coins.filter(c=>c.y<H+50);
+  }
+  document.getElementById('info').textContent=`Score: ${score} | Coins: ${coinCount}`;
+  draw();requestAnimationFrame(update);
+}
+
+function crash(){
+  running=false;
+  let total=score+coinCount*10;
+  if(total>highScore)highScore=total;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-msg').textContent=`Score: ${score} | Coins: ${coinCount} | Total: ${total} | Best: ${highScore}`;
+  save();
+}
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)save()}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  lane=1;playerY=H-60;jumping=false;sliding=false;jumpVY=0;
+  obstacles=[];coins=[];score=0;coinCount=0;speed=3;dist=0;running=true;paused=false;lt=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

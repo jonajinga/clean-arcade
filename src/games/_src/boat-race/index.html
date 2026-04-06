@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boat Race</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.controls{display:flex;gap:8px;margin:6px 0}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Boat Race</h1>
+<div class="wrap">
+<canvas id="c" width="500" height="250"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Boat Race</h2>
+<p>Side-scrolling boat race! Tap/Space to boost over waves and obstacles. Distance-based scoring.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Race Over!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Distance: 0m | Speed: 0</div>
+<div class="controls">
+<button class="btn-primary" id="boost-btn" onmousedown="boosting=true" onmouseup="boosting=false" ontouchstart="event.preventDefault();boosting=true" ontouchend="event.preventDefault();boosting=false">Boost / Jump</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const SLUG='boat-race';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=500,H=250;
+let boatX,boatY,vy,speed,dist,score,obstacles,waveOff,running,paused,boosting=false,highScore=0;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(500,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*250/500)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{if(e.key===' ')boosting=true;if(e.key==='p'||e.key==='P')togglePause()});
+document.addEventListener('keyup',e=>{if(e.key===' ')boosting=false});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();boosting=true});
+canvas.addEventListener('touchend',e=>{e.preventDefault();boosting=false});
+
+function waveY(x){return H*0.6+Math.sin((x+waveOff)*0.02)*15+Math.sin((x+waveOff)*0.05)*8}
+
+function draw(){
+  // sky
+  ctx.fillStyle='#0c4a6e';ctx.fillRect(0,0,W,H*0.4);
+  // water
+  ctx.fillStyle='#1e3a5f';ctx.fillRect(0,H*0.4,W,H*0.6);
+  // waves
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;ctx.beginPath();
+  for(let x=0;x<W;x+=3){ctx.lineTo(x,waveY(x))}ctx.stroke();
+  // obstacles
+  obstacles.forEach(o=>{
+    ctx.fillStyle=o.type==='rock'?'#64748b':'#78350f';
+    if(o.type==='rock'){ctx.beginPath();ctx.arc(o.x-dist%1000+1000,o.wy-10,o.r,0,Math.PI*2);ctx.fill()}
+    else{ctx.fillRect(o.x-dist%1000+1000-5,o.wy-30,10,30)}
+  });
+  // boat
+  ctx.fillStyle='#ef4444';
+  ctx.beginPath();
+  ctx.moveTo(boatX,boatY);ctx.lineTo(boatX+30,boatY);ctx.lineTo(boatX+35,boatY+8);
+  ctx.lineTo(boatX-5,boatY+8);ctx.closePath();ctx.fill();
+  // cabin
+  ctx.fillStyle='#fbbf24';ctx.fillRect(boatX+5,boatY-8,12,8);
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='20px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start'}
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(!paused){
+    waveOff+=speed*dt*60;
+    speed=Math.min(speed+dt*5,200);
+    if(boosting){vy=-180;speed=Math.min(speed+dt*20,250)}
+    vy+=400*dt;
+    boatY+=vy*dt;
+    let wy=waveY(boatX);
+    if(boatY>wy-8){boatY=wy-8;vy=0}
+    dist+=speed*dt;
+    // spawn
+    if(Math.random()<0.02){
+      let ox=dist+W+Math.random()*200;
+      let owy=waveY(ox%W);
+      obstacles.push({x:ox%1000,type:Math.random()<0.5?'rock':'log',r:12+Math.random()*8,wy});
+    }
+    // collision
+    for(let o of obstacles){
+      let ox=o.x-dist%1000+1000;
+      let dx=Math.abs(boatX+15-ox),dy=Math.abs(boatY+4-(o.wy-10));
+      if(dx<20&&dy<15){crash();return}
+    }
+    score=Math.floor(dist/10);
+  }
+  document.getElementById('info').textContent=`Distance: ${Math.floor(dist)}m | Speed: ${Math.floor(speed)} | Score: ${score}`;
+  draw();requestAnimationFrame(update);
+}
+
+function crash(){
+  running=false;if(score>highScore)highScore=score;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-msg').textContent=`Distance: ${Math.floor(dist)}m | Score: ${score} | Best: ${highScore}`;
+  save();
+}
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)save()}
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  boatX=80;boatY=H*0.55;vy=0;speed=60;dist=0;score=0;obstacles=[];waveOff=0;running=true;paused=false;lt=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

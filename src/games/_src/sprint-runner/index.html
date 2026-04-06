@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sprint Runner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+#tap-zone{padding:20px 40px;font-size:1.2rem;background:#ef4444;color:#fff;margin:6px 0;user-select:none}
+#tap-zone:active{background:#dc2626;transform:scale(.97)}
+</style>
+</head>
+<body>
+<h1>Sprint Runner</h1>
+<div class="wrap">
+<canvas id="c" width="500" height="200"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>100m Sprint</h2>
+<p>Tap/click as fast as you can to sprint 100 meters! Best of 3 races.</p>
+<button class="btn-primary" onclick="startGame()">Start Race 1</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Race Complete!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Race 1/3 | Distance: 0m | Time: 0.00s</div>
+<button id="tap-zone" onclick="doTap()">TAP TO RUN!</button>
+<script>
+const SLUG='sprint-runner';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=500,H=200;
+let dist,speed,raceTime,taps,raceNum,times,running,countdown,highScore=Infinity;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||Infinity});
+
+function resize(){let w=Math.min(500,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*200/500)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{if(e.key===' ')doTap()});
+
+function doTap(){
+  if(!running||countdown>0)return;
+  taps++;speed=Math.min(speed+0.8,12);
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // track
+  let trackY=H*0.65;
+  ctx.fillStyle='#78350f';ctx.fillRect(0,trackY,W,40);
+  // lanes
+  ctx.strokeStyle='#ffffff33';ctx.lineWidth=1;
+  for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(0,trackY+i*10);ctx.lineTo(W,trackY+i*10);ctx.stroke()}
+  // distance markers
+  for(let m=0;m<=100;m+=10){
+    let mx=m/100*(W-60)+30;
+    ctx.fillStyle='#94a3b8';ctx.font='10px system-ui';ctx.textAlign='center';
+    ctx.fillText(m+'m',mx,trackY-4);
+    ctx.strokeStyle='#ffffff44';ctx.beginPath();ctx.moveTo(mx,trackY);ctx.lineTo(mx,trackY+40);ctx.stroke();
+  }
+  // runner
+  let rx=dist/100*(W-60)+30;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.arc(rx,trackY+10,8,0,Math.PI*2);ctx.fill();
+  ctx.fillRect(rx-3,trackY+18,6,14);
+  // legs
+  let legA=Math.sin(taps*0.5)*5;
+  ctx.fillRect(rx-5,trackY+32,4,8+legA);
+  ctx.fillRect(rx+1,trackY+32,4,8-legA);
+  // finish line
+  ctx.fillStyle='#facc15';ctx.fillRect(W-30,trackY,3,40);
+  // countdown
+  if(countdown>0){
+    ctx.fillStyle='#facc15';ctx.font='bold 48px system-ui';ctx.textAlign='center';
+    ctx.fillText(Math.ceil(countdown),W/2,H/2);
+  }
+  ctx.textAlign='start';
+}
+
+let lt=0,startT;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(countdown>0){countdown-=dt;draw();requestAnimationFrame(update);return}
+  if(!startT)startT=ts;
+  raceTime=(ts-startT)/1000;
+  speed=Math.max(speed-dt*3,0);
+  dist+=speed*dt*1.5;
+  if(dist>=100){
+    let t=raceTime;
+    times.push(t);
+    running=false;
+    if(raceNum<3){
+      raceNum++;
+      document.getElementById('info').textContent=`Race ${raceNum-1} done! Time: ${t.toFixed(2)}s`;
+      setTimeout(()=>startRace(),1500);
+    } else {
+      let best=Math.min(...times);
+      if(best<highScore)highScore=best;
+      document.getElementById('over-overlay').style.display='flex';
+      document.getElementById('over-title').textContent='All Races Complete!';
+      document.getElementById('over-msg').textContent=`Times: ${times.map(t=>t.toFixed(2)+'s').join(', ')}\nBest: ${best.toFixed(2)}s | Record: ${highScore===Infinity?'-':highScore.toFixed(2)+'s'}`;
+      save();
+    }
+    draw();return;
+  }
+  document.getElementById('info').textContent=`Race ${raceNum}/3 | Distance: ${dist.toFixed(1)}m | Time: ${raceTime.toFixed(2)}s | Taps: ${taps}`;
+  draw();requestAnimationFrame(update);
+}
+
+function startRace(){
+  dist=0;speed=0;taps=0;raceTime=0;countdown=3;running=true;lt=0;startT=0;
+  requestAnimationFrame(update);
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  raceNum=1;times=[];
+  startRace();
+}
+draw();
+</script>
+</body>
+</html>

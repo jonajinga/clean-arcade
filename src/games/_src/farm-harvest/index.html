@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Farm Harvest</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.85rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Farm Harvest</h1>
+<div class="hud">
+  <span id="dayDisp">Day: 1/20</span>
+  <span id="coinsDisp">Coins: 50</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="320" height="320"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Farm Harvest</h2>
+    <p>Plant, water, harvest on a 4x4 grid.</p>
+    <p>Sell crops for coins over 20 days!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Season Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls" id="actionBtns"></div>
+<div class="controls">
+  <button onclick="nextDay()" id="nextBtn" style="display:none">Next Day</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=320,H=320,GRID=4,CELL=W/GRID;
+const CROPS=[
+  {name:'Carrot',cost:5,grow:3,sell:15,color:'#ef4444'},
+  {name:'Wheat',cost:8,grow:4,sell:25,color:'#facc15'},
+  {name:'Melon',cost:15,grow:5,sell:50,color:'#22c55e'}
+];
+let grid,day,coins,highScore=0,action='plant',selectedCrop=0;
+// plot: {crop:-1, planted:false, watered:false, growDay:0, stage:0, maxGrow:0}
+
+function emptyPlot(){return{crop:-1,planted:false,watered:false,growDay:0,stage:0,maxGrow:0};}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('nextBtn').style.display='inline-block';
+  grid=Array.from({length:GRID},()=>Array.from({length:GRID},()=>emptyPlot()));
+  day=1;coins=50;action='plant';selectedCrop=0;
+  buildBtns();updateHUD();draw();
+}
+
+function buildBtns(){
+  const p=document.getElementById('actionBtns');p.innerHTML='';
+  const actions=[
+    {name:'Plant',act:'plant'},{name:'Water',act:'water'},{name:'Harvest',act:'harvest'}
+  ];
+  actions.forEach(a=>{
+    const b=document.createElement('button');b.textContent=a.name;
+    b.style.background=action===a.act?'#facc15':'#334155';
+    b.style.color=action===a.act?'#0f172a':'#e2e8f0';
+    b.onclick=()=>{action=a.act;buildBtns();};
+    p.appendChild(b);
+  });
+  CROPS.forEach((c,i)=>{
+    const b=document.createElement('button');b.textContent=c.name+' $'+c.cost;
+    b.style.background=selectedCrop===i?c.color:'#334155';
+    b.onclick=()=>{selectedCrop=i;action='plant';buildBtns();};
+    p.appendChild(b);
+  });
+}
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const gx=Math.floor((e.clientX-r.left)/r.width*GRID);
+  const gy=Math.floor((e.clientY-r.top)/r.height*GRID);
+  if(gx<0||gx>=GRID||gy<0||gy>=GRID)return;
+  const plot=grid[gy][gx];
+  if(action==='plant'&&!plot.planted){
+    const c=CROPS[selectedCrop];
+    if(coins>=c.cost){
+      coins-=c.cost;
+      plot.crop=selectedCrop;plot.planted=true;plot.watered=false;plot.growDay=0;plot.stage=0;plot.maxGrow=c.grow;
+    }
+  } else if(action==='water'&&plot.planted&&!plot.watered&&plot.stage<plot.maxGrow){
+    plot.watered=true;
+  } else if(action==='harvest'&&plot.planted&&plot.stage>=plot.maxGrow){
+    coins+=CROPS[plot.crop].sell;
+    grid[gy][gx]=emptyPlot();
+  }
+  updateHUD();draw();
+});
+
+function nextDay(){
+  day++;
+  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
+    const p=grid[y][x];
+    if(p.planted&&p.watered){p.stage++;p.watered=false;}
+  }
+  if(day>20){
+    if(coins>highScore){highScore=coins;saveState();}
+    document.getElementById('finalScore').textContent='Coins: '+coins;
+    document.getElementById('gameOverOverlay').style.display='flex';
+    document.getElementById('nextBtn').style.display='none';
+    return;
+  }
+  updateHUD();draw();
+}
+
+function updateHUD(){
+  document.getElementById('dayDisp').textContent='Day: '+day+'/20';
+  document.getElementById('coinsDisp').textContent='Coins: '+coins;
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  for(let y=0;y<GRID;y++){
+    for(let x=0;x<GRID;x++){
+      const px=x*CELL,py=y*CELL;
+      ctx.fillStyle='#78350f';ctx.fillRect(px+2,py+2,CELL-4,CELL-4);
+      const p=grid[y][x];
+      if(p.planted){
+        const c=CROPS[p.crop];
+        const pct=p.stage/p.maxGrow;
+        const h=10+pct*40;
+        ctx.fillStyle=c.color;
+        ctx.fillRect(px+CELL/2-5,py+CELL-10-h,10,h);
+        if(p.stage>=p.maxGrow){
+          ctx.fillStyle='#facc15';ctx.beginPath();
+          ctx.arc(px+CELL/2,py+CELL-10-h-5,8,0,Math.PI*2);ctx.fill();
+        }
+        if(p.watered){
+          ctx.fillStyle='rgba(59,130,246,0.3)';ctx.fillRect(px+2,py+2,CELL-4,CELL-4);
+        }
+      }
+      ctx.strokeStyle='#1e293b';ctx.strokeRect(px,py,CELL,CELL);
+    }
+  }
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'farm-harvest',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='farm-harvest'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

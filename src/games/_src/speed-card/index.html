@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Speed Card</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(500px,95vw);height:420px;background:#1e293b;position:relative;padding:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.zone{display:flex;justify-content:center;align-items:center;gap:12px;margin:6px 0}
+.card{width:56px;height:80px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1rem;font-weight:700;cursor:pointer;user-select:none}
+.card.red{color:#ef4444}
+.card.face-down{background:#6366f1;color:transparent}.card.face-down span{visibility:hidden}
+.card.empty{background:#334155;border-style:dashed;color:#475569}
+.pile{display:flex;flex-direction:column;align-items:center;gap:2px}
+.pile-label{font-size:.7rem;color:#94a3b8}
+.player-cards{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.card.playable{border-color:#22c55e;cursor:pointer;box-shadow:0 0 4px #22c55e}
+#msg{text-align:center;color:#22c55e;min-height:1.4em;font-size:.9rem;margin:4px 0}
+.score-row{display:flex;justify-content:space-between;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>Speed Card</h1>
+<div id="game-area">
+<div class="score-row"><span id="cpu-count">CPU: 26</span><span id="p-count">You: 26</span></div>
+<div class="zone" id="cpu-zone"></div>
+<div class="zone" id="center">
+  <div class="pile"><div class="card empty" id="pile1"><span>-</span></div><div class="pile-label">Pile 1</div></div>
+  <div class="pile"><div class="card empty" id="pile2"><span>-</span></div><div class="pile-label">Pile 2</div></div>
+</div>
+<div id="msg">Play cards ±1 from center piles</div>
+<div class="zone player-cards" id="p-zone"></div>
+<div class="overlay" id="start-overlay">
+<h2>Speed</h2>
+<p>Race to play all your cards! Play cards that are ±1 from either center pile. Click your card then click a pile.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Game Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SLUG='speed-card';
+let pDeck,cDeck,pHand,cHand,pile1,pile2,selected,highScore=0,running;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function makeDeck(){let d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}return d}
+function rv(r){return RANKS.indexOf(r)}
+function isRed(s){return s==='♥'||s==='♦'}
+function canPlay(card,pileCard){if(!pileCard)return true;let a=rv(card.rank),b=rv(pileCard.rank);let diff=Math.abs(a-b);return diff===1||diff===12}
+function cardEl(c,fd){let cls='card'+(isRed(c.suit)?' red':'')+(fd?' face-down':'');return `<div class="${cls}"><span>${c.rank}${c.suit}</span></div>`}
+
+function render(){
+  let cz=document.getElementById('cpu-zone');
+  cz.innerHTML=cHand.map(c=>cardEl(c,true)).join('');
+  let p1=pile1[pile1.length-1],p2=pile2[pile2.length-1];
+  document.getElementById('pile1').className='card'+(p1&&isRed(p1.suit)?' red':'');
+  document.getElementById('pile1').innerHTML=p1?`<span>${p1.rank}${p1.suit}</span>`:'<span>-</span>';
+  document.getElementById('pile2').className='card'+(p2&&isRed(p2.suit)?' red':'');
+  document.getElementById('pile2').innerHTML=p2?`<span>${p2.rank}${p2.suit}</span>`:'<span>-</span>';
+  let pz=document.getElementById('p-zone');
+  pz.innerHTML=pHand.map((c,i)=>{
+    let play=canPlay(c,p1)||canPlay(c,p2);
+    let sel=selected===i;
+    return `<div class="card${isRed(c.suit)?' red':''}${play?' playable':''}${sel?' selected':''}" data-idx="${i}" onclick="selectCard(${i})"><span>${c.rank}${c.suit}</span></div>`;
+  }).join('');
+  document.getElementById('cpu-count').textContent='CPU: '+(cDeck.length+cHand.length);
+  document.getElementById('p-count').textContent='You: '+(pDeck.length+pHand.length);
+}
+
+function selectCard(i){
+  if(!running)return;
+  selected=i;render();
+}
+
+function tryPlay(pileIdx){
+  if(!running||selected===null)return;
+  let pile=pileIdx===0?pile1:pile2;
+  let top=pile[pile.length-1];
+  let card=pHand[selected];
+  if(canPlay(card,top)){
+    pile.push(card);pHand.splice(selected,1);selected=null;
+    if(pHand.length<5&&pDeck.length>0)pHand.push(pDeck.pop());
+    checkWin();render();
+  }
+}
+
+document.getElementById('pile1').addEventListener('click',()=>tryPlay(0));
+document.getElementById('pile2').addEventListener('click',()=>tryPlay(1));
+
+function cpuTurn(){
+  if(!running)return;
+  let p1=pile1[pile1.length-1],p2=pile2[pile2.length-1];
+  for(let i=0;i<cHand.length;i++){
+    if(canPlay(cHand[i],p1)){pile1.push(cHand.splice(i,1)[0]);if(cHand.length<5&&cDeck.length>0)cHand.push(cDeck.pop());checkWin();render();return}
+    if(canPlay(cHand[i],p2)){pile2.push(cHand.splice(i,1)[0]);if(cHand.length<5&&cDeck.length>0)cHand.push(cDeck.pop());checkWin();render();return}
+  }
+  // stuck - flip new cards
+  if(pDeck.length>0)pile1.push(pDeck.pop());
+  if(cDeck.length>0)pile2.push(cDeck.pop());
+  render();
+}
+
+function checkWin(){
+  if(pHand.length===0&&pDeck.length===0){endGame(true);return}
+  if(cHand.length===0&&cDeck.length===0){endGame(false);return}
+}
+function endGame(won){
+  running=false;
+  let sc=won?(pDeck.length+pHand.length===0?100:50):0;
+  if(sc>highScore)highScore=sc;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent=won?'You Win!':'CPU Wins!';
+  document.getElementById('over-msg').textContent=(won?'You played all your cards!':'CPU was faster.')+'  Score: '+sc+'  Best: '+highScore;
+  save();
+}
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  let full=makeDeck();
+  pDeck=full.slice(0,26);cDeck=full.slice(26);
+  pile1=[pDeck.pop()];pile2=[cDeck.pop()];
+  pHand=pDeck.splice(0,5);cHand=cDeck.splice(0,5);
+  selected=null;running=true;render();
+  clearInterval(window._cpuInt);
+  window._cpuInt=setInterval(()=>{if(running)cpuTurn()},1500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capture the Flag</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;margin:0.25rem 0;text-align:center;min-height:1.4em}
+canvas{border:2px solid #6366f1;display:block;margin:0.25rem auto}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;flex-wrap:wrap;justify-content:center}
+.controls button{padding:0.5rem 1rem;font-size:0.85rem;background:#334155}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>Capture the Flag</h1>
+<div class="info" id="info">Select a soldier, then move to capture the enemy flag!</div>
+<canvas id="canvas"></canvas>
+<div class="controls">
+<button onclick="endPlayerTurn()" style="background:#334155">End Turn</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Capture the Flag</h2>
+<p>Move your soldiers (green) to capture the enemy flag (red F). Fog of war limits visibility to 3 tiles. Turn-based vs AI.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const GS=10,VIS=3,SOLDIERS=4;
+let grid,playerUnits,aiUnits,playerFlag,aiFlag,selected,moved,turn,gameOver,highScore=0,wins=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d'),info=document.getElementById('info');
+let cs,cw;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='capture-flag'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'capture-flag',state:{highScore}},'*')}catch(e){}}
+
+function resize(){cw=Math.min(window.innerWidth-20,420);canvas.width=cw;canvas.height=cw;cs=cw/GS;render()}
+window.addEventListener('resize',resize);
+
+function startGame(){
+grid=Array.from({length:GS},()=>Array(GS).fill(0));
+// Add some walls
+for(let i=0;i<15;i++){
+const r=Math.floor(Math.random()*GS),c=Math.floor(Math.random()*GS);
+if((r<3&&c<3)||(r>GS-4&&c>GS-4))continue;
+grid[r][c]=1;
+}
+playerUnits=[];aiUnits=[];
+for(let i=0;i<SOLDIERS;i++){
+playerUnits.push({r:GS-1-i,c:Math.floor(Math.random()*3),hp:3,moved:false});
+aiUnits.push({r:i,c:GS-1-Math.floor(Math.random()*3),hp:3,moved:false});
+}
+playerFlag={r:GS-1,c:0};aiFlag={r:0,c:GS-1};
+grid[playerFlag.r][playerFlag.c]=0;grid[aiFlag.r][aiFlag.c]=0;
+playerUnits.forEach(u=>{grid[u.r][u.c]=0});
+aiUnits.forEach(u=>{grid[u.r][u.c]=0});
+selected=null;moved=new Set();turn='player';gameOver=false;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+info.textContent='Select a soldier to move (2 steps per turn)';
+resize();
+}
+
+function isVisible(r,c){
+for(const u of playerUnits){
+if(Math.abs(u.r-r)+Math.abs(u.c-c)<=VIS)return true;
+}
+return Math.abs(playerFlag.r-r)+Math.abs(playerFlag.c-c)<=1;
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,cw);
+for(let r=0;r<GS;r++)for(let c=0;c<GS;c++){
+const vis=isVisible(r,c);
+let fill=vis?(grid[r][c]?'#475569':'#1e293b'):'#0f172a';
+if(selected&&selected===playerUnits.find(u=>u.r===r&&u.c===c))fill='#4f46e5';
+ctx.fillStyle=fill;ctx.fillRect(c*cs+0.5,r*cs+0.5,cs-1,cs-1);
+if(!vis){
+ctx.fillStyle='rgba(15,23,42,0.7)';ctx.fillRect(c*cs,r*cs,cs,cs);
+continue;
+}
+}
+// Flags
+drawIcon(playerFlag.r,playerFlag.c,'F','#22c55e');
+if(isVisible(aiFlag.r,aiFlag.c))drawIcon(aiFlag.r,aiFlag.c,'F','#ef4444');
+// Units
+for(const u of playerUnits){
+ctx.fillStyle=moved.has(u)?'#166534':'#22c55e';
+ctx.beginPath();ctx.arc(u.c*cs+cs/2,u.r*cs+cs/2,cs*0.35,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#fff';ctx.font='bold '+(cs*0.3)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(u.hp,u.c*cs+cs/2,u.r*cs+cs/2);
+}
+for(const u of aiUnits){
+if(!isVisible(u.r,u.c))continue;
+ctx.fillStyle='#ef4444';
+ctx.beginPath();ctx.arc(u.c*cs+cs/2,u.r*cs+cs/2,cs*0.35,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#fff';ctx.font='bold '+(cs*0.3)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(u.hp,u.c*cs+cs/2,u.r*cs+cs/2);
+}
+}
+
+function drawIcon(r,c,txt,color){
+ctx.fillStyle=color;ctx.font='bold '+(cs*0.5)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(txt,c*cs+cs/2,r*cs+cs/2);
+}
+
+canvas.addEventListener('click',e=>{
+if(gameOver||turn!=='player')return;
+const rect=canvas.getBoundingClientRect();
+const mx=(e.clientX-rect.left)*(cw/rect.width),my=(e.clientY-rect.top)*(cw/rect.height);
+const tc=Math.floor(mx/cs),tr=Math.floor(my/cs);
+if(tr<0||tr>=GS||tc<0||tc>=GS)return;
+
+// Click on own unit to select
+const clickedUnit=playerUnits.find(u=>u.r===tr&&u.c===tc);
+if(clickedUnit&&!moved.has(clickedUnit)){selected=clickedUnit;render();return}
+
+if(!selected)return;
+// Try to move
+const dist=Math.abs(selected.r-tr)+Math.abs(selected.c-tc);
+if(dist>2||dist===0)return;
+if(grid[tr][tc])return;
+// Check for enemy
+const enemy=aiUnits.find(u=>u.r===tr&&u.c===tc);
+if(enemy){
+// Combat
+enemy.hp--;selected.hp--;
+if(enemy.hp<=0)aiUnits.splice(aiUnits.indexOf(enemy),1);
+if(selected.hp<=0){playerUnits.splice(playerUnits.indexOf(selected),1);selected=null;render();checkWin();return}
+moved.add(selected);selected=null;render();checkWin();return;
+}
+// Check if stepping on flag
+if(tr===aiFlag.r&&tc===aiFlag.c){endGame('You captured the flag!',true);return}
+const pu=playerUnits.find(u=>u!==selected&&u.r===tr&&u.c===tc);
+if(pu)return;
+selected.r=tr;selected.c=tc;
+moved.add(selected);selected=null;render();
+});
+
+function endPlayerTurn(){
+if(gameOver||turn!=='player')return;
+moved.clear();selected=null;turn='ai';
+info.textContent='AI moving...';
+setTimeout(aiTurn,300);
+}
+
+function aiTurn(){
+if(gameOver)return;
+for(const u of aiUnits){
+// Move toward player flag
+let bestR=u.r,bestC=u.c,bestD=Math.abs(u.r-playerFlag.r)+Math.abs(u.c-playerFlag.c);
+for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){
+const nr=u.r+dr,nc=u.c+dc;
+if(nr<0||nr>=GS||nc<0||nc>=GS||grid[nr][nc])continue;
+const enemy=playerUnits.find(p=>p.r===nr&&p.c===nc);
+if(enemy){u.hp--;enemy.hp--;if(enemy.hp<=0)playerUnits.splice(playerUnits.indexOf(enemy),1);continue}
+const ai2=aiUnits.find(a=>a!==u&&a.r===nr&&a.c===nc);
+if(ai2)continue;
+const d=Math.abs(nr-playerFlag.r)+Math.abs(nc-playerFlag.c);
+if(d<bestD){bestD=d;bestR=nr;bestC=nc}
+}
+if(bestR===playerFlag.r&&bestC===playerFlag.c){endGame('AI captured your flag!',false);return}
+u.r=bestR;u.c=bestC;
+if(u.hp<=0)aiUnits.splice(aiUnits.indexOf(u),1);
+}
+playerUnits.forEach(u=>{if(u.hp<=0)playerUnits.splice(playerUnits.indexOf(u),1)});
+render();checkWin();
+if(!gameOver){turn='player';info.textContent='Your turn - select and move soldiers'}
+}
+
+function checkWin(){
+if(playerUnits.length===0&&!gameOver)endGame('All soldiers lost!',false);
+if(aiUnits.length===0&&!gameOver)info.textContent='All enemies defeated! Capture the flag!';
+}
+
+function endGame(msg,won){
+gameOver=true;
+if(won){wins++;highScore=Math.max(highScore,wins);save()}
+info.textContent=msg;
+setTimeout(()=>{
+document.getElementById('overTitle').textContent=won?'Victory!':'Defeat';
+document.getElementById('overMsg').textContent=msg+'\nWins: '+wins;
+document.getElementById('overOverlay').classList.remove('hidden');
+},500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peg Solitaire</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.9rem;color:#94a3b8;margin:0.25rem 0}
+#undo-btn{background:#334155;padding:8px 16px;font-size:0.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Peg Solitaire</h1>
+<div id="hud"><span id="pegs-txt">Pegs: 32</span><span id="moves-txt">Moves: 0</span></div>
+<canvas id="c"></canvas>
+<button id="undo-btn" onclick="undo()">Undo</button>
+
+<div class="overlay" id="start-overlay">
+<h2>Peg Solitaire</h2>
+<p>Jump pegs over adjacent pegs to remove them.<br>Goal: leave only one peg in the center.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2 id="go-title">Game Over</h2>
+<p id="go-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const GRID=7;
+// English board: cross shape
+// -1 = invalid, 0 = empty, 1 = peg
+const BOARD_TEMPLATE=[
+  [-1,-1,1,1,1,-1,-1],
+  [-1,-1,1,1,1,-1,-1],
+  [1,1,1,1,1,1,1],
+  [1,1,1,0,1,1,1],
+  [1,1,1,1,1,1,1],
+  [-1,-1,1,1,1,-1,-1],
+  [-1,-1,1,1,1,-1,-1]
+];
+
+let board=[],selected=null,moves=0,cellSize,highScore=0,history=[];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='peg-solitaire'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'peg-solitaire',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,350);
+  cellSize=Math.floor(maxW/GRID);
+  canvas.width=cellSize*GRID;
+  canvas.height=cellSize*GRID;
+  draw();
+}
+
+function initBoard(){
+  board=BOARD_TEMPLATE.map(r=>r.slice());
+  selected=null;moves=0;history=[];
+  updateHUD();
+}
+
+function countPegs(){let c=0;board.forEach(r=>r.forEach(v=>{if(v===1)c++}));return c}
+
+function updateHUD(){
+  document.getElementById('pegs-txt').textContent='Pegs: '+countPegs();
+  document.getElementById('moves-txt').textContent='Moves: '+moves;
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    if(board[r][c]===-1)continue;
+    const x=c*cellSize,y=r*cellSize;
+    // hole
+    ctx.fillStyle='#334155';
+    ctx.beginPath();ctx.arc(x+cellSize/2,y+cellSize/2,cellSize*0.35,0,Math.PI*2);ctx.fill();
+    if(board[r][c]===1){
+      const isSel=selected&&selected.r===r&&selected.c===c;
+      ctx.fillStyle=isSel?'#facc15':'#3b82f6';
+      ctx.beginPath();ctx.arc(x+cellSize/2,y+cellSize/2,cellSize*0.3,0,Math.PI*2);ctx.fill();
+      // highlight
+      ctx.fillStyle=isSel?'#fde047':'#60a5fa';
+      ctx.beginPath();ctx.arc(x+cellSize/2-cellSize*0.08,y+cellSize/2-cellSize*0.08,cellSize*0.1,0,Math.PI*2);ctx.fill();
+    }
+    // valid moves highlight
+    if(selected&&board[r][c]===0){
+      if(isValidMove(selected.r,selected.c,r,c)){
+        ctx.strokeStyle='#22c55e';ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(x+cellSize/2,y+cellSize/2,cellSize*0.35,0,Math.PI*2);ctx.stroke();
+      }
+    }
+  }
+}
+
+function isValidMove(sr,sc,dr,dc){
+  const mr=sr+(dr-sr)/2,mc=sc+(dc-sc)/2;
+  if(Math.abs(dr-sr)+Math.abs(dc-sc)!==2)return false;
+  if(dr-sr!==0&&dc-sc!==0)return false;
+  if(dr<0||dr>=GRID||dc<0||dc>=GRID)return false;
+  if(board[dr][dc]!==0)return false;
+  if(board[mr][mc]!==1)return false;
+  return true;
+}
+
+function hasValidMoves(){
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++){
+    if(board[r][c]!==1)continue;
+    const dirs=[[0,2],[0,-2],[2,0],[-2,0]];
+    for(const[dr,dc]of dirs){
+      if(isValidMove(r,c,r+dr,c+dc))return true;
+    }
+  }
+  return false;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const c=Math.floor(mx/cellSize),r=Math.floor(my/cellSize);
+  if(r<0||r>=GRID||c<0||c>=GRID||board[r][c]===-1)return;
+
+  if(!selected){
+    if(board[r][c]===1){selected={r,c};draw()}
+  } else {
+    if(board[r][c]===1){selected={r,c};draw();return}
+    if(isValidMove(selected.r,selected.c,r,c)){
+      history.push(board.map(row=>row.slice()));
+      const mr=selected.r+(r-selected.r)/2,mc=selected.c+(c-selected.c)/2;
+      board[selected.r][selected.c]=0;
+      board[mr][mc]=0;
+      board[r][c]=1;
+      moves++;selected=null;
+      updateHUD();draw();
+      // check end
+      if(!hasValidMoves()){
+        const pegs=countPegs();
+        const won=pegs===1&&board[3][3]===1;
+        if(won&&(highScore===0||moves<highScore)){highScore=moves;save()}
+        setTimeout(()=>{
+          document.getElementById('go-title').textContent=won?'You Win!':'Game Over';
+          document.getElementById('go-msg').textContent=won?'Perfect! Solved in '+moves+' moves!':'Stuck with '+pegs+' pegs remaining.';
+          document.getElementById('gameover-overlay').classList.remove('hidden');
+        },300);
+      }
+    } else {
+      selected=null;draw();
+    }
+  }
+});
+
+function undo(){
+  if(history.length>0){board=history.pop();moves--;selected=null;updateHUD();draw()}
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  initBoard();resize();
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

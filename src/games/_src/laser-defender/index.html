@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laser Defender</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.hud{display:flex;gap:1.5rem;font-size:0.85rem;margin:0.25rem;flex-wrap:wrap;justify-content:center}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin-bottom:1rem;font-size:1rem;text-align:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+.hidden{display:none}
+.pause-btn{background:#334155;margin:0.25rem;padding:0.5rem 1rem;font-size:0.85rem}
+</style>
+</head>
+<body>
+<h1>Laser Defender</h1>
+<div class="hud">
+<span>Score: <strong id="scoreEl">0</strong></span>
+<span>Wave: <strong id="waveEl">1</strong></span>
+<span>HP: <strong id="hpEl">5</strong></span>
+<span>Power: <strong id="powerEl">Normal</strong></span>
+</div>
+<canvas id="canvas"></canvas>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+
+<div class="overlay" id="startOverlay">
+<h2>Laser Defender</h2>
+<p>Ship on the left, auto-fires right. Move up/down to aim. Collect powerups. Survive the waves!</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="overOverlay">
+<h2 id="overTitle">Game Over</h2>
+<p id="overMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+let ship,enemies,bullets,eBullets,powerups,particles,score,wave,hp,fireRate,fireTimer,powerType,powerTimer;
+let paused,gameOver,animId,lastTime,waveTimer,enemiesInWave,highScore=0;
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+let cw,ch;
+const keys={};
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='laser-defender'){const s=e.data.state;if(s)highScore=s.highScore||0}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'laser-defender',state:{highScore}},'*')}catch(e){}}
+
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='P'||e.key==='p')togglePause()});
+document.addEventListener('keyup',e=>{keys[e.key]=false});
+
+let touchY=null;
+canvas.addEventListener('touchstart',e=>{e.preventDefault();touchY=(e.touches[0].clientY-canvas.getBoundingClientRect().top)*(ch/canvas.getBoundingClientRect().height)},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();touchY=(e.touches[0].clientY-canvas.getBoundingClientRect().top)*(ch/canvas.getBoundingClientRect().height)},{passive:false});
+canvas.addEventListener('touchend',()=>{touchY=null});
+
+function resize(){cw=Math.min(window.innerWidth-4,500);ch=Math.min(window.innerHeight-120,400);canvas.width=cw;canvas.height=ch}
+window.addEventListener('resize',resize);
+
+function startGame(){
+resize();
+ship={x:40,y:ch/2,w:30,h:20};
+enemies=[];bullets=[];eBullets=[];powerups=[];particles=[];
+score=0;wave=1;hp=5;fireRate=12;fireTimer=0;powerType='Normal';powerTimer=0;
+paused=false;gameOver=false;waveTimer=0;enemiesInWave=0;
+lastTime=performance.now();
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+updateHUD();gameLoop(performance.now());
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();gameLoop(performance.now())}}
+
+function spawnEnemy(){
+const types=['basic','fast','tank'];
+const t=types[Math.floor(Math.random()*Math.min(types.length,1+wave/3))];
+const e={x:cw+20,y:Math.random()*(ch-40)+20,type:t,
+speed:t==='fast'?3:t==='tank'?1:2,
+hp:t==='tank'?3:1,size:t==='tank'?20:14,
+shootTimer:Math.random()*60,sinOffset:Math.random()*Math.PI*2};
+enemies.push(e);
+}
+
+function gameLoop(now){
+if(paused||gameOver){animId=null;return}
+const dt=Math.min(now-lastTime,50)/16.67;lastTime=now;
+// Ship movement
+const spd=4;
+if(keys['ArrowUp']||keys['w']||keys['W'])ship.y-=spd*dt;
+if(keys['ArrowDown']||keys['s']||keys['S'])ship.y+=spd*dt;
+if(touchY!==null){const dy=touchY-ship.y;ship.y+=Math.sign(dy)*Math.min(Math.abs(dy),spd*dt)}
+ship.y=Math.max(ship.h,Math.min(ch-ship.h,ship.y));
+// Auto-fire
+fireTimer+=dt;
+const rate=powerType==='Rapid'?4:fireRate;
+if(fireTimer>=rate){
+fireTimer=0;
+if(powerType==='Spread'){
+bullets.push({x:ship.x+ship.w,y:ship.y,vx:8,vy:-2,size:3});
+bullets.push({x:ship.x+ship.w,y:ship.y,vx:8,vy:0,size:3});
+bullets.push({x:ship.x+ship.w,y:ship.y,vx:8,vy:2,size:3});
+}else{
+const dmg=powerType==='Power'?2:1;
+bullets.push({x:ship.x+ship.w,y:ship.y,vx:8,vy:0,size:powerType==='Power'?5:3,dmg});
+}
+}
+// Powerup timer
+if(powerTimer>0){powerTimer-=dt;if(powerTimer<=0){powerType='Normal';document.getElementById('powerEl').textContent='Normal'}}
+// Spawn enemies
+waveTimer+=dt;
+const waveSize=5+wave*3;
+if(waveTimer>40&&enemiesInWave<waveSize){waveTimer=0;spawnEnemy();enemiesInWave++}
+// Move bullets
+for(const b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt}
+bullets=bullets.filter(b=>b.x<cw+10&&b.y>-10&&b.y<ch+10);
+// Move enemy bullets
+for(const b of eBullets){b.x+=b.vx*dt;b.y+=b.vy*dt}
+eBullets=eBullets.filter(b=>b.x>-10);
+// Move enemies
+for(const e of enemies){
+e.x-=e.speed*dt;
+e.y+=Math.sin(e.sinOffset+e.x*0.02)*0.5*dt;
+e.shootTimer-=dt;
+if(e.shootTimer<=0&&e.x<cw-30){
+e.shootTimer=40+Math.random()*30;
+eBullets.push({x:e.x-e.size,y:e.y,vx:-4,vy:(Math.random()-0.5)*1.5,size:3});
+}
+}
+// Collisions: bullets vs enemies
+for(const b of bullets){
+for(const e of enemies){
+if(Math.hypot(b.x-e.x,b.y-e.y)<e.size+b.size){
+e.hp-=(b.dmg||1);b.x=cw+100;
+if(e.hp<=0){
+score+=e.type==='tank'?30:e.type==='fast'?20:10;
+addParticles(e.x,e.y,e.type==='tank'?'#ef4444':'#facc15',8);
+if(Math.random()<0.15)powerups.push({x:e.x,y:e.y,type:['Rapid','Spread','Power','Heal'][Math.floor(Math.random()*4)],life:300});
+}
+}
+}
+}
+enemies=enemies.filter(e=>e.hp>0&&e.x>-30);
+// Collisions: enemy bullets vs ship
+for(const b of eBullets){
+if(Math.abs(b.x-ship.x)<ship.w&&Math.abs(b.y-ship.y)<ship.h){
+hp--;b.x=-100;addParticles(ship.x,ship.y,'#ef4444',5);
+if(hp<=0){endGame();return}
+}
+}
+// Enemy collision with ship
+for(const e of enemies){
+if(Math.abs(e.x-ship.x)<ship.w+e.size&&Math.abs(e.y-ship.y)<ship.h+e.size){
+hp--;e.hp=0;addParticles(e.x,e.y,'#ef4444',10);
+if(hp<=0){endGame();return}
+}
+}
+// Powerups
+for(const p of powerups){
+p.life-=dt;
+if(Math.hypot(p.x-ship.x,p.y-ship.y)<25){
+if(p.type==='Heal'){hp=Math.min(hp+2,10)}
+else{powerType=p.type;powerTimer=300}
+p.life=0;
+document.getElementById('powerEl').textContent=powerType;
+}
+}
+powerups=powerups.filter(p=>p.life>0);
+// Particles
+particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt});
+particles=particles.filter(p=>p.life>0);
+// Wave check
+if(enemiesInWave>=waveSize&&enemies.length===0){
+wave++;enemiesInWave=0;waveTimer=-60;
+}
+updateHUD();render();
+animId=requestAnimationFrame(gameLoop);
+}
+
+function addParticles(x,y,color,n){
+for(let i=0;i<n;i++){
+const a=Math.random()*Math.PI*2;const s=1+Math.random()*3;
+particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,color,life:20+Math.random()*10,size:2+Math.random()*3});
+}
+}
+
+function render(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,cw,ch);
+// Stars
+for(let i=0;i<30;i++){ctx.fillStyle='rgba(226,232,240,0.3)';ctx.fillRect((i*73+waveTimer)%cw,i*13%ch,1,1)}
+// Ship
+ctx.fillStyle='#3b82f6';ctx.beginPath();
+ctx.moveTo(ship.x+ship.w,ship.y);ctx.lineTo(ship.x-ship.w*0.5,ship.y-ship.h);ctx.lineTo(ship.x-ship.w*0.3,ship.y);ctx.lineTo(ship.x-ship.w*0.5,ship.y+ship.h);ctx.closePath();ctx.fill();
+ctx.fillStyle='#6366f1';ctx.fillRect(ship.x-ship.w*0.5,ship.y-3,8,6);
+// Engine
+ctx.fillStyle='#facc15';ctx.beginPath();ctx.moveTo(ship.x-ship.w*0.5,ship.y-5);ctx.lineTo(ship.x-ship.w*0.5-10-Math.random()*8,ship.y);ctx.lineTo(ship.x-ship.w*0.5,ship.y+5);ctx.closePath();ctx.fill();
+// Bullets
+ctx.fillStyle='#22c55e';
+for(const b of bullets){ctx.fillRect(b.x-b.size,b.y-1,b.size*2,2)}
+// Enemy bullets
+ctx.fillStyle='#ef4444';
+for(const b of eBullets){ctx.beginPath();ctx.arc(b.x,b.y,b.size,0,Math.PI*2);ctx.fill()}
+// Enemies
+for(const e of enemies){
+ctx.fillStyle=e.type==='tank'?'#ef4444':e.type==='fast'?'#facc15':'#e2e8f0';
+ctx.beginPath();ctx.moveTo(e.x-e.size,e.y);ctx.lineTo(e.x+e.size*0.5,e.y-e.size*0.8);ctx.lineTo(e.x+e.size,e.y);ctx.lineTo(e.x+e.size*0.5,e.y+e.size*0.8);ctx.closePath();ctx.fill();
+}
+// Powerups
+for(const p of powerups){
+ctx.fillStyle=p.type==='Heal'?'#22c55e':p.type==='Rapid'?'#facc15':p.type==='Spread'?'#3b82f6':'#ef4444';
+ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#fff';ctx.font='8px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText(p.type[0],p.x,p.y);
+}
+// Particles
+for(const p of particles){
+ctx.globalAlpha=p.life/30;ctx.fillStyle=p.color;
+ctx.fillRect(p.x,p.y,p.size,p.size);
+}
+ctx.globalAlpha=1;
+}
+
+function updateHUD(){
+document.getElementById('scoreEl').textContent=score;
+document.getElementById('waveEl').textContent=wave;
+document.getElementById('hpEl').textContent=hp;
+}
+
+function endGame(){
+gameOver=true;cancelAnimationFrame(animId);animId=null;
+highScore=Math.max(highScore,score);save();
+setTimeout(()=>{
+document.getElementById('overTitle').textContent='Ship Destroyed!';
+document.getElementById('overMsg').textContent=`Score: ${score}\nWave: ${wave}\nBest: ${highScore}`;
+document.getElementById('overOverlay').classList.remove('hidden');
+},300);
+}
+</script>
+</body>
+</html>

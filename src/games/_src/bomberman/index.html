@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bomberman</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:390px;padding:0.25rem 0;font-size:0.85rem}
+.touch-controls{display:grid;grid-template-columns:60px 60px 60px;grid-template-rows:50px 50px;gap:4px;margin:0.25rem 0}
+.touch-controls button{width:100%;height:100%;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>Bomberman</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="390" height="330"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Bomberman</h2>
+<p>Arrow keys to move, Space to place bomb</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-controls">
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowUp=true" ontouchend="event.preventDefault();keys.ArrowUp=false">▲</button>
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowDown=true" ontouchend="event.preventDefault();keys.ArrowDown=false">▼</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<button class="btn-primary" style="margin:0.25rem;width:188px;height:44px" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false">BOMB</button>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const TILE=30,COLS=13,ROWS=11,W=COLS*TILE,H=ROWS*TILE;
+canvas.width=W;canvas.height=H;
+let gameRunning=false,paused=false,animId;
+let grid,player,bombs,explosions,enemies,powerups,score,lives,level,highScore=0;
+let bombRange=2,maxBombs=1;
+let keys={},bombCd=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,W)/W;canvas.style.width=(W*s)+'px';canvas.style.height=(H*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='bomberman'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'bomberman',state:{highScore}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function buildLevel(){
+  grid=[];
+  for(let r=0;r<ROWS;r++){
+    grid[r]=[];
+    for(let c=0;c<COLS;c++){
+      if(r===0||r===ROWS-1||c===0||c===COLS-1)grid[r][c]=1; // wall
+      else if(r%2===0&&c%2===0)grid[r][c]=1; // pillar
+      else grid[r][c]=0;
+    }
+  }
+  // Place breakable blocks
+  for(let r=1;r<ROWS-1;r++){
+    for(let c=1;c<COLS-1;c++){
+      if(grid[r][c]===0&&!(r<=2&&c<=2)&&Math.random()<0.4+level*0.03){
+        grid[r][c]=2; // breakable
+      }
+    }
+  }
+  player={x:1,y:1,px:TILE,py:TILE,speed:2};
+  bombs=[];explosions=[];powerups=[];
+  // Enemies
+  enemies=[];
+  let count=3+level;
+  for(let i=0;i<count;i++){
+    let ex,ey;
+    do{ex=2+Math.floor(Math.random()*(COLS-4));ey=2+Math.floor(Math.random()*(ROWS-4));}
+    while(grid[ey][ex]!==0||(ex<=2&&ey<=2));
+    enemies.push({x:ex*TILE+TILE/2,y:ey*TILE+TILE/2,speed:0.8+level*0.15,dir:Math.floor(Math.random()*4),moveTimer:0,alive:true});
+  }
+  bombRange=2;maxBombs=1;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;
+  buildLevel();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+function canWalk(px,py,w){
+  let margin=4;
+  let cells=[
+    {c:Math.floor((px+margin)/TILE),r:Math.floor((py+margin)/TILE)},
+    {c:Math.floor((px+w-margin)/TILE),r:Math.floor((py+margin)/TILE)},
+    {c:Math.floor((px+margin)/TILE),r:Math.floor((py+w-margin)/TILE)},
+    {c:Math.floor((px+w-margin)/TILE),r:Math.floor((py+w-margin)/TILE)},
+  ];
+  for(let cell of cells){
+    if(cell.r<0||cell.r>=ROWS||cell.c<0||cell.c>=COLS)return false;
+    if(grid[cell.r][cell.c]>0)return false;
+    // Can't walk through bombs (except the one you're standing on)
+    if(bombs.find(b=>b.gx===cell.c&&b.gy===cell.r&&!(b.gx===player.x&&b.gy===player.y)))return false;
+  }
+  return true;
+}
+
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function update(){
+  let nx=player.px,ny=player.py,s=player.speed;
+  if(keys.ArrowLeft)nx-=s;
+  if(keys.ArrowRight)nx+=s;
+  if(canWalk(nx,player.py,TILE-2))player.px=nx;
+  if(keys.ArrowUp)ny-=s;
+  if(keys.ArrowDown)ny+=s;
+  if(canWalk(player.px,ny,TILE-2))player.py=ny;
+  player.x=Math.round(player.px/TILE);
+  player.y=Math.round(player.py/TILE);
+
+  // Place bomb
+  if(keys[' ']&&bombCd<=0){
+    bombCd=15;
+    if(bombs.filter(b=>b.active).length<maxBombs&&!bombs.find(b=>b.gx===player.x&&b.gy===player.y)){
+      bombs.push({gx:player.x,gy:player.y,timer:120,active:true,range:bombRange});
+    }
+  }
+  if(bombCd>0)bombCd--;
+
+  // Bomb timers
+  bombs.forEach(b=>{
+    if(!b.active)return;
+    b.timer--;
+    if(b.timer<=0)explode(b);
+  });
+
+  // Explosions
+  explosions.forEach(e=>e.timer--);
+  explosions=explosions.filter(e=>e.timer>0);
+
+  // Check explosion hits
+  explosions.forEach(e=>{
+    // Hit player
+    let pgx=Math.round(player.px/TILE),pgy=Math.round(player.py/TILE);
+    if(e.gx===pgx&&e.gy===pgy)loseLife();
+    // Hit enemies
+    enemies.forEach(en=>{
+      if(!en.alive)return;
+      let egx=Math.round(en.x/TILE),egy=Math.round(en.y/TILE);
+      if(e.gx===egx&&e.gy===egy){en.alive=false;score+=200;updateHUD();}
+    });
+  });
+
+  // Powerups
+  powerups.forEach(pu=>{
+    let pgx=Math.round(player.px/TILE),pgy=Math.round(player.py/TILE);
+    if(pu.gx===pgx&&pu.gy===pgy&&!pu.collected){
+      pu.collected=true;
+      if(pu.type==='range')bombRange++;
+      else if(pu.type==='bomb')maxBombs++;
+      else if(pu.type==='speed')player.speed=Math.min(4,player.speed+0.5);
+      score+=100;updateHUD();
+    }
+  });
+
+  // Enemy AI
+  const dirs=[{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    let d=dirs[e.dir];
+    let nx2=e.x+d.dx*e.speed,ny2=e.y+d.dy*e.speed;
+    let gc=Math.round(nx2/TILE),gr=Math.round(ny2/TILE);
+    if(gc>=1&&gc<COLS-1&&gr>=1&&gr<ROWS-1&&grid[gr][gc]===0){
+      e.x=nx2;e.y=ny2;
+    } else {
+      e.dir=Math.floor(Math.random()*4);
+    }
+    // Hit player
+    if(Math.abs(e.x-player.px)<TILE*0.7&&Math.abs(e.y-player.py)<TILE*0.7)loseLife();
+  });
+
+  // Level clear
+  if(enemies.filter(e=>e.alive).length===0){level++;buildLevel();updateHUD();}
+}
+
+function explode(b){
+  b.active=false;
+  const dirs2=[{dx:0,dy:0},{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+  dirs2.forEach(d=>{
+    for(let i=(d.dx===0&&d.dy===0?0:1);i<=b.range;i++){
+      let gx=b.gx+d.dx*i,gy=b.gy+d.dy*i;
+      if(gx<0||gx>=COLS||gy<0||gy>=ROWS)break;
+      if(grid[gy][gx]===1)break; // solid wall
+      if(grid[gy][gx]===2){
+        grid[gy][gx]=0;
+        score+=10;
+        // Maybe drop powerup
+        if(Math.random()<0.3){
+          let types=['range','bomb','speed'];
+          powerups.push({gx,gy,type:types[Math.floor(Math.random()*3)],collected:false});
+        }
+        explosions.push({gx,gy,timer:20});
+        break;
+      }
+      explosions.push({gx,gy,timer:20});
+      // Chain explode other bombs
+      let otherBomb=bombs.find(ob=>ob.active&&ob.gx===gx&&ob.gy===gy);
+      if(otherBomb)explode(otherBomb);
+    }
+  });
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{player.px=TILE;player.py=TILE;player.x=1;player.y=1;}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Grid
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(grid[r][c]===1){ctx.fillStyle='#475569';ctx.fillRect(c*TILE,r*TILE,TILE,TILE);}
+      else if(grid[r][c]===2){ctx.fillStyle='#78716c';ctx.fillRect(c*TILE+1,r*TILE+1,TILE-2,TILE-2);}
+      else{ctx.fillStyle='#1e293b';ctx.fillRect(c*TILE,r*TILE,TILE,TILE);}
+    }
+  }
+
+  // Powerups
+  powerups.forEach(pu=>{
+    if(pu.collected)return;
+    ctx.fillStyle=pu.type==='range'?'#ef4444':pu.type==='bomb'?'#3b82f6':'#22c55e';
+    ctx.fillRect(pu.gx*TILE+8,pu.gy*TILE+8,TILE-16,TILE-16);
+    ctx.fillStyle='#fff';ctx.font='10px system-ui';
+    ctx.fillText(pu.type[0].toUpperCase(),pu.gx*TILE+11,pu.gy*TILE+22);
+  });
+
+  // Bombs
+  bombs.forEach(b=>{
+    if(!b.active)return;
+    let pulse=1+Math.sin(b.timer*0.3)*0.15;
+    ctx.fillStyle='#1e293b';
+    ctx.beginPath();ctx.arc(b.gx*TILE+TILE/2,b.gy*TILE+TILE/2,TILE/2*pulse-2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#facc15';
+    ctx.fillRect(b.gx*TILE+TILE/2-1,b.gy*TILE+2,2,6);
+  });
+
+  // Explosions
+  explosions.forEach(e=>{
+    let alpha=e.timer/20;
+    ctx.fillStyle=`rgba(239,68,68,${alpha})`;
+    ctx.fillRect(e.gx*TILE+2,e.gy*TILE+2,TILE-4,TILE-4);
+    ctx.fillStyle=`rgba(250,204,21,${alpha*0.7})`;
+    ctx.fillRect(e.gx*TILE+6,e.gy*TILE+6,TILE-12,TILE-12);
+  });
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath();ctx.arc(e.x,e.y,TILE/2-3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.fillRect(e.x-4,e.y-4,3,3);ctx.fillRect(e.x+1,e.y-4,3,3);
+  });
+
+  // Player
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(player.px+2,player.py+2,TILE-4,TILE-4);
+  ctx.fillStyle='#fff';
+  ctx.fillRect(player.px+7,player.py+6,4,4);
+  ctx.fillRect(player.px+17,player.py+6,4,4);
+}
+</script>
+</body>
+</html>

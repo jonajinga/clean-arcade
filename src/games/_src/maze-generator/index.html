@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maze Generator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center;align-items:center}
+select{background:#1e293b;border:1px solid #6366f1;color:#e2e8f0;padding:0.4rem;font-size:0.9rem;border-radius:0}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.dpad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:2px;margin:0.25rem}
+.dpad button{padding:0;font-size:1.2rem;min-width:0}
+.dpad .empty{background:transparent;cursor:default}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Maze Generator</h1>
+<div class="score-display">Steps: <span id="steps">0</span> | Level: <span id="level">1</span></div>
+<canvas id="game" width="400" height="400"></canvas>
+<div class="controls">
+<label style="color:#94a3b8;font-size:0.85rem">Size:</label>
+<select id="sizeSelect">
+<option value="10">Small (10x10)</option>
+<option value="15" selected>Medium (15x15)</option>
+<option value="20">Large (20x20)</option>
+<option value="30">Huge (30x30)</option>
+</select>
+<button onclick="newMaze()">New Maze</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="dpad">
+<div class="empty"></div>
+<button onclick="move(0,-1)">▲</button>
+<div class="empty"></div>
+<button onclick="move(-1,0)">◄</button>
+<div class="empty"></div>
+<button onclick="move(1,0)">►</button>
+<div class="empty"></div>
+<button onclick="move(0,1)">▼</button>
+<div class="empty"></div>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Maze Generator</h2>
+<p>Watch the maze build, then solve it!</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Watch DFS generate the maze, then navigate from top-left (green) to bottom-right (red). Use arrow keys or buttons.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Maze Solved!</h2>
+<p>Steps: <span id="finalSteps">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+let N=15;
+let cellSize;
+let maze=[];
+let playerX=0,playerY=0;
+let steps=0;
+let level=1;
+let gameActive=false;
+let paused=false;
+let generating=false;
+let highScore=0;
+let visited=new Set();
+
+function resize(){
+const s=Math.min(window.innerWidth-20,400);
+canvas.width=s;canvas.height=s;
+cellSize=Math.floor(s/N);
+canvas.width=cellSize*N;canvas.height=cellSize*N;
+if(!generating)drawMaze();
+}
+
+function initMaze(){
+maze=[];
+for(let y=0;y<N;y++){
+maze[y]=[];
+for(let x=0;x<N;x++){
+maze[y][x]={walls:{top:true,right:true,bottom:true,left:true},visited:false};
+}
+}
+}
+
+async function generateMaze(){
+generating=true;
+initMaze();
+const stack=[];
+let cx=0,cy=0;
+maze[cy][cx].visited=true;
+stack.push({x:cx,y:cy});
+const dirs=[[0,-1,'top','bottom'],[1,0,'right','left'],[0,1,'bottom','top'],[-1,0,'left','right']];
+while(stack.length>0){
+const neighbors=[];
+for(const[dx,dy,w1,w2] of dirs){
+const nx=cx+dx,ny=cy+dy;
+if(nx>=0&&nx<N&&ny>=0&&ny<N&&!maze[ny][nx].visited)neighbors.push({x:nx,y:ny,w1,w2});
+}
+if(neighbors.length>0){
+const n=neighbors[Math.floor(Math.random()*neighbors.length)];
+maze[cy][cx].walls[n.w1]=false;
+maze[n.y][n.x].walls[n.w2]=false;
+maze[n.y][n.x].visited=true;
+stack.push({x:cx,y:cy});
+cx=n.x;cy=n.y;
+// Animate
+drawMaze(cx,cy);
+await new Promise(r=>setTimeout(r,N>20?5:15));
+}else{
+const prev=stack.pop();
+cx=prev.x;cy=prev.y;
+}
+}
+generating=false;
+}
+
+function drawMaze(genX,genY){
+ctx.fillStyle='#0f172a';
+ctx.fillRect(0,0,canvas.width,canvas.height);
+for(let y=0;y<N;y++){
+for(let x=0;x<N;x++){
+const c=maze[y][x];
+const px=x*cellSize,py=y*cellSize;
+if(c.visited){
+ctx.fillStyle=visited.has(`${x},${y}`)?'rgba(99,102,241,0.15)':'#1e293b';
+ctx.fillRect(px,py,cellSize,cellSize);
+}
+ctx.strokeStyle='#6366f1';
+ctx.lineWidth=2;
+if(c.walls.top){ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+cellSize,py);ctx.stroke();}
+if(c.walls.right){ctx.beginPath();ctx.moveTo(px+cellSize,py);ctx.lineTo(px+cellSize,py+cellSize);ctx.stroke();}
+if(c.walls.bottom){ctx.beginPath();ctx.moveTo(px,py+cellSize);ctx.lineTo(px+cellSize,py+cellSize);ctx.stroke();}
+if(c.walls.left){ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,py+cellSize);ctx.stroke();}
+}
+}
+// Start & end
+ctx.fillStyle='#22c55e';
+ctx.fillRect(2,2,cellSize-4,cellSize-4);
+ctx.fillStyle='#ef4444';
+ctx.fillRect((N-1)*cellSize+2,(N-1)*cellSize+2,cellSize-4,cellSize-4);
+// Generation cursor
+if(generating&&genX!==undefined){
+ctx.fillStyle='#facc15';
+ctx.fillRect(genX*cellSize+4,genY*cellSize+4,cellSize-8,cellSize-8);
+}
+// Player
+if(!generating&&gameActive){
+ctx.fillStyle='#facc15';
+ctx.beginPath();
+ctx.arc(playerX*cellSize+cellSize/2,playerY*cellSize+cellSize/2,cellSize/3,0,Math.PI*2);
+ctx.fill();
+}
+}
+
+function move(dx,dy){
+if(!gameActive||paused||generating)return;
+const nx=playerX+dx,ny=playerY+dy;
+if(nx<0||nx>=N||ny<0||ny>=N)return;
+// Check walls
+const cell=maze[playerY][playerX];
+if(dx===1&&cell.walls.right)return;
+if(dx===-1&&cell.walls.left)return;
+if(dy===1&&cell.walls.bottom)return;
+if(dy===-1&&cell.walls.top)return;
+playerX=nx;playerY=ny;
+steps++;
+visited.add(`${nx},${ny}`);
+document.getElementById('steps').textContent=steps;
+drawMaze();
+if(playerX===N-1&&playerY===N-1){
+gameActive=false;
+if(steps<highScore||highScore===0){highScore=steps;save();}
+document.getElementById('finalSteps').textContent=steps;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),300);
+level++;
+}
+}
+
+function togglePause(){
+if(!gameActive||generating)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+async function newMaze(){
+N=parseInt(document.getElementById('sizeSelect').value);
+steps=0;playerX=0;playerY=0;
+visited=new Set();visited.add('0,0');
+document.getElementById('steps').textContent='0';
+document.getElementById('level').textContent=level;
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+document.getElementById('startOverlay').classList.add('hidden');
+paused=false;
+document.getElementById('pauseBtn').textContent='⏸';
+resize();
+await generateMaze();
+gameActive=true;
+drawMaze();
+}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P'){togglePause();return;}
+if(e.key==='ArrowUp'){e.preventDefault();move(0,-1);}
+if(e.key==='ArrowDown'){e.preventDefault();move(0,1);}
+if(e.key==='ArrowLeft'){e.preventDefault();move(-1,0);}
+if(e.key==='ArrowRight'){e.preventDefault();move(1,0);}
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'maze-generator',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='maze-generator'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',newMaze);
+document.getElementById('againBtn').addEventListener('click',newMaze);
+window.addEventListener('resize',resize);
+initMaze();resize();
+</script>
+</body>
+</html>

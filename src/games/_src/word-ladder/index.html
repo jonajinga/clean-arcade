@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Ladder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;padding:1rem;width:90%;max-width:400px;margin:0.5rem auto}
+.endpoints{display:flex;justify-content:space-between;margin-bottom:1rem}
+.endpoint{background:#1e293b;padding:0.5rem 1rem;font-size:1.3rem;font-weight:bold;letter-spacing:4px;text-transform:uppercase}
+.endpoint.start{border-left:3px solid #22c55e}
+.endpoint.target{border-left:3px solid #ef4444}
+.ladder{display:flex;flex-direction:column;gap:0.3rem;margin:0.5rem 0}
+.rung{display:flex;gap:2px;justify-content:center}
+.rung .letter{width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:bold;text-transform:uppercase;background:#1e293b;border:1px solid #334155}
+.rung .letter.changed{background:#6366f1;color:#fff}
+.rung .letter.correct{background:#22c55e;color:#0f172a}
+.input-row{display:flex;gap:0.5rem;justify-content:center;margin:0.5rem 0}
+.input-row input{background:#1e293b;border:1px solid #6366f1;color:#e2e8f0;padding:0.5rem;font-size:1.1rem;width:160px;text-align:center;letter-spacing:4px;text-transform:uppercase;border-radius:0}
+.msg{color:#ef4444;font-size:0.9rem;min-height:1.2rem;text-align:center}
+.stats{color:#94a3b8;font-size:0.9rem;text-align:center;margin:0.25rem}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>Word Ladder</h1>
+<div class="score-display">Steps: <span id="steps">0</span> | Level: <span id="level">1</span></div>
+<div class="game-area" id="gameArea">
+<div class="endpoints">
+<div class="endpoint start" id="startWord"></div>
+<div class="endpoint target" id="targetWord"></div>
+</div>
+<div class="ladder" id="ladder"></div>
+<div class="input-row">
+<input type="text" id="wordInput" maxlength="4" autocomplete="off" placeholder="Next word">
+<button onclick="submitStep()">Go</button>
+</div>
+<div class="msg" id="msg"></div>
+</div>
+<div class="stats">Change one letter at a time. Each step must be a valid word.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Word Ladder</h2>
+<p>Transform one word into another</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Change one letter at a time. Every intermediate step must be a valid 4-letter word.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Congratulations!</h2>
+<p>Solved in <span id="finalSteps">0</span> steps</p>
+<p>Level: <span id="finalLevel">1</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+
+<script>
+const DICT=["able","acid","aged","also","area","army","away","baby","back","bail","bait","bake","bald","bale","ball","band","bane","bang","bank","bare","bark","barn","base","bath","bead","beak","beam","bean","bear","beat","been","beer","bell","belt","bend","bent","best","bike","bill","bind","bird","bite","blew","blow","blue","blur","boat","body","bold","bolt","bomb","bond","bone","book","boom","boot","bore","born","boss","both","bowl","bulk","bull","burn","bust","busy","cafe","cage","cake","calf","call","calm","came","camp","cane","cape","card","care","cart","case","cash","cast","cave","cell","chat","chip","chop","cite","city","clad","clam","clan","clap","claw","clay","clip","clone","clot","club","clue","coal","coat","code","coil","coin","cold","cole","colt","comb","come","cone","cook","cool","cope","copy","cord","core","cork","corn","cost","coup","crew","crop","crow","cube","cult","cups","curb","cure","curl","cute","dado","dale","dame","damn","damp","dare","dark","dart","dash","data","date","dawn","dead","deaf","deal","dean","dear","debt","deck","deed","deem","deep","deer","demo","dent","deny","desk","dial","dice","died","diet","dime","dine","dire","dirt","disc","dish","disk","dock","does","dole","doll","dome","done","doom","door","dose","dove","down","drag","draw","drew","drip","drop","drum","dual","duck","dude","duel","duke","dull","dumb","dump","dune","dung","dunk","dusk","dust","duty","each","earl","earn","ease","east","easy","edge","edit","else","emit","envy","epic","euro","even","ever","evil","exam","exec","exit","eyed","face","fact","fade","fail","fair","fake","fall","fame","fang","fare","farm","fast","fate","fawn","fear","feat","feed","feel","feet","fell","felt","fend","fern","file","fill","film","find","fine","fire","firm","fish","fist","five","flag","flap","flat","flaw","flea","fled","flee","flew","flex","flip","flog","flow","foam","foes","foil","fold","folk","fond","font","food","fool","foot","ford","fore","fork","form","fort","foul","four","fowl","free","frog","from","fuel","full","fume","fund","furl","fuse","fuss","fuzz","gain","gait","gale","game","gang","gape","garb","gash","gasp","gate","gave","gawk","gaze","gear","gene","gets","gift","gild","gill","gilt","girl","gist","give","glad","glee","glen","glib","glob","glow","glue","glum","glut","gnat","gnaw","goad","goal","goat","goes","gold","golf","gone","good","gore","grab","gram","gray","grew","grid","grim","grin","grip","grit","grow","gulf","gull","gulp","gust","guts","hack","hail","hair","hale","half","hall","halt","hand","hang","hard","hare","harm","harp","hate","haul","have","hawk","haze","hazy","head","heal","heap","hear","heat","heed","heel","held","helm","help","herd","here","hero","hide","high","hike","hill","hilt","hind","hint","hire","hits","hive","hock","hold","hole","holy","home","hone","hood","hook","hope","horn","hose","host","hour","howl","hubs","hued","huge","hull","hung","hunt","hurl","hurt","hush","hymn","icon","idea","inch","into","iron","isle","item","jack","jade","jail","jamb","jars","java","jaws","jazz","jean","jeer","jest","jilt","jobs","jock","join","joke","jolt","jury","just","keen","keep","kelp","kept","keys","kick","kill","kind","king","kiss","kite","knack","knead","knee","knelt","knew","knit","knob","knot","know","lace","lack","lacy","laid","lain","lair","lake","lamb","lame","lamp","land","lane","lard","lark","lash","lass","last","late","lawn","laws","lead","leaf","leak","lean","leap","left","lend","lens","lent","less","lest","levy","liar","lice","lick","lied","lieu","life","lift","like","lily","limb","lime","limp","line","link","lint","lion","lips","list","live","load","loaf","loan","lock","lodge","loft","lone","long","look","loop","loot","lord","lore","lose","loss","lost","lots","loud","love","luck","lull","lump","lung","lure","lurk","lush","lust","mace","made","maid","mail","main","make","male","mall","malt","mane","many","maps","mare","mark","mars","mash","mask","mass","mast","mate","maze","mead","meal","mean","meat","meek","meet","meld","melt","memo","mend","menu","mere","mesh","mess","mice","mild","mile","milk","mill","mime","mind","mine","mint","mire","miss","mist","mite","mitt","moan","moat","mock","mode","mold","mole","molt","monk","mood","moon","moor","more","morn","moss","most","moth","move","much","muck","mule","mull","muse","mush","must","mute","myth","nail","name","nape","navy","near","neat","neck","need","nest","nets","news","next","nice","nick","nine","node","none","nook","norm","nose","note","noun","null","numb","nuts","oafs","oaks","oath","obey","odds","odor","offs","oink","omen","omit","once","only","onto","ooze","opal","open","opts","oral","orca","ores","ours","oust","outs","oven","over","owed","owes","owls","owns","pace","pack","pact","page","paid","pail","pain","pair","pale","palm","pane","pang","pant","pare","park","part","pass","past","path","pave","pawn","peak","peal","pear","peas","peck","peek","peel","peer","pelt","pend","pens","pent","perk","perm","pest","pick","pier","pike","pile","pill","pine","pink","pint","pipe","pity","plan","play","plea","plod","plot","plow","ploy","plug","plum","plus","pock","pods","poem","poet","poke","pole","poll","polo","pomp","pond","pony","pool","poor","pope","pops","pore","pork","port","pose","post","pour","pray","prey","prod","prop","prow","prry","pubs","puck","pull","pulp","pump","punk","pure","push","puts","quit","quiz","race","rack","raft","rage","raid","rail","rain","rake","ramp","rang","rank","rant","rare","rash","rasp","rate","rave","rays","read","real","ream","reap","rear","reed","reef","reel","rein","rely","rend","rent","rest","rich","ride","rift","rile","rill","rims","rind","ring","rink","riot","rise","risk","road","roam","roar","robe","rock","rode","role","roll","roof","room","root","rope","rose","rote","rout","rove","ruin","rule","rump","rung","runt","rush","rust","ruth","sack","safe","sage","said","sail","sake","sale","salt","same","sand","sane","sang","sank","save","saws","says","scab","scam","scan","scar","seal","seam","sear","seas","seat","sect","seed","seek","seem","seen","self","sell","send","sent","sept","sera","serve","sets","shed","shin","ship","shoe","shoo","shop","shot","show","shut","sick","side","sift","sigh","sign","silk","sill","silo","silt","sine","sing","sink","sips","sire","site","sits","size","slab","slag","slam","slap","slat","slaw","slay","sled","slew","slid","slim","slit","slob","slop","slot","slow","slug","slum","slur","smog","snap","snip","snob","snot","snow","snub","snug","soak","soap","soar","sock","soda","sofa","soft","soil","sold","sole","solo","some","song","sons","soon","soot","sore","sort","soul","soup","sour","span","spar","spec","sped","spin","spit","spot","spry","spud","spun","spur","stab","stag","star","stay","stem","step","stew","stir","stop","stow","stub","stud","stun","suck","suit","sulk","sumo","sump","sung","sunk","sure","surf","swap","swim","tabs","tack","tact","tags","tail","take","tale","talk","tall","tame","tang","tank","tape","taps","tarn","tarp","tart","task","taxi","teak","teal","team","tear","teen","tell","temp","tend","tent","term","test","text","than","that","them","then","they","thin","this","thus","tick","tide","tidy","tied","tier","tile","till","tilt","time","tine","tiny","tips","tire","toad","toed","toil","told","toll","tomb","tome","tone","tons","took","tool","tops","tore","torn","toss","tour","town","trap","tray","tree","trim","trio","trip","trod","trot","true","tube","tuck","tuft","tuna","tune","turf","turn","tusk","tuft","twin","type","ugly","undo","unit","upon","urge","used","user","uses","vain","vale","vane","vary","vase","vast","veal","veer","veil","vein","vent","verb","very","vest","veto","vice","vied","view","vine","visa","void","volt","vote","wade","wage","wail","wait","wake","walk","wall","wand","want","ward","warm","warn","warp","wart","wary","wash","wasp","wave","wavy","waxy","ways","weak","wean","wear","weed","week","well","welt","went","were","west","what","when","whom","wick","wide","wife","wild","will","wilt","wily","wimp","wind","wine","wing","wink","wins","wipe","wire","wise","wish","wisp","with","wits","woes","woke","wolf","womb","wont","wood","wool","word","wore","work","worm","worn","wove","wrap","wren","writ","yard","yawn","year","yell","your","yowl","zeal","zero","zinc","zone","zoom"];
+
+const PAIRS=[["cold","warm"],["head","tail"],["love","hate"],["dark","lite"],["fast","slow"],["hard","soft"],["lead","gold"],["hide","seek"],["fish","bird"],["cake","wine"],["book","read"],["hand","foot"],["rain","snow"],["fire","lake"],["word","game"],["ball","goal"],["wine","beer"],["ship","dock"],["lamp","glow"],["tree","bush"]];
+
+let current='';
+let target='';
+let chain=[];
+let steps=0;
+let level=1;
+let highScore=0;
+let gameActive=false;
+
+function diffCount(a,b){let d=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])d++;return d;}
+
+function renderLadder(){
+const el=document.getElementById('ladder');
+el.innerHTML='';
+chain.forEach((w,wi)=>{
+const row=document.createElement('div');
+row.className='rung';
+for(let i=0;i<w.length;i++){
+const d=document.createElement('div');
+d.className='letter';
+if(wi>0&&w[i]!==chain[wi-1][i])d.classList.add('changed');
+if(w===target)d.classList.add('correct');
+d.textContent=w[i];
+row.appendChild(d);
+}
+el.appendChild(row);
+});
+}
+
+function submitStep(){
+if(!gameActive)return;
+const input=document.getElementById('wordInput');
+const w=input.value.trim().toLowerCase();
+input.value='';
+const msg=document.getElementById('msg');
+if(w.length!==4){msg.textContent='Word must be 4 letters';return;}
+const last=chain[chain.length-1];
+if(diffCount(w,last)!==1){msg.textContent='Change exactly one letter';return;}
+if(!DICT.includes(w)){msg.textContent='Not a valid word';return;}
+if(chain.includes(w)){msg.textContent='Already used';return;}
+msg.textContent='';
+chain.push(w);
+steps++;
+document.getElementById('steps').textContent=steps;
+renderLadder();
+if(w===target){
+gameActive=false;
+setTimeout(()=>{
+level++;
+document.getElementById('finalSteps').textContent=steps;
+document.getElementById('finalLevel').textContent=level-1;
+document.getElementById('overOverlay').classList.remove('hidden');
+if(level>highScore){highScore=level;save();}
+},500);
+}
+}
+
+function startGame(){
+const pair=PAIRS[Math.floor(Math.random()*PAIRS.length)];
+current=pair[0];target=pair[1];
+chain=[current];steps=0;
+document.getElementById('steps').textContent='0';
+document.getElementById('level').textContent=level;
+document.getElementById('startWord').textContent=current.toUpperCase();
+document.getElementById('targetWord').textContent=target.toUpperCase();
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+gameActive=true;
+renderLadder();
+document.getElementById('wordInput').focus();
+}
+
+document.getElementById('wordInput').addEventListener('keydown',e=>{
+if(e.key==='Enter')submitStep();
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'word-ladder',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='word-ladder'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

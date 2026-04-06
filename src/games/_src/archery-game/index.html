@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archery</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Archery</h1>
+<div class="hud">
+  <span id="arrowDisp">Arrows: 10</span>
+  <span id="scoreDisp">Score: 0</span>
+  <span id="windDisp">Wind: 0</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="300"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Archery</h2>
+    <p>Click to set angle, click again for power.</p>
+    <p>Wind affects the arrow! 10 arrows total.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>All Arrows Shot!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=300;
+let arrows,score,highScore=0,wind,phase,angle,power,powerDir;
+let arrow=null,hits=[];
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  arrows=10;score=0;wind=(Math.random()-0.5)*6;
+  phase='aim';angle=45;power=50;powerDir=1;arrow=null;hits=[];
+  updateHUD();loop();
+}
+
+canvas.addEventListener('click',()=>{
+  if(arrows<=0||arrow)return;
+  if(phase==='aim'){phase='power';return;}
+  if(phase==='power'){
+    // fire
+    const rad=angle*Math.PI/180;
+    const v=power/10;
+    arrow={x:30,y:H-60,vx:Math.cos(rad)*v,vy:-Math.sin(rad)*v};
+    phase='flight';
+  }
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  canvas.click();
+},{passive:false});
+
+function updateHUD(){
+  document.getElementById('arrowDisp').textContent='Arrows: '+arrows;
+  document.getElementById('scoreDisp').textContent='Score: '+score;
+  document.getElementById('windDisp').textContent='Wind: '+(wind>0?'+':'')+wind.toFixed(1);
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+const TX=330,TY=H/2,TR=50; // target center
+
+function calcRingScore(x,y){
+  const d=Math.sqrt((x-TX)**2+(y-TY)**2);
+  if(d>TR)return 0;
+  return Math.max(1,Math.round(10-d/TR*9));
+}
+
+function update(){
+  if(phase==='aim'){
+    angle+=0.5;
+    if(angle>80)angle=10;
+  }
+  if(phase==='power'){
+    power+=powerDir*2;
+    if(power>=100||power<=10)powerDir*=-1;
+  }
+  if(phase==='flight'&&arrow){
+    arrow.x+=arrow.vx;
+    arrow.vy+=0.15;// gravity
+    arrow.vx+=wind*0.005;
+    arrow.y+=arrow.vy;
+    // check target hit
+    if(arrow.x>=TX-5){
+      const pts=calcRingScore(arrow.x,arrow.y);
+      score+=pts;
+      hits.push({x:arrow.x,y:arrow.y,pts});
+      arrows--;
+      wind=(Math.random()-0.5)*6;
+      arrow=null;phase='aim';
+      if(arrows<=0){
+        if(score>highScore){highScore=score;saveState();}
+        document.getElementById('finalScore').textContent='Total Score: '+score+'/100';
+        document.getElementById('gameOverOverlay').style.display='flex';
+      }
+      updateHUD();
+      return;
+    }
+    if(arrow.y>H||arrow.x>W){
+      arrows--;arrow=null;phase='aim';
+      wind=(Math.random()-0.5)*6;
+      if(arrows<=0){
+        if(score>highScore){highScore=score;saveState();}
+        document.getElementById('finalScore').textContent='Total Score: '+score+'/100';
+        document.getElementById('gameOverOverlay').style.display='flex';
+      }
+      updateHUD();
+    }
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // ground
+  ctx.fillStyle='#166534';ctx.fillRect(0,H-30,W,30);
+  // target
+  const colors=['#ef4444','#ef4444','#3b82f6','#3b82f6','#22c55e','#22c55e','#facc15','#facc15','#e2e8f0','#e2e8f0'];
+  for(let i=0;i<10;i++){
+    const r=TR*(10-i)/10;
+    ctx.fillStyle=colors[i];ctx.beginPath();ctx.arc(TX,TY,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#0f172a';ctx.lineWidth=0.5;ctx.stroke();
+  }
+  // hits on target
+  for(let h of hits){
+    ctx.fillStyle='#0f172a';ctx.beginPath();ctx.arc(h.x,h.y,3,0,Math.PI*2);ctx.fill();
+  }
+  // archer
+  ctx.fillStyle='#e2e8f0';ctx.fillRect(25,H-60,10,30);
+  // bow
+  ctx.strokeStyle='#d4a017';ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(30,H-55,20,Math.PI*0.3,Math.PI*1.7);ctx.stroke();
+  // aim line
+  if(phase==='aim'){
+    const rad=angle*Math.PI/180;
+    ctx.strokeStyle='rgba(250,204,21,0.5)';ctx.lineWidth=1;ctx.setLineDash([5,5]);
+    ctx.beginPath();ctx.moveTo(30,H-55);ctx.lineTo(30+Math.cos(rad)*200,H-55-Math.sin(rad)*200);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // power meter
+  if(phase==='power'){
+    ctx.fillStyle='#1e293b';ctx.fillRect(10,10,20,100);
+    ctx.fillStyle='#ef4444';ctx.fillRect(10,110-power,20,power);
+    ctx.strokeStyle='#e2e8f0';ctx.strokeRect(10,10,20,100);
+  }
+  // flying arrow
+  if(arrow){
+    ctx.strokeStyle='#d4a017';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(arrow.x,arrow.y);
+    ctx.lineTo(arrow.x-arrow.vx*3,arrow.y-arrow.vy*3);ctx.stroke();
+    // arrowhead
+    ctx.fillStyle='#6b7280';ctx.beginPath();
+    ctx.arc(arrow.x,arrow.y,3,0,Math.PI*2);ctx.fill();
+  }
+  // wind indicator
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';
+  ctx.fillText('Wind: '+(wind>0?'>>':'<<')+' '+Math.abs(wind).toFixed(1),W/2-40,20);
+}
+
+function loop(){
+  if(arrows<=0&&!arrow)return;
+  update();draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'archery-game',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='archery-game'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

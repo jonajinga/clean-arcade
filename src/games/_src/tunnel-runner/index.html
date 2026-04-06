@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tunnel Runner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+.controls{display:flex;gap:8px;margin:6px 0}
+</style>
+</head>
+<body>
+<h1>Tunnel Runner</h1>
+<div class="wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Tunnel Runner</h2>
+<p>Navigate through the tunnel! Dodge walls by moving left/right. Speed increases over time.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Crashed!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Distance: 0 | Speed: 1x</div>
+<div class="controls">
+<button class="btn-secondary" id="left-btn" onmousedown="moveL=true" onmouseup="moveL=false" ontouchstart="event.preventDefault();moveL=true" ontouchend="event.preventDefault();moveL=false">◀</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+<button class="btn-secondary" id="right-btn" onmousedown="moveR=true" onmouseup="moveR=false" ontouchstart="event.preventDefault();moveR=true" ontouchend="event.preventDefault();moveR=false">▶</button>
+</div>
+<script>
+const SLUG='tunnel-runner';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=400,H=400,CX=200,CY=200;
+let playerX,speed,dist,walls,running,paused,highScore=0;
+let moveL=false,moveR=false;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(400,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=w+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')moveL=true;
+  if(e.key==='ArrowRight'||e.key==='d')moveR=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')moveL=false;
+  if(e.key==='ArrowRight'||e.key==='d')moveR=false;
+});
+
+function spawnWall(){
+  // Wall has a gap
+  let gapW=120-Math.min(dist/100,50);
+  let gapX=Math.random()*(W-gapW-40)+20;
+  walls.push({y:-20,gapX,gapW,passed:false});
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // tunnel sides
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,10,H);ctx.fillRect(W-10,0,10,H);
+  // perspective lines
+  for(let i=0;i<H;i+=30){
+    ctx.strokeStyle='#334155';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(10,i);ctx.lineTo(W-10,i);ctx.stroke();
+  }
+  // walls
+  walls.forEach(w=>{
+    ctx.fillStyle='#6366f1';
+    ctx.fillRect(10,w.y,w.gapX-10,16);
+    ctx.fillRect(w.gapX+w.gapW,w.y,W-10-w.gapX-w.gapW,16);
+    // highlight
+    ctx.fillStyle='#818cf8';
+    ctx.fillRect(10,w.y,w.gapX-10,3);
+    ctx.fillRect(w.gapX+w.gapW,w.y,W-10-w.gapX-w.gapW,3);
+  });
+  // player
+  ctx.fillStyle='#22c55e';
+  ctx.beginPath();
+  ctx.moveTo(playerX,H-30);ctx.lineTo(playerX-10,H-10);ctx.lineTo(playerX+10,H-10);ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle='#4ade80';
+  ctx.beginPath();
+  ctx.moveTo(playerX,H-26);ctx.lineTo(playerX-6,H-14);ctx.lineTo(playerX+6,H-14);ctx.closePath();
+  ctx.fill();
+  // speed lines
+  if(speed>2){
+    ctx.strokeStyle='#ffffff11';ctx.lineWidth=1;
+    for(let i=0;i<5;i++){
+      let lx=Math.random()*W,ly=Math.random()*H;
+      ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(lx,ly+20);ctx.stroke();
+    }
+  }
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',CX,CY);ctx.textAlign='start'}
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(!paused){
+    speed=1+dist/500;
+    if(moveL)playerX-=250*dt;
+    if(moveR)playerX+=250*dt;
+    playerX=Math.max(20,Math.min(W-20,playerX));
+    let scrollAmt=speed*200*dt;
+    dist+=scrollAmt*0.1;
+    // move walls
+    walls.forEach(w=>w.y+=scrollAmt);
+    // spawn
+    if(walls.length===0||walls[walls.length-1].y>80)spawnWall();
+    // collision
+    for(let w of walls){
+      if(w.y>H-35&&w.y<H-5){
+        if(playerX-8<w.gapX||playerX+8>w.gapX+w.gapW){
+          crash();return;
+        }
+      }
+    }
+    walls=walls.filter(w=>w.y<H+20);
+  }
+  document.getElementById('info').textContent=`Distance: ${Math.floor(dist)} | Speed: ${speed.toFixed(1)}x`;
+  draw();requestAnimationFrame(update);
+}
+
+function crash(){
+  running=false;
+  let sc=Math.floor(dist);
+  if(sc>highScore)highScore=sc;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-msg').textContent=`Distance: ${sc} | Best: ${highScore}`;
+  save();
+}
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)save()}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  playerX=CX;speed=1;dist=0;walls=[];running=true;paused=false;lt=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

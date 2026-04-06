@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Missile Command</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+</style>
+</head>
+<body>
+<h1>Missile Command</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-ammo">Ammo: 30</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Missile Command</h2>
+<p>Click / tap to launch defense missiles</p>
+<p>Protect your 6 cities!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400;
+let gameRunning=false,paused=false,animId;
+let cities,missiles,defenses,explosions,score,level,ammo,highScore=0;
+let missileTimer=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=canvas.style.height=(400*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='missile-command'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'missile-command',state:{highScore}},'*');}catch(e){}}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function getCanvasPos(e){
+  let rect=canvas.getBoundingClientRect();
+  let scaleX=W/rect.width,scaleY=H/rect.height;
+  let clientX,clientY;
+  if(e.touches){clientX=e.touches[0].clientX;clientY=e.touches[0].clientY;}
+  else{clientX=e.clientX;clientY=e.clientY;}
+  return{x:(clientX-rect.left)*scaleX,y:(clientY-rect.top)*scaleY};
+}
+
+canvas.addEventListener('click',e=>{if(!gameRunning||paused)return;let p=getCanvasPos(e);launchDefense(p.x,p.y);});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();if(!gameRunning||paused)return;let p=getCanvasPos(e);launchDefense(p.x,p.y);});
+
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;level=1;ammo=30;
+  cities=[{x:40,alive:true},{x:100,alive:true},{x:160,alive:true},{x:240,alive:true},{x:300,alive:true},{x:360,alive:true}];
+  missiles=[];defenses=[];explosions=[];
+  missileTimer=0;
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-ammo').textContent='Ammo: '+ammo;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+function launchDefense(tx,ty){
+  if(ammo<=0)return;
+  ammo--;updateHUD();
+  let startX=W/2,startY=H-20;
+  let dx=tx-startX,dy=ty-startY,d=Math.sqrt(dx*dx+dy*dy)||1;
+  let speed=5;
+  defenses.push({x:startX,y:startY,tx,ty,vx:dx/d*speed,vy:dy/d*speed,active:true});
+}
+
+function spawnMissile(){
+  let tx=cities[Math.floor(Math.random()*cities.length)];
+  if(!tx.alive)tx=cities.find(c=>c.alive);
+  if(!tx)return;
+  let sx=Math.random()*W;
+  let speed=0.5+level*0.15;
+  let dx=tx.x-sx,dy=(H-20)-0,d=Math.sqrt(dx*dx+dy*dy)||1;
+  missiles.push({sx,sy:0,x:sx,y:0,vx:dx/d*speed,vy:dy/d*speed,active:true,targetX:tx.x});
+}
+
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function update(){
+  // Spawn missiles
+  missileTimer++;
+  let interval=Math.max(15,60-level*5);
+  if(missileTimer>=interval){missileTimer=0;spawnMissile();}
+
+  // Move enemy missiles
+  missiles.forEach(m=>{
+    if(!m.active)return;
+    m.x+=m.vx;m.y+=m.vy;
+    if(m.y>=H-20){
+      m.active=false;
+      // Destroy nearest city
+      let nearest=null,minD=50;
+      cities.forEach(c=>{
+        if(!c.alive)return;
+        let dd=Math.abs(c.x-m.x);
+        if(dd<minD){minD=dd;nearest=c;}
+      });
+      if(nearest){
+        nearest.alive=false;
+        explosions.push({x:m.x,y:H-20,r:0,maxR:30,growing:true,timer:40});
+      }
+    }
+    // Check if hit by explosion
+    explosions.forEach(ex=>{
+      let dx=m.x-ex.x,dy=m.y-ex.y;
+      if(Math.sqrt(dx*dx+dy*dy)<ex.r){
+        m.active=false;
+        score+=25;updateHUD();
+        explosions.push({x:m.x,y:m.y,r:0,maxR:20,growing:true,timer:30});
+      }
+    });
+  });
+  missiles=missiles.filter(m=>m.active||m.y<H);
+
+  // Move defense missiles
+  defenses.forEach(d=>{
+    if(!d.active)return;
+    d.x+=d.vx;d.y+=d.vy;
+    let dx=d.x-d.tx,dy=d.y-d.ty;
+    if(Math.sqrt(dx*dx+dy*dy)<6){
+      d.active=false;
+      explosions.push({x:d.tx,y:d.ty,r:0,maxR:35,growing:true,timer:50});
+    }
+  });
+
+  // Explosions
+  explosions.forEach(ex=>{
+    if(ex.growing){ex.r+=1.5;if(ex.r>=ex.maxR)ex.growing=false;}
+    else{ex.timer--;if(ex.timer<=0)ex.r-=1;}
+  });
+  explosions=explosions.filter(ex=>ex.r>0);
+
+  // Check game over
+  if(!cities.some(c=>c.alive)){
+    gameRunning=false;
+    if(score>highScore)highScore=score;
+    document.getElementById('final-score').textContent='Score: '+score;
+    document.getElementById('high-score-msg').textContent='High Score: '+highScore;
+    document.getElementById('over-overlay').classList.remove('hidden');
+    saveState();
+  }
+
+  // Next level
+  if(missiles.filter(m=>m.active).length===0&&missileTimer>interval*8){
+    level++;ammo=Math.min(ammo+10,30);
+    // Bonus for surviving cities
+    score+=cities.filter(c=>c.alive).length*100;
+    missileTimer=0;updateHUD();
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Ground
+  ctx.fillStyle='#22c55e';ctx.fillRect(0,H-10,W,10);
+
+  // Cities
+  cities.forEach(c=>{
+    if(!c.alive){ctx.fillStyle='#334155';ctx.fillRect(c.x-12,H-16,24,6);return;}
+    ctx.fillStyle='#3b82f6';
+    ctx.fillRect(c.x-10,H-22,20,12);
+    ctx.fillRect(c.x-6,H-28,12,8);
+    ctx.fillRect(c.x-2,H-32,4,6);
+  });
+
+  // Launcher
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(W/2-8,H-20,16,10);
+  ctx.fillRect(W/2-2,H-26,4,8);
+
+  // Enemy missiles (trails)
+  missiles.forEach(m=>{
+    if(!m.active)return;
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(m.sx,m.sy);ctx.lineTo(m.x,m.y);ctx.stroke();
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath();ctx.arc(m.x,m.y,3,0,Math.PI*2);ctx.fill();
+  });
+
+  // Defense missiles (trails)
+  defenses.forEach(d=>{
+    if(!d.active)return;
+    ctx.strokeStyle='#3b82f6';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(W/2,H-20);ctx.lineTo(d.x,d.y);ctx.stroke();
+    ctx.fillStyle='#3b82f6';
+    ctx.beginPath();ctx.arc(d.x,d.y,2,0,Math.PI*2);ctx.fill();
+  });
+
+  // Explosions
+  explosions.forEach(ex=>{
+    let grad=ctx.createRadialGradient(ex.x,ex.y,0,ex.x,ex.y,ex.r);
+    grad.addColorStop(0,'rgba(250,204,21,0.9)');
+    grad.addColorStop(0.5,'rgba(239,68,68,0.6)');
+    grad.addColorStop(1,'rgba(239,68,68,0)');
+    ctx.fillStyle=grad;
+    ctx.beginPath();ctx.arc(ex.x,ex.y,ex.r,0,Math.PI*2);ctx.fill();
+  });
+
+  // Stars
+  ctx.fillStyle='#475569';
+  for(let i=0;i<20;i++){
+    ctx.fillRect((i*67+13)%W,(i*43+7)%200,1,1);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Futoshiki</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;padding:0.5rem;margin:0.5rem}
+.board{display:grid;gap:0;justify-content:center}
+.cell{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:bold;cursor:pointer;background:#1e293b;border:1px solid #334155;user-select:none}
+.cell.selected{background:#334155;outline:2px solid #facc15}
+.cell.given{color:#6366f1;cursor:default}
+.cell.error{border-color:#ef4444}
+.ineq{display:flex;align-items:center;justify-content:center;font-size:1rem;color:#facc15;font-weight:bold}
+.ineq.h{width:16px;height:48px}
+.ineq.v{width:48px;height:16px}
+.spacer{width:16px;height:16px}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.numpad{display:flex;gap:2px;margin:0.25rem 0}
+.numpad button{padding:0.5rem 0.7rem;font-size:1rem;min-width:36px}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{font-size:0.9rem;min-height:1.1rem;text-align:center;margin:0.25rem}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Futoshiki</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/5</div>
+<div class="game-area" id="gameArea"></div>
+<div class="numpad" id="numpad"></div>
+<div class="controls">
+<button onclick="clearGrid()" style="background:#ef4444">Clear</button>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg"></div>
+<div class="info">Fill 5x5 with 1-5. No repeats in rows/cols. Respect inequality signs.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Futoshiki</h2>
+<p>Latin square with inequalities</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Fill each row and column with 1-5 (no repeats). Arrow signs between cells must be satisfied.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Solved!</h2>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const N=5;
+const PUZZLES=[
+{
+solution:[[2,4,1,3,5],[5,1,3,4,2],[1,3,5,2,4],[4,5,2,1,3],[3,2,4,5,1]],
+given:[[0,0,2],[0,3,3],[1,1,1],[2,4,4],[3,0,4],[4,2,4]],
+ineqH:[// [r,c] means cell(r,c) OP cell(r,c+1)
+{r:0,c:0,op:'<'},{r:1,c:2,op:'<'},{r:2,c:0,op:'<'},{r:3,c:3,op:'<'},{r:4,c:1,op:'<'}
+],
+ineqV:[// [r,c] means cell(r,c) OP cell(r+1,c)
+{r:0,c:1,op:'>'},{r:1,c:3,op:'>'},{r:2,c:2,op:'>'},{r:3,c:0,op:'>'}
+]
+},
+{
+solution:[[3,1,5,2,4],[1,4,2,5,3],[5,2,4,3,1],[4,3,1,5,2],[2,5,3,4,1]],
+given:[[0,0,3],[1,2,2],[2,1,2],[3,4,2],[4,0,2]],
+ineqH:[{r:0,c:1,op:'<'},{r:1,c:0,op:'<'},{r:2,c:3,op:'>'},{r:3,c:2,op:'<'},{r:4,c:3,op:'>'}],
+ineqV:[{r:0,c:0,op:'>'},{r:1,c:4,op:'>'},{r:2,c:1,op:'<'},{r:3,c:3,op:'>'}]
+},
+{
+solution:[[1,5,3,4,2],[4,2,5,1,3],[5,3,1,2,4],[2,4,5,3,1],[3,1,2,5,4]],
+given:[[0,0,1],[1,0,4],[2,2,1],[3,3,3],[4,4,4]],
+ineqH:[{r:0,c:2,op:'<'},{r:1,c:1,op:'<'},{r:2,c:0,op:'>'},{r:3,c:1,op:'<'},{r:4,c:0,op:'>'}],
+ineqV:[{r:0,c:3,op:'>'},{r:1,c:0,op:'<'},{r:2,c:4,op:'>'},{r:3,c:2,op:'>'}]
+},
+{
+solution:[[4,2,3,1,5],[1,5,4,3,2],[3,1,5,2,4],[5,4,2,3,1],[2,3,1,5,4]],
+given:[[0,4,5],[1,0,1],[2,3,2],[3,1,4],[4,2,1]],
+ineqH:[{r:0,c:0,op:'>'},{r:1,c:3,op:'>'},{r:2,c:1,op:'<'},{r:3,c:0,op:'>'},{r:4,c:3,op:'>'}],
+ineqV:[{r:0,c:2,op:'<'},{r:1,c:1,op:'>'},{r:2,c:0,op:'<'},{r:3,c:4,op:'<'}]
+},
+{
+solution:[[5,3,2,4,1],[2,1,4,5,3],[4,5,1,3,2],[1,2,3,5,4],[3,4,5,1,2]],
+given:[[0,0,5],[1,4,3],[2,0,4],[3,3,5],[4,1,4]],
+ineqH:[{r:0,c:1,op:'>'},{r:1,c:0,op:'>'},{r:2,c:2,op:'<'},{r:3,c:0,op:'<'},{r:4,c:2,op:'>'}],
+ineqV:[{r:0,c:4,op:'<'},{r:1,c:1,op:'<'},{r:2,c:3,op:'<'},{r:3,c:0,op:'>'}]
+}
+];
+
+let currentPuzzle=0;
+let playerGrid=[];
+let givenSet=new Set();
+let selectedCell=null;
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function buildGrid(){
+const p=PUZZLES[currentPuzzle];
+playerGrid=Array.from({length:N},()=>Array(N).fill(0));
+givenSet=new Set();
+p.given.forEach(([r,c,v])=>{playerGrid[r][c]=v;givenSet.add(`${r},${c}`);});
+selectedCell=null;
+renderGrid();
+}
+
+function renderGrid(){
+const p=PUZZLES[currentPuzzle];
+const area=document.getElementById('gameArea');
+area.innerHTML='';
+const board=document.createElement('div');
+board.className='board';
+// Grid with inequalities: 5 cells + 4 gaps per row, 5 rows + 4 gaps
+const cols=N+(N-1);
+board.style.gridTemplateColumns=Array.from({length:cols},(_, i)=>i%2===0?'48px':'16px').join(' ');
+const rows=N+(N-1);
+for(let gr=0;gr<rows;gr++){
+for(let gc=0;gc<cols;gc++){
+if(gr%2===0&&gc%2===0){
+// Cell
+const r=gr/2,c=gc/2;
+const cell=document.createElement('div');
+cell.className='cell';
+const v=playerGrid[r][c];
+if(v)cell.textContent=v;
+const isGiven=givenSet.has(`${r},${c}`);
+if(isGiven)cell.classList.add('given');
+if(selectedCell&&selectedCell.r===r&&selectedCell.c===c)cell.classList.add('selected');
+if(!isGiven){
+cell.addEventListener('click',()=>{
+if(!gameActive||paused)return;
+selectedCell={r,c};renderGrid();
+});
+}
+board.appendChild(cell);
+}else if(gr%2===0&&gc%2===1){
+// Horizontal inequality
+const r=gr/2,c=(gc-1)/2;
+const div=document.createElement('div');
+div.className='ineq h';
+const iq=p.ineqH.find(i=>i.r===r&&i.c===c);
+if(iq)div.textContent=iq.op==='<'?'<':'>';
+board.appendChild(div);
+}else if(gr%2===1&&gc%2===0){
+// Vertical inequality
+const r=(gr-1)/2,c=gc/2;
+const div=document.createElement('div');
+div.className='ineq v';
+const iq=p.ineqV.find(i=>i.r===r&&i.c===c);
+if(iq)div.textContent=iq.op==='<'?'∨':'∧';
+board.appendChild(div);
+}else{
+// Corner spacer
+const div=document.createElement('div');
+div.className='spacer';
+board.appendChild(div);
+}
+}
+}
+area.appendChild(board);
+// Numpad
+const numpad=document.getElementById('numpad');
+numpad.innerHTML='';
+for(let n=1;n<=5;n++){
+const btn=document.createElement('button');
+btn.textContent=n;
+btn.addEventListener('click',()=>enterNumber(n));
+numpad.appendChild(btn);
+}
+const clr=document.createElement('button');
+clr.textContent='⌫';clr.style.background='#ef4444';
+clr.addEventListener('click',()=>enterNumber(0));
+numpad.appendChild(clr);
+}
+
+function enterNumber(n){
+if(!gameActive||paused||!selectedCell)return;
+const{r,c}=selectedCell;
+if(givenSet.has(`${r},${c}`))return;
+playerGrid[r][c]=n;
+renderGrid();
+}
+
+function clearGrid(){
+if(!gameActive||paused)return;
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+if(!givenSet.has(`${r},${c}`))playerGrid[r][c]=0;
+}
+selectedCell=null;renderGrid();
+}
+
+function checkSolution(){
+if(!gameActive||paused)return;
+const p=PUZZLES[currentPuzzle];
+const msg=document.getElementById('msg');
+let correct=true;
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+if(playerGrid[r][c]!==p.solution[r][c])correct=false;
+}
+if(correct){
+msg.textContent='Correct!';msg.style.color='#22c55e';
+currentPuzzle++;
+if(currentPuzzle>=PUZZLES.length){
+gameActive=false;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+}else{
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+setTimeout(()=>{buildGrid();msg.textContent='';},1000);
+}
+}else{msg.textContent='Not correct. Keep trying!';msg.style.color='#ef4444';}
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P'){togglePause();return;}
+if(!gameActive||paused)return;
+if(e.key>='1'&&e.key<='5')enterNumber(parseInt(e.key));
+if(e.key==='Backspace'||e.key==='Delete')enterNumber(0);
+});
+
+function startGame(){
+currentPuzzle=0;
+document.getElementById('puzzleNum').textContent='1';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+buildGrid();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'futoshiki',state:{highScore:currentPuzzle}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='futoshiki'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

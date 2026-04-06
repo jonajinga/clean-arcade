@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ski Downhill</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.controls{display:flex;gap:8px;margin:6px 0}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Ski Downhill</h1>
+<div class="wrap">
+<canvas id="c" width="360" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Ski Downhill</h2>
+<p>Dodge trees and rocks, go through gates for points! Arrow keys or touch sides to steer.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Crashed!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Score: 0 | Speed: 0</div>
+<div class="controls">
+<button class="btn-secondary" onclick="steerL=true" ontouchstart="event.preventDefault();steerL=true" ontouchend="event.preventDefault();steerL=false" onmousedown="steerL=true" onmouseup="steerL=false">◀ Left</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+<button class="btn-secondary" onclick="steerR=true" ontouchstart="event.preventDefault();steerR=true" ontouchend="event.preventDefault();steerR=false" onmousedown="steerR=true" onmouseup="steerR=false">Right ▶</button>
+</div>
+<script>
+const SLUG='ski-downhill';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=360,H=500;
+let px,speed,dist,score,gates,obstacles,running,paused,highScore=0;
+let steerL=false,steerR=false;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(360,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*500/360)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')steerL=true;
+  if(e.key==='ArrowRight')steerR=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')steerL=false;
+  if(e.key==='ArrowRight')steerR=false;
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  let r=canvas.getBoundingClientRect();
+  let tx=(e.touches[0].clientX-r.left)/r.width*W;
+  if(tx<W/2)steerL=true;else steerR=true;
+});
+canvas.addEventListener('touchend',e=>{e.preventDefault();steerL=false;steerR=false});
+
+function spawnObs(){
+  if(Math.random()<0.03){
+    let type=Math.random()<0.5?'tree':'rock';
+    obstacles.push({x:Math.random()*(W-40)+20,y:-20,type,w:type==='tree'?16:20,h:type==='tree'?20:14});
+  }
+  if(Math.random()<0.015){
+    let gx=Math.random()*(W-120)+60;
+    gates.push({x:gx,y:-20,w:80,passed:false});
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#e8e8e8';ctx.fillRect(0,0,W,H);
+  // obstacles
+  obstacles.forEach(o=>{
+    if(o.type==='tree'){
+      ctx.fillStyle='#166534';ctx.beginPath();ctx.moveTo(o.x,o.y);ctx.lineTo(o.x-10,o.y+20);ctx.lineTo(o.x+10,o.y+20);ctx.fill();
+      ctx.fillStyle='#78350f';ctx.fillRect(o.x-3,o.y+20,6,6);
+    } else {
+      ctx.fillStyle='#64748b';ctx.beginPath();ctx.ellipse(o.x,o.y,o.w/2,o.h/2,0,0,Math.PI*2);ctx.fill();
+    }
+  });
+  // gates
+  gates.forEach(g=>{
+    ctx.strokeStyle=g.passed?'#22c55e':'#ef4444';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(g.x,g.y);ctx.lineTo(g.x,g.y+30);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(g.x+g.w,g.y);ctx.lineTo(g.x+g.w,g.y+30);ctx.stroke();
+    ctx.strokeStyle=g.passed?'#22c55e44':'#ef444444';
+    ctx.beginPath();ctx.moveTo(g.x,g.y+15);ctx.lineTo(g.x+g.w,g.y+15);ctx.stroke();
+  });
+  // skier
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.arc(px,H-60,8,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(px,H-52);ctx.lineTo(px,H-38);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(px-8,H-38);ctx.lineTo(px+8,H-38);ctx.stroke();
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start'}
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;
+  let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(!paused){
+    speed=Math.min(speed+dt*10,300);
+    if(steerL)px-=200*dt;
+    if(steerR)px+=200*dt;
+    px=Math.max(10,Math.min(W-10,px));
+    dist+=speed*dt;
+    spawnObs();
+    let scrollAmt=speed*dt;
+    obstacles.forEach(o=>o.y+=scrollAmt);
+    gates.forEach(g=>g.y+=scrollAmt);
+    // collision
+    for(let o of obstacles){
+      let dx=Math.abs(px-o.x),dy=Math.abs((H-50)-o.y);
+      if(dx<o.w/2+6&&dy<o.h/2+6){crash();return}
+    }
+    // gates
+    gates.forEach(g=>{
+      if(!g.passed&&g.y>H-70&&g.y<H-40){
+        if(px>g.x&&px<g.x+g.w){g.passed=true;score+=10}
+      }
+    });
+    obstacles=obstacles.filter(o=>o.y<H+30);
+    gates=gates.filter(g=>g.y<H+30);
+    score=Math.max(score,Math.floor(dist/50));
+  }
+  document.getElementById('info').textContent=`Score: ${score} | Speed: ${Math.floor(speed)} | Dist: ${Math.floor(dist)}m`;
+  draw();requestAnimationFrame(update);
+}
+
+function crash(){
+  running=false;
+  if(score>highScore)highScore=score;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-msg').textContent=`Score: ${score} | Distance: ${Math.floor(dist)}m | Best: ${highScore}`;
+  save();
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)save()}
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  px=W/2;speed=50;dist=0;score=0;obstacles=[];gates=[];running=true;paused=false;lt=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

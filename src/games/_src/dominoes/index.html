@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dominoes</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+#hand{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;max-width:400px;margin:0.5rem 0}
+.domino{background:#1e293b;border:2px solid #6366f1;padding:4px 8px;cursor:pointer;color:#e2e8f0;font-size:0.9rem;min-width:44px;text-align:center}
+.domino:hover{border-color:#facc15}
+.domino.selected{border-color:#facc15;background:#334155}
+</style>
+</head>
+<body>
+<h1>Dominoes</h1>
+<div id="info"><span id="hud-turn">Your turn</span> | Score: <span id="hud-score">0</span> | AI: <span id="hud-ai">0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="200"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Dominoes</h2>
+<p>Select a domino, then click Left or Right end</p>
+<p>Match ends to play. Draw if stuck.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">Round Over</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="btn-secondary" id="left-btn" onclick="playLeft()">← Left End</button>
+<button class="btn-secondary" id="draw-btn" onclick="drawTile()">Draw</button>
+<button class="btn-secondary" id="right-btn" onclick="playRight()">Right End →</button>
+</div>
+<div id="hand"></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=200;
+let gameRunning=false;
+let allTiles,playerHand,aiHand,boneyard,chain,leftEnd,rightEnd,selectedIdx,playerTurn;
+let playerScore=0,aiScore=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=(400*s)+'px';canvas.style.height=(200*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='dominoes'&&e.data.state)playerScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'dominoes',state:{highScore:playerScore}},'*');}catch(e){}}
+
+function createTiles(){
+  allTiles=[];
+  for(let a=0;a<=6;a++)for(let b=a;b<=6;b++)allTiles.push([a,b]);
+  // Shuffle
+  for(let i=allTiles.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[allTiles[i],allTiles[j]]=[allTiles[j],allTiles[i]];}
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  createTiles();
+  playerHand=allTiles.splice(0,7);
+  aiHand=allTiles.splice(0,7);
+  boneyard=[...allTiles];
+  chain=[];leftEnd=-1;rightEnd=-1;
+  selectedIdx=-1;playerTurn=true;
+  gameRunning=true;
+  updateInfo();renderHand();draw();
+}
+
+function updateInfo(){
+  document.getElementById('hud-turn').textContent=playerTurn?'Your turn (AI has '+aiHand.length+')':'AI thinking';
+  document.getElementById('hud-score').textContent=playerScore;
+  document.getElementById('hud-ai').textContent=aiScore;
+}
+
+function renderHand(){
+  let el=document.getElementById('hand');
+  el.innerHTML='';
+  playerHand.forEach((t,i)=>{
+    let d=document.createElement('button');
+    d.className='domino'+(i===selectedIdx?' selected':'');
+    d.textContent=t[0]+'|'+t[1];
+    d.onclick=()=>{selectedIdx=i;renderHand();};
+    el.appendChild(d);
+  });
+}
+
+function canPlay(tile,end){
+  return tile[0]===end||tile[1]===end;
+}
+
+function playLeft(){
+  if(!gameRunning||!playerTurn||selectedIdx<0)return;
+  let tile=playerHand[selectedIdx];
+  if(chain.length===0){
+    chain.push(tile);leftEnd=tile[0];rightEnd=tile[1];
+    playerHand.splice(selectedIdx,1);selectedIdx=-1;
+    afterPlay(true);return;
+  }
+  if(!canPlay(tile,leftEnd))return;
+  let placed=[...tile];
+  if(placed[1]!==leftEnd)[placed[0],placed[1]]=[placed[1],placed[0]];
+  chain.unshift(placed);leftEnd=placed[0];
+  playerHand.splice(selectedIdx,1);selectedIdx=-1;
+  afterPlay(true);
+}
+
+function playRight(){
+  if(!gameRunning||!playerTurn||selectedIdx<0)return;
+  let tile=playerHand[selectedIdx];
+  if(chain.length===0){
+    chain.push(tile);leftEnd=tile[0];rightEnd=tile[1];
+    playerHand.splice(selectedIdx,1);selectedIdx=-1;
+    afterPlay(true);return;
+  }
+  if(!canPlay(tile,rightEnd))return;
+  let placed=[...tile];
+  if(placed[0]!==rightEnd)[placed[0],placed[1]]=[placed[1],placed[0]];
+  chain.push(placed);rightEnd=placed[1];
+  playerHand.splice(selectedIdx,1);selectedIdx=-1;
+  afterPlay(true);
+}
+
+function drawTile(){
+  if(!gameRunning||!playerTurn)return;
+  if(boneyard.length>0){
+    playerHand.push(boneyard.pop());
+    renderHand();updateInfo();draw();
+  }
+}
+
+function afterPlay(wasPlayer){
+  if(wasPlayer&&playerHand.length===0){endRound('player');return;}
+  if(!wasPlayer&&aiHand.length===0){endRound('ai');return;}
+
+  playerTurn=!playerTurn;
+  updateInfo();renderHand();draw();
+  if(!playerTurn)setTimeout(aiMove,600);
+  // Check if both stuck
+  checkBlocked();
+}
+
+function checkBlocked(){
+  if(chain.length===0)return;
+  let pCan=playerHand.some(t=>canPlay(t,leftEnd)||canPlay(t,rightEnd));
+  let aCan=aiHand.some(t=>canPlay(t,leftEnd)||canPlay(t,rightEnd));
+  if(!pCan&&!aCan&&boneyard.length===0){
+    endRound('blocked');
+  }
+}
+
+function aiMove(){
+  if(!gameRunning)return;
+  // Try to play
+  for(let i=0;i<aiHand.length;i++){
+    let tile=aiHand[i];
+    if(chain.length===0){
+      chain.push(tile);leftEnd=tile[0];rightEnd=tile[1];
+      aiHand.splice(i,1);afterPlay(false);return;
+    }
+    if(canPlay(tile,rightEnd)){
+      let placed=[...tile];
+      if(placed[0]!==rightEnd)[placed[0],placed[1]]=[placed[1],placed[0]];
+      chain.push(placed);rightEnd=placed[1];
+      aiHand.splice(i,1);afterPlay(false);return;
+    }
+    if(canPlay(tile,leftEnd)){
+      let placed=[...tile];
+      if(placed[1]!==leftEnd)[placed[0],placed[1]]=[placed[1],placed[0]];
+      chain.unshift(placed);leftEnd=placed[0];
+      aiHand.splice(i,1);afterPlay(false);return;
+    }
+  }
+  // Draw
+  if(boneyard.length>0){aiHand.push(boneyard.pop());setTimeout(aiMove,400);}
+  else{playerTurn=true;updateInfo();renderHand();draw();checkBlocked();}
+}
+
+function endRound(winner){
+  gameRunning=false;
+  let pSum=playerHand.reduce((s,t)=>s+t[0]+t[1],0);
+  let aSum=aiHand.reduce((s,t)=>s+t[0]+t[1],0);
+  let msg;
+  if(winner==='player'){playerScore+=aSum;msg='You Win! +'+aSum+' points';}
+  else if(winner==='ai'){aiScore+=pSum;msg='AI Wins! AI +'+pSum+' points';}
+  else{
+    if(pSum<aSum){playerScore+=aSum;msg='Blocked! You win (lower pips) +'+aSum;}
+    else if(aSum<pSum){aiScore+=pSum;msg='Blocked! AI wins (lower pips) +'+pSum;}
+    else msg='Blocked! Draw';
+  }
+  document.getElementById('win-msg').textContent='Round Over';
+  document.getElementById('win-detail').textContent=msg+' | You: '+playerScore+' AI: '+aiScore;
+  document.getElementById('over-overlay').classList.remove('hidden');
+  saveState();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Draw chain
+  if(chain.length===0){ctx.fillStyle='#334155';ctx.font='14px system-ui';ctx.textAlign='center';ctx.fillText('Play a domino to start',W/2,H/2);return;}
+
+  let tileW=28,tileH=14,gap=2;
+  let totalW=chain.length*(tileW+gap);
+  let scrollX=Math.max(0,(totalW-W+20)/2);
+  let startX=W/2-totalW/2;
+
+  chain.forEach((t,i)=>{
+    let x=startX+i*(tileW+gap);
+    let y=H/2-tileH/2;
+    ctx.fillStyle='#e2e8f0';ctx.fillRect(x,y,tileW,tileH);
+    ctx.fillStyle='#0f172a';ctx.font='10px system-ui';ctx.textAlign='center';
+    ctx.fillText(t[0],x+7,y+11);
+    ctx.fillText(t[1],x+21,y+11);
+    ctx.fillRect(x+tileW/2-0.5,y+1,1,tileH-2);
+  });
+
+  // End indicators
+  ctx.fillStyle='#facc15';ctx.font='12px system-ui';
+  ctx.textAlign='left';ctx.fillText('L:'+leftEnd,5,20);
+  ctx.textAlign='right';ctx.fillText('R:'+rightEnd,W-5,20);
+
+  // AI hand count
+  ctx.fillStyle='#ef4444';ctx.textAlign='center';
+  ctx.fillText('AI: '+aiHand.length+' tiles',W/2,18);
+  ctx.fillStyle='#334155';ctx.fillText('Boneyard: '+boneyard.length,W/2,H-8);
+}
+
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baseball Pitch</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Baseball Pitch</h1>
+<div class="hud">
+  <span id="inningDisp">Inning: 1/9</span>
+  <span id="scoreDisp">You: 0 CPU: 0</span>
+  <span id="countDisp">B:0 S:0 O:0</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Baseball Pitch</h2>
+    <p>Click the strike zone to swing!</p>
+    <p>Timing matters for hit type.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Game Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400;
+const ZX=125,ZY=150,ZW=150,ZH=180; // strike zone
+let inning,playerScore,cpuScore,balls,strikes,outs,batting,highScore=0;
+let pitch=null,pitchTimer=0,swung=false,result='',resultTimer=0;
+let paused=false,running=false;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('pauseBtn').style.display='inline-block';
+  inning=1;playerScore=0;cpuScore=0;balls=0;strikes=0;outs=0;batting=true;
+  paused=false;running=true;result='';swung=false;pitch=null;
+  throwPitch();updateHUD();loop();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function throwPitch(){
+  const tx=ZX+Math.random()*ZW;
+  const ty=ZY+Math.random()*ZH;
+  const isStrike=tx>ZX+10&&tx<ZX+ZW-10&&ty>ZY+10&&ty<ZY+ZH-10;
+  pitch={x:W/2,y:50,tx,ty,speed:4+Math.random()*3,isStrike,arrived:false};
+  swung=false;
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||paused||!pitch||swung)return;
+  swung=true;
+  const r=canvas.getBoundingClientRect();
+  const mx=(e.clientX-r.left)/r.width*W;
+  const my=(e.clientY-r.top)/r.height*H;
+  // check timing - ball must be close to zone
+  const dist=Math.sqrt((pitch.x-pitch.tx)**2+(pitch.y-pitch.ty)**2);
+  const clickDist=Math.sqrt((mx-pitch.tx)**2+(my-pitch.ty)**2);
+  if(dist<50&&clickDist<40){
+    // hit!
+    const quality=1-dist/50;
+    if(quality>0.8){result='HOME RUN!';playerScore+=1;}
+    else if(quality>0.5){result='Double!';playerScore+=1;}
+    else if(quality>0.2){result='Single!';playerScore+=1;}
+    else{result='Foul ball';strikes=Math.min(2,strikes+1);}
+  } else {
+    result='Swing and miss!';strikes++;
+  }
+  resultTimer=60;
+  checkCount();
+});
+
+function checkCount(){
+  if(strikes>=3){result='Strikeout!';outs++;strikes=0;balls=0;resultTimer=60;}
+  if(balls>=4){result='Walk!';playerScore+=1;balls=0;strikes=0;resultTimer=60;}
+  if(outs>=3){
+    outs=0;balls=0;strikes=0;
+    if(!batting){inning++;batting=true;}
+    else{batting=false;cpuInning();}
+  }
+  if(inning>9)endGame();
+  setTimeout(()=>{if(running&&inning<=9)throwPitch();},1000);
+  updateHUD();
+}
+
+function cpuInning(){
+  // simplified CPU at-bat
+  const runs=Math.floor(Math.random()*3);
+  cpuScore+=runs;
+  result='CPU scores '+runs;resultTimer=90;
+  outs=3;// auto-end
+  inning++;batting=true;
+  if(inning>9)endGame();
+  else setTimeout(()=>{if(running)throwPitch();},1500);
+  updateHUD();
+}
+
+function endGame(){
+  running=false;
+  if(playerScore>highScore){highScore=playerScore;saveState();}
+  document.getElementById('finalScore').textContent='Final: You '+playerScore+' - CPU '+cpuScore;
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('inningDisp').textContent='Inning: '+Math.min(inning,9)+'/9';
+  document.getElementById('scoreDisp').textContent='You: '+playerScore+' CPU: '+cpuScore;
+  document.getElementById('countDisp').textContent='B:'+balls+' S:'+strikes+' O:'+outs;
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+function update(){
+  if(!pitch||pitch.arrived)return;
+  const dx=pitch.tx-pitch.x,dy=pitch.ty-pitch.y;
+  const d=Math.sqrt(dx*dx+dy*dy);
+  if(d<pitch.speed){
+    pitch.x=pitch.tx;pitch.y=pitch.ty;pitch.arrived=true;
+    if(!swung){
+      if(pitch.isStrike){strikes++;result='Strike!';}
+      else{balls++;result='Ball';}
+      resultTimer=40;
+      checkCount();
+    }
+  } else {
+    pitch.x+=dx/d*pitch.speed;pitch.y+=dy/d*pitch.speed;
+  }
+  if(resultTimer>0)resultTimer--;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // mound
+  ctx.fillStyle='#78350f';ctx.beginPath();ctx.ellipse(W/2,60,30,15,0,0,Math.PI*2);ctx.fill();
+  // strike zone
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=2;ctx.strokeRect(ZX,ZY,ZW,ZH);
+  // zone grid 3x3
+  for(let i=1;i<3;i++){
+    ctx.strokeStyle='#334155';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(ZX+i*ZW/3,ZY);ctx.lineTo(ZX+i*ZW/3,ZY+ZH);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ZX,ZY+i*ZH/3);ctx.lineTo(ZX+ZW,ZY+i*ZH/3);ctx.stroke();
+  }
+  // home plate
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.moveTo(W/2,ZY+ZH+30);ctx.lineTo(W/2-15,ZY+ZH+45);
+  ctx.lineTo(W/2-10,ZY+ZH+55);ctx.lineTo(W/2+10,ZY+ZH+55);ctx.lineTo(W/2+15,ZY+ZH+45);ctx.fill();
+  // pitch (ball)
+  if(pitch){
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(pitch.x,pitch.y,8,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=1;ctx.beginPath();ctx.arc(pitch.x,pitch.y,8,0,Math.PI*2);ctx.stroke();
+  }
+  // result text
+  if(resultTimer>0&&result){
+    ctx.fillStyle='#facc15';ctx.font='bold 20px system-ui';ctx.textAlign='center';
+    ctx.fillText(result,W/2,H-30);ctx.textAlign='start';
+  }
+}
+
+function loop(){
+  if(paused||!running)return;
+  update();draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'baseball-pitch',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='baseball-pitch'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

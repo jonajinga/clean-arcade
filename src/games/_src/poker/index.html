@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5-Card Draw Poker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(600px,95vw);background:#1e293b;position:relative;padding:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;font-size:1rem;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}
+.btn-primary:hover{background:#818cf8}
+.btn-secondary{background:#334155}
+.btn-secondary:hover{background:#475569}
+.info-bar{display:flex;justify-content:space-between;padding:6px 0;font-size:.9rem;color:#e2e8f0}
+.hand{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+.card{width:60px;height:88px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;cursor:pointer;user-select:none;position:relative;transition:transform .15s}
+.card.selected{transform:translateY(-10px);border-color:#facc15;box-shadow:0 0 8px #facc15}
+.card.red{color:#ef4444}
+.card.face-down{background:#6366f1;color:#6366f1}
+.card.face-down span{visibility:hidden}
+.label{font-size:.75rem;color:#94a3b8;text-align:center;margin:4px 0}
+.actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+.hand-ranks{font-size:.7rem;color:#94a3b8;text-align:center;line-height:1.5;margin-top:6px}
+#msg{text-align:center;color:#22c55e;min-height:1.5em;font-weight:600;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>5-Card Draw Poker</h1>
+<div id="game-area">
+<div class="info-bar"><span id="chips">Chips: 100</span><span id="pot">Pot: 0</span><span id="hi">Best: 100</span></div>
+<div class="label">CPU Hand</div>
+<div class="hand" id="cpu-hand"></div>
+<div id="msg"></div>
+<div class="label">Your Hand (click to hold/discard)</div>
+<div class="hand" id="player-hand"></div>
+<div class="actions" id="actions"></div>
+<div class="hand-ranks">Royal Flush > Straight Flush > Four of a Kind > Full House > Flush > Straight > Three of a Kind > Two Pair > One Pair > High Card</div>
+<div class="overlay" id="start-overlay">
+<h2>5-Card Draw Poker</h2>
+<p>Bet chips, get 5 cards, discard up to 3, best hand wins!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Game Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const SLUG='poker';
+let deck,playerHand,cpuHand,chips,pot,highScore=0,phase;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('hi').textContent='Best: '+highScore}});
+
+function makeDeck(){let d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}return d}
+function isRed(s){return s==='♥'||s==='♦'}
+function cardHTML(c,faceDown,sel,idx){
+  let cls='card'+(isRed(c.suit)?' red':'')+(faceDown?' face-down':'')+(sel?' selected':'');
+  return `<div class="${cls}" data-idx="${idx}"><span>${c.rank}${c.suit}</span></div>`;
+}
+function renderHands(){
+  document.getElementById('cpu-hand').innerHTML=cpuHand.map((c,i)=>cardHTML(c,phase<3,false,i)).join('');
+  document.getElementById('player-hand').innerHTML=playerHand.map((c,i)=>cardHTML(c,false,c._sel,i)).join('');
+  document.querySelectorAll('#player-hand .card').forEach(el=>{
+    el.addEventListener('click',()=>{if(phase!==1)return;let i=+el.dataset.idx;playerHand[i]._sel=!playerHand[i]._sel;renderHands()});
+  });
+}
+function updateInfo(){
+  document.getElementById('chips').textContent='Chips: '+chips;
+  document.getElementById('pot').textContent='Pot: '+pot;
+  document.getElementById('hi').textContent='Best: '+highScore;
+}
+function rankVal(r){return RANKS.indexOf(r)}
+function evalHand(h){
+  let vals=h.map(c=>rankVal(c.rank)).sort((a,b)=>a-b);
+  let suits=h.map(c=>c.suit);
+  let flush=suits.every(s=>s===suits[0]);
+  let straight=vals[4]-vals[0]===4&&new Set(vals).size===5;
+  if(!straight&&vals.join()==='0,1,2,3,12')straight=true; // A-low
+  let counts={};vals.forEach(v=>{counts[v]=(counts[v]||0)+1});
+  let freq=Object.values(counts).sort((a,b)=>b-a);
+  let score=0,name='High Card';
+  if(straight&&flush&&vals[4]===12&&vals[3]===11){score=9;name='Royal Flush'}
+  else if(straight&&flush){score=8;name='Straight Flush'}
+  else if(freq[0]===4){score=7;name='Four of a Kind'}
+  else if(freq[0]===3&&freq[1]===2){score=6;name='Full House'}
+  else if(flush){score=5;name='Flush'}
+  else if(straight){score=4;name='Straight'}
+  else if(freq[0]===3){score=3;name='Three of a Kind'}
+  else if(freq[0]===2&&freq[1]===2){score=2;name='Two Pair'}
+  else if(freq[0]===2){score=1;name='One Pair'}
+  return{score,name,high:vals[4]};
+}
+function cpuDiscard(){
+  let e=evalHand(cpuHand);
+  if(e.score>=4)return;
+  let counts={};cpuHand.forEach(c=>{let v=rankVal(c.rank);counts[v]=(counts[v]||0)+1});
+  let keep=new Set();
+  cpuHand.forEach((c,i)=>{if(counts[rankVal(c.rank)]>=2)keep.add(i)});
+  if(keep.size===0){cpuHand.sort((a,b)=>rankVal(b.rank)-rankVal(a.rank));keep.add(0);keep.add(1)}
+  cpuHand.forEach((c,i)=>{if(!keep.has(i)){cpuHand[i]=deck.pop()}});
+}
+function setActions(btns){
+  let el=document.getElementById('actions');
+  el.innerHTML=btns.map(b=>`<button class="${b.cls}" onclick="${b.fn}">${b.txt}</button>`).join('');
+}
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  chips=100;pot=0;phase=0;
+  newRound();
+}
+function newRound(){
+  if(chips<=0){endGame();return}
+  deck=makeDeck();playerHand=deck.splice(0,5);cpuHand=deck.splice(0,5);
+  playerHand.forEach(c=>c._sel=false);
+  let bet=Math.min(10,chips);chips-=bet;pot=bet*2;
+  phase=1;
+  document.getElementById('msg').textContent='Select cards to discard, then Draw (bet: '+bet+')';
+  updateInfo();renderHands();
+  setActions([{txt:'Draw',cls:'btn-primary',fn:'doDraw()'},{txt:'Raise +5',cls:'btn-secondary',fn:'doRaise()'}]);
+}
+function doRaise(){
+  if(phase!==1)return;
+  let r=Math.min(5,chips);if(r<=0)return;chips-=r;pot+=r*2;updateInfo();
+  document.getElementById('msg').textContent='Raised! Pot: '+pot;
+}
+function doDraw(){
+  if(phase!==1)return;phase=2;
+  let disc=playerHand.filter(c=>c._sel).length;
+  if(disc>3){document.getElementById('msg').textContent='Max 3 discards!';phase=1;return}
+  playerHand.forEach((c,i)=>{if(c._sel){playerHand[i]=deck.pop();playerHand[i]._sel=false}});
+  cpuDiscard();
+  phase=3;renderHands();
+  let pe=evalHand(playerHand),ce=evalHand(cpuHand);
+  let win=pe.score>ce.score||(pe.score===ce.score&&pe.high>ce.high);
+  let tie=pe.score===ce.score&&pe.high===ce.high;
+  if(win){chips+=pot;document.getElementById('msg').textContent='You win! '+pe.name+' beats '+ce.name+' (+'+pot+')'}
+  else if(tie){chips+=pot/2;document.getElementById('msg').textContent='Tie! '+pe.name+'. Split pot.'}
+  else{document.getElementById('msg').textContent='CPU wins! '+ce.name+' beats '+pe.name}
+  pot=0;updateInfo();
+  if(chips>highScore){highScore=chips;updateInfo()}
+  save();
+  if(chips<=0){setTimeout(endGame,1500)}
+  else{setActions([{txt:'Next Hand',cls:'btn-primary',fn:'newRound()'}])}
+}
+function endGame(){
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent='Game Over';
+  document.getElementById('over-msg').textContent='You ran out of chips! Best: '+highScore;
+  save();
+}
+</script>
+</body>
+</html>

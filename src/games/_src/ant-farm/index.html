@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ant Farm</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+.controls{display:flex;gap:0.5rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Ant Farm</h1>
+<div class="hud">
+  <span id="antCount">Ants: 5</span>
+  <span id="foodCount">Food: 0</span>
+  <span id="hScore">High Score: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Ant Farm</h2>
+    <p>Click to place food. Ants dig &amp; collect!</p>
+    <p>Buy more ants with food (10 food = 1 ant)</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+</div>
+<div class="controls">
+  <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+  <button onclick="buyAnt()">Buy Ant (10 food)</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=400,H=400,COLS=80,ROWS=80,CELL=W/COLS;
+let grid=[],ants=[],foodItems=[],food=0,highScore=0,paused=false,running=false;
+const DIRT=1,AIR=0,NEST=2,FOOD_CELL=3;
+const nestX=Math.floor(COLS/2),nestY=2;
+
+function resize(){
+  const mw=Math.min(window.innerWidth-16,400);
+  W=mw;H=mw;CELL=W/COLS;
+  canvas.width=W;canvas.height=H;
+}
+resize();
+window.addEventListener('resize',resize);
+
+function initGrid(){
+  grid=[];
+  for(let y=0;y<ROWS;y++){
+    grid[y]=[];
+    for(let x=0;x<COLS;x++){
+      if(y<5)grid[y][x]=AIR;
+      else grid[y][x]=DIRT;
+    }
+  }
+  grid[nestY][nestX]=NEST;
+  grid[nestY][nestX-1]=NEST;
+  grid[nestY][nestX+1]=NEST;
+  grid[nestY+1][nestX]=NEST;
+}
+
+function createAnt(){
+  return{x:nestX,y:nestY,tx:-1,ty:-1,hasFood:false,dir:Math.random()*Math.PI*2,timer:0};
+}
+
+function initAnts(n){
+  ants=[];
+  for(let i=0;i<n;i++)ants.push(createAnt());
+}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  initGrid();food=0;
+  initAnts(5);foodItems=[];
+  running=true;paused=false;
+  updateHUD();loop();
+}
+
+function togglePause(){
+  if(!running)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+canvas.addEventListener('click',e=>{
+  if(!running||paused)return;
+  const r=canvas.getBoundingClientRect();
+  const cx=Math.floor((e.clientX-r.left)/r.width*COLS);
+  const cy=Math.floor((e.clientY-r.top)/r.height*ROWS);
+  if(cx>=0&&cx<COLS&&cy>=0&&cy<ROWS&&grid[cy][cx]===AIR){
+    grid[cy][cx]=FOOD_CELL;
+    foodItems.push({x:cx,y:cy});
+  }
+});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const t=e.touches[0],r=canvas.getBoundingClientRect();
+  const cx=Math.floor((t.clientX-r.left)/r.width*COLS);
+  const cy=Math.floor((t.clientY-r.top)/r.height*ROWS);
+  if(cx>=0&&cx<COLS&&cy>=0&&cy<ROWS&&grid[cy][cx]===AIR){
+    grid[cy][cx]=FOOD_CELL;
+    foodItems.push({x:cx,y:cy});
+  }
+},{passive:false});
+
+function buyAnt(){
+  if(food>=10){
+    food-=10;
+    ants.push(createAnt());
+    updateHUD();
+  }
+}
+
+function updateHUD(){
+  document.getElementById('antCount').textContent='Ants: '+ants.length;
+  document.getElementById('foodCount').textContent='Food: '+food;
+  document.getElementById('hScore').textContent='High Score: '+highScore;
+}
+
+function findNearestFood(ax,ay){
+  let best=null,bd=Infinity;
+  for(let f of foodItems){
+    const d=Math.abs(f.x-ax)+Math.abs(f.y-ay);
+    if(d<bd){bd=d;best=f;}
+  }
+  return best;
+}
+
+function moveAnt(ant){
+  ant.timer++;
+  if(ant.timer%3!==0)return;
+  if(ant.hasFood){
+    // go to nest
+    let dx=nestX-ant.x,dy=nestY-ant.y;
+    let nx=ant.x+(dx>0?1:dx<0?-1:0);
+    let ny=ant.y+(dy>0?1:dy<0?-1:0);
+    if(ny>=0&&ny<ROWS&&nx>=0&&nx<COLS){
+      if(grid[ny][nx]===DIRT){grid[ny][nx]=AIR;}
+      ant.x=nx;ant.y=ny;
+    }
+    if(Math.abs(ant.x-nestX)<=1&&Math.abs(ant.y-nestY)<=1){
+      ant.hasFood=false;food++;
+      if(food>highScore){highScore=food;saveState();}
+      updateHUD();
+    }
+  } else {
+    let target=findNearestFood(ant.x,ant.y);
+    if(target){
+      let dx=target.x-ant.x,dy=target.y-ant.y;
+      let nx=ant.x+(dx>0?1:dx<0?-1:0);
+      let ny=ant.y+(dy>0?1:dy<0?-1:0);
+      if(ny>=0&&ny<ROWS&&nx>=0&&nx<COLS){
+        if(grid[ny][nx]===DIRT)grid[ny][nx]=AIR;
+        ant.x=nx;ant.y=ny;
+      }
+      if(ant.x===target.x&&ant.y===target.y){
+        ant.hasFood=true;
+        grid[target.y][target.x]=AIR;
+        foodItems=foodItems.filter(f=>f!==target);
+      }
+    } else {
+      // wander and dig
+      let nx=ant.x+Math.floor(Math.random()*3)-1;
+      let ny=ant.y+Math.floor(Math.random()*3)-1;
+      if(ny>=0&&ny<ROWS&&nx>=0&&nx<COLS){
+        if(grid[ny][nx]===DIRT&&Math.random()<0.3)grid[ny][nx]=AIR;
+        if(grid[ny][nx]!==DIRT){ant.x=nx;ant.y=ny;}
+      }
+    }
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  for(let y=0;y<ROWS;y++){
+    for(let x=0;x<COLS;x++){
+      const c=grid[y][x];
+      if(c===DIRT){ctx.fillStyle='#78350f';ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}
+      else if(c===NEST){ctx.fillStyle='#facc15';ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}
+      else if(c===FOOD_CELL){ctx.fillStyle='#22c55e';ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}
+    }
+  }
+  for(let ant of ants){
+    ctx.fillStyle=ant.hasFood?'#ef4444':'#e2e8f0';
+    ctx.fillRect(ant.x*CELL,ant.y*CELL,CELL,CELL);
+  }
+}
+
+function loop(){
+  if(paused||!running)return;
+  for(let ant of ants)moveAnt(ant);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function saveState(){
+  try{parent.postMessage({type:'ca-save',slug:'ant-farm',state:{highScore}},'*');}catch(e){}
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='ant-farm'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+    updateHUD();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Magic Square</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.85rem;color:#94a3b8;text-align:center;margin-bottom:0.5rem}
+#grid{display:grid;grid-template-columns:repeat(3,1fr);border:2px solid #6366f1;gap:2px;background:#6366f1;margin:0 auto}
+.cell{display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:bold;cursor:pointer;background:#1e293b;color:#e2e8f0;user-select:none;transition:background 0.15s}
+.cell.selected{background:#6366f1;color:#fff}
+.cell.correct-row{color:#22c55e}
+#sums{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:0.75rem;color:#94a3b8;text-align:center;max-width:320px;width:100%}
+.sum-ok{color:#22c55e;font-weight:bold}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.9rem;color:#94a3b8;margin:0.25rem 0}
+</style>
+</head>
+<body>
+<h1>Magic Square</h1>
+<div id="info">Arrange 1-9 so rows, columns &amp; diagonals all sum to 15</div>
+<div id="hud"><span id="moves-txt">Moves: 0</span><span id="timer-txt">Time: 0:00</span></div>
+<div id="grid"></div>
+<div id="sums"></div>
+
+<div class="overlay" id="start-overlay">
+<h2>Magic Square</h2>
+<p>Arrange numbers 1-9 in a 3×3 grid<br>so every row, column, and diagonal sums to 15.<br>Tap two cells to swap them.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>Magic Square Complete!</h2>
+<p id="go-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<script>
+let grid=[],selected=-1,moves=0,timer=null,seconds=0,highScore=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='magic-square'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'magic-square',state:{highScore}},'*')}catch(e){}}
+
+function shuffle(){
+  grid=[1,2,3,4,5,6,7,8,9];
+  for(let i=8;i>0;i--){const j=Math.random()*(i+1)|0;[grid[i],grid[j]]=[grid[j],grid[i]]}
+  // ensure not already solved
+  if(checkWin()){[grid[0],grid[8]]=[grid[8],grid[0]]}
+}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,300);
+  const cs=Math.floor(maxW/3);
+  const gridEl=document.getElementById('grid');
+  gridEl.style.width=cs*3+4+'px';
+  document.querySelectorAll('.cell').forEach(c=>{c.style.width=cs+'px';c.style.height=cs+'px'});
+}
+
+function render(){
+  const gridEl=document.getElementById('grid');
+  gridEl.innerHTML='';
+  grid.forEach((val,i)=>{
+    const cell=document.createElement('div');
+    cell.className='cell'+(selected===i?' selected':'');
+    cell.textContent=val;
+    cell.onclick=()=>tapCell(i);
+    gridEl.appendChild(cell);
+  });
+  renderSums();
+  resize();
+}
+
+function renderSums(){
+  const el=document.getElementById('sums');
+  const rows=[[0,1,2],[3,4,5],[6,7,8]];
+  const cols=[[0,3,6],[1,4,7],[2,5,8]];
+  const diags=[[0,4,8],[2,4,6]];
+  const all=[...rows,...cols,...diags];
+  const labels=['Row 1','Row 2','Row 3','Col 1','Col 2','Col 3','Diag ↘','Diag ↗'];
+  el.innerHTML='';
+  all.forEach((idxs,i)=>{
+    const sum=idxs.reduce((s,j)=>s+grid[j],0);
+    const div=document.createElement('div');
+    div.textContent=labels[i]+': '+sum;
+    if(sum===15)div.className='sum-ok';
+    el.appendChild(div);
+  });
+}
+
+function tapCell(i){
+  if(selected===-1){
+    selected=i;render();
+  } else if(selected===i){
+    selected=-1;render();
+  } else {
+    [grid[selected],grid[i]]=[grid[i],grid[selected]];
+    moves++;
+    selected=-1;
+    document.getElementById('moves-txt').textContent='Moves: '+moves;
+    render();
+    if(checkWin()){
+      clearInterval(timer);
+      if(highScore===0||moves<highScore){highScore=moves;save()}
+      setTimeout(()=>{
+        document.getElementById('go-msg').textContent='Solved in '+moves+' moves, '+formatTime(seconds)+'!';
+        document.getElementById('gameover-overlay').classList.remove('hidden');
+      },300);
+    }
+  }
+}
+
+function checkWin(){
+  const g=grid;
+  const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  return lines.every(l=>g[l[0]]+g[l[1]]+g[l[2]]===15);
+}
+
+function formatTime(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  shuffle();moves=0;seconds=0;selected=-1;
+  if(timer)clearInterval(timer);
+  timer=setInterval(()=>{seconds++;document.getElementById('timer-txt').textContent='Time: '+formatTime(seconds)},1000);
+  render();
+}
+
+window.addEventListener('resize',resize);
+</script>
+</body>
+</html>

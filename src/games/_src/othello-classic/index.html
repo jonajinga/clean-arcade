@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Othello Classic</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+</style>
+</head>
+<body>
+<h1>Othello Classic</h1>
+<div id="info">
+<span id="hud-turn">Your turn (Black)</span> |
+Black: <span id="hud-black">2</span> |
+White: <span id="hud-white">2</span> |
+Wins: <span id="hud-wins">0</span>
+</div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Othello Classic</h2>
+<p>Click to place. Flip opponent's pieces.</p>
+<p>Smart AI with positional strategy</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">Game Over</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,SZ=8,CELL=W/SZ;
+let board,currentPlayer,gameRunning=false,wins=0;
+const BLACK=1,WHITE=-1,EMPTY=0;
+const DIRS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+// Positional weights for AI
+const WEIGHTS=[
+  [100,-20,10,5,5,10,-20,100],
+  [-20,-50,-2,-2,-2,-2,-50,-20],
+  [10,-2,1,1,1,1,-2,10],
+  [5,-2,1,0,0,1,-2,5],
+  [5,-2,1,0,0,1,-2,5],
+  [10,-2,1,1,1,1,-2,10],
+  [-20,-50,-2,-2,-2,-2,-50,-20],
+  [100,-20,10,5,5,10,-20,100],
+];
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=canvas.style.height=(400*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='othello-classic'&&e.data.state)wins=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'othello-classic',state:{highScore:wins}},'*');}catch(e){}}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  board=Array.from({length:SZ},()=>Array(SZ).fill(EMPTY));
+  board[3][3]=WHITE;board[3][4]=BLACK;board[4][3]=BLACK;board[4][4]=WHITE;
+  currentPlayer=BLACK;gameRunning=true;
+  updateInfo();draw();
+}
+
+function updateInfo(){
+  let bc=0,wc=0;
+  for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){if(board[r][c]===BLACK)bc++;if(board[r][c]===WHITE)wc++;}
+  document.getElementById('hud-turn').textContent=currentPlayer===BLACK?'Your turn (Black)':'AI thinking (White)';
+  document.getElementById('hud-black').textContent=bc;
+  document.getElementById('hud-white').textContent=wc;
+  document.getElementById('hud-wins').textContent=wins;
+}
+
+function getFlips(b,r,c,player){
+  if(b[r][c]!==EMPTY)return[];
+  let allFlips=[];
+  for(let[dr,dc]of DIRS){
+    let flips=[],nr=r+dr,nc=c+dc;
+    while(nr>=0&&nr<SZ&&nc>=0&&nc<SZ&&b[nr][nc]===-player){
+      flips.push([nr,nc]);nr+=dr;nc+=dc;
+    }
+    if(flips.length>0&&nr>=0&&nr<SZ&&nc>=0&&nc<SZ&&b[nr][nc]===player){
+      allFlips.push(...flips);
+    }
+  }
+  return allFlips;
+}
+
+function getValidMoves(b,player){
+  let moves=[];
+  for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){
+    let flips=getFlips(b,r,c,player);
+    if(flips.length>0)moves.push({r,c,flips});
+  }
+  return moves;
+}
+
+function makeMove(b,r,c,player){
+  let flips=getFlips(b,r,c,player);
+  b[r][c]=player;
+  flips.forEach(([fr,fc])=>b[fr][fc]=player);
+  return flips.length;
+}
+
+canvas.addEventListener('click',e=>{
+  if(!gameRunning||currentPlayer!==BLACK)return;
+  let rect=canvas.getBoundingClientRect();
+  let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+  let c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
+  if(r<0||r>=SZ||c<0||c>=SZ)return;
+
+  let flips=getFlips(board,r,c,BLACK);
+  if(flips.length===0)return;
+
+  makeMove(board,r,c,BLACK);
+  currentPlayer=WHITE;
+  updateInfo();draw();
+  setTimeout(()=>aiTurn(),300);
+});
+
+function aiTurn(){
+  if(!gameRunning)return;
+  let moves=getValidMoves(board,WHITE);
+  if(moves.length===0){
+    currentPlayer=BLACK;
+    let playerMoves=getValidMoves(board,BLACK);
+    if(playerMoves.length===0)endGame();
+    else{updateInfo();draw();}
+    return;
+  }
+
+  // AI: minimax with alpha-beta, depth 4
+  let bestMove=null,bestScore=-Infinity;
+
+  for(let move of moves){
+    let sim=board.map(r=>[...r]);
+    makeMove(sim,move.r,move.c,WHITE);
+    let sc=minimax(sim,3,false,-Infinity,Infinity);
+    if(sc>bestScore){bestScore=sc;bestMove=move;}
+  }
+
+  if(bestMove)makeMove(board,bestMove.r,bestMove.c,WHITE);
+  currentPlayer=BLACK;
+
+  let playerMoves=getValidMoves(board,BLACK);
+  if(playerMoves.length===0){
+    let aiMoves=getValidMoves(board,WHITE);
+    if(aiMoves.length===0)endGame();
+    else{currentPlayer=WHITE;updateInfo();draw();setTimeout(aiTurn,300);}
+    return;
+  }
+  updateInfo();draw();
+}
+
+function evaluate(b){
+  let sc=0;
+  for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){
+    if(b[r][c]===WHITE)sc+=WEIGHTS[r][c];
+    else if(b[r][c]===BLACK)sc-=WEIGHTS[r][c];
+  }
+  // Mobility
+  sc+=getValidMoves(b,WHITE).length*5;
+  sc-=getValidMoves(b,BLACK).length*5;
+  return sc;
+}
+
+function minimax(b,depth,isMax,alpha,beta){
+  if(depth===0)return evaluate(b);
+  let player=isMax?WHITE:BLACK;
+  let moves=getValidMoves(b,player);
+  if(moves.length===0){
+    let opp=getValidMoves(b,-player);
+    if(opp.length===0)return evaluate(b);
+    return minimax(b,depth-1,!isMax,alpha,beta);
+  }
+  if(isMax){
+    let best=-Infinity;
+    for(let m of moves){
+      let sim=b.map(r=>[...r]);
+      makeMove(sim,m.r,m.c,WHITE);
+      best=Math.max(best,minimax(sim,depth-1,false,alpha,beta));
+      alpha=Math.max(alpha,best);
+      if(beta<=alpha)break;
+    }
+    return best;
+  } else {
+    let best=Infinity;
+    for(let m of moves){
+      let sim=b.map(r=>[...r]);
+      makeMove(sim,m.r,m.c,BLACK);
+      best=Math.min(best,minimax(sim,depth-1,true,alpha,beta));
+      beta=Math.min(beta,best);
+      if(beta<=alpha)break;
+    }
+    return best;
+  }
+}
+
+function endGame(){
+  gameRunning=false;
+  let bc=0,wc=0;
+  for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){if(board[r][c]===BLACK)bc++;if(board[r][c]===WHITE)wc++;}
+  let msg;
+  if(bc>wc){wins++;msg='You Win!';}
+  else if(wc>bc)msg='AI Wins';
+  else msg='Draw';
+  document.getElementById('win-msg').textContent=msg;
+  document.getElementById('win-detail').textContent='Black: '+bc+' | White: '+wc+' | Wins: '+wins;
+  document.getElementById('over-overlay').classList.remove('hidden');
+  saveState();draw();
+}
+
+function draw(){
+  // Board
+  ctx.fillStyle='#166534';ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='#0f172a';ctx.lineWidth=1;
+  for(let i=0;i<=SZ;i++){
+    ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(W,i*CELL);ctx.stroke();
+  }
+
+  // Guide dots
+  ctx.fillStyle='#0f172a';
+  [2,6].forEach(r=>[2,6].forEach(c=>{
+    ctx.beginPath();ctx.arc(r*CELL,c*CELL,3,0,Math.PI*2);ctx.fill();
+  }));
+
+  // Pieces
+  for(let r=0;r<SZ;r++){
+    for(let c=0;c<SZ;c++){
+      if(board[r][c]===EMPTY)continue;
+      let cx=c*CELL+CELL/2,cy=r*CELL+CELL/2;
+      ctx.fillStyle=board[r][c]===BLACK?'#1e293b':'#e2e8f0';
+      ctx.beginPath();ctx.arc(cx,cy,CELL/2-4,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=board[r][c]===BLACK?'#475569':'#94a3b8';
+      ctx.lineWidth=2;ctx.stroke();
+    }
+  }
+
+  // Valid moves highlight
+  if(gameRunning&&currentPlayer===BLACK){
+    let moves=getValidMoves(board,BLACK);
+    moves.forEach(m=>{
+      let cx=m.c*CELL+CELL/2,cy=m.r*CELL+CELL/2;
+      ctx.fillStyle='rgba(34,197,94,0.3)';
+      ctx.beginPath();ctx.arc(cx,cy,CELL/4,0,Math.PI*2);ctx.fill();
+    });
+  }
+}
+
+draw();
+</script>
+</body>
+</html>

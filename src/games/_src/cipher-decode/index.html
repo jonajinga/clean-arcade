@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cipher Decode</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;padding:1rem;width:95%;max-width:600px;margin:0.5rem auto}
+.cipher-text{font-family:monospace;font-size:1rem;line-height:2.2;word-wrap:break-word}
+.cipher-letter{display:inline-block;text-align:center;cursor:pointer;min-width:1.2em;position:relative}
+.cipher-letter .encoded{color:#ef4444;font-weight:bold}
+.cipher-letter .decoded{color:#22c55e;font-size:0.85em;display:block;min-height:1.1em}
+.cipher-letter.selected .encoded{background:#6366f1;color:#fff}
+.cipher-letter.space{min-width:0.6em}
+.cipher-letter.punct{cursor:default}
+.mapping{display:flex;flex-wrap:wrap;gap:2px;margin:0.5rem 0;justify-content:center}
+.map-item{display:flex;flex-direction:column;align-items:center;width:28px;font-size:0.75rem;padding:2px;cursor:pointer;border:1px solid #334155;background:#1e293b}
+.map-item .from{color:#ef4444;font-weight:bold}
+.map-item .to{color:#22c55e;min-height:1em}
+.map-item.active{border-color:#facc15;background:#334155}
+.hint-bar{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:0.25rem 0}
+.hint-letter{font-size:0.7rem;color:#94a3b8;background:#1e293b;padding:1px 4px;border:1px solid #334155}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.msg{font-size:0.9rem;min-height:1.1rem;text-align:center;margin:0.25rem}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold;margin:0.25rem}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Cipher Decode</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/10 | Score: <span id="score">0</span></div>
+<div class="game-area" id="gameArea">
+<div class="cipher-text" id="cipherText"></div>
+</div>
+<div class="mapping" id="mapping"></div>
+<div class="hint-bar" id="hintBar"></div>
+<div class="controls">
+<button onclick="giveHint()">Hint</button>
+<button onclick="clearAll()" style="background:#ef4444">Clear</button>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg"></div>
+<div class="info">Click an encoded letter, then type its decoded value. Frequency hints below.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Cipher Decode</h2>
+<p>Crack the substitution cipher</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Each letter has been replaced by another. Figure out the mapping to reveal the original message.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Complete!</h2>
+<p>Final Score: <span id="finalScore">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const QUOTES=[
+"The only thing we have to fear is fear itself",
+"To be or not to be that is the question",
+"All that glitters is not gold",
+"A journey of a thousand miles begins with a single step",
+"In the middle of difficulty lies opportunity",
+"Knowledge is power and power is knowledge",
+"The pen is mightier than the sword",
+"Actions speak louder than words",
+"Fortune favors the bold and brave",
+"Time flies over us but leaves its shadow behind"
+];
+
+let currentPuzzle=0;
+let cipherMap={};
+let reverseMap={};
+let userMap={};
+let selectedLetter=null;
+let score=0;
+let highScore=0;
+let hintsUsed=0;
+let paused=false;
+let gameActive=false;
+let originalText='';
+
+function generateCipher(){
+const alpha='abcdefghijklmnopqrstuvwxyz'.split('');
+const shuffled=[...alpha];
+for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];}
+// ensure no letter maps to itself
+for(let i=0;i<26;i++){
+if(alpha[i]===shuffled[i]){
+const j=(i+1)%26;
+[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+}
+}
+cipherMap={};reverseMap={};
+for(let i=0;i<26;i++){cipherMap[alpha[i]]=shuffled[i];reverseMap[shuffled[i]]=alpha[i];}
+}
+
+function encode(text){
+return text.split('').map(c=>{
+const l=c.toLowerCase();
+if(cipherMap[l])return c===c.toUpperCase()?cipherMap[l].toUpperCase():cipherMap[l];
+return c;
+}).join('');
+}
+
+function renderPuzzle(){
+const text=originalText;
+const encoded=encode(text);
+const container=document.getElementById('cipherText');
+container.innerHTML='';
+for(let i=0;i<encoded.length;i++){
+const ch=encoded[i];
+const orig=text[i];
+if(/[a-z]/i.test(ch)){
+const span=document.createElement('span');
+span.className='cipher-letter';
+const el=ch.toLowerCase();
+if(selectedLetter===el)span.classList.add('selected');
+const enc=document.createElement('span');
+enc.className='encoded';
+enc.textContent=ch.toUpperCase();
+const dec=document.createElement('span');
+dec.className='decoded';
+dec.textContent=userMap[el]?userMap[el].toUpperCase():'_';
+if(userMap[el]&&userMap[el]===reverseMap[el])dec.style.color='#22c55e';
+else if(userMap[el])dec.style.color='#facc15';
+span.appendChild(enc);
+span.appendChild(dec);
+span.addEventListener('click',()=>{selectedLetter=el;renderPuzzle();renderMapping();});
+container.appendChild(span);
+}else{
+const span=document.createElement('span');
+span.className='cipher-letter punct';
+if(ch===' ')span.classList.add('space');
+span.textContent=ch;
+container.appendChild(span);
+}
+}
+}
+
+function renderMapping(){
+const container=document.getElementById('mapping');
+container.innerHTML='';
+const alpha='abcdefghijklmnopqrstuvwxyz';
+for(const l of alpha){
+const div=document.createElement('div');
+div.className='map-item';
+if(selectedLetter===l)div.classList.add('active');
+const from=document.createElement('span');
+from.className='from';from.textContent=l.toUpperCase();
+const to=document.createElement('span');
+to.className='to';to.textContent=userMap[l]?userMap[l].toUpperCase():'';
+div.appendChild(from);div.appendChild(to);
+div.addEventListener('click',()=>{selectedLetter=l;renderPuzzle();renderMapping();});
+container.appendChild(div);
+}
+}
+
+function renderHints(){
+const encoded=encode(originalText).toLowerCase();
+const freq={};
+for(const c of encoded)if(/[a-z]/.test(c))freq[c]=(freq[c]||0)+1;
+const sorted=Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+const bar=document.getElementById('hintBar');
+bar.innerHTML='<span style="color:#94a3b8;font-size:0.7rem">Frequency: </span>';
+sorted.forEach(([l,n])=>{
+const s=document.createElement('span');
+s.className='hint-letter';
+s.textContent=`${l.toUpperCase()}:${n}`;
+bar.appendChild(s);
+});
+}
+
+function giveHint(){
+if(!gameActive||paused)return;
+const alpha='abcdefghijklmnopqrstuvwxyz';
+const unmapped=[];
+for(const l of alpha){
+if(!userMap[l]&&encode(originalText).toLowerCase().includes(l))unmapped.push(l);
+}
+if(unmapped.length===0)return;
+const l=unmapped[Math.floor(Math.random()*unmapped.length)];
+userMap[l]=reverseMap[l];
+hintsUsed++;
+renderPuzzle();renderMapping();
+}
+
+function clearAll(){
+if(!gameActive||paused)return;
+userMap={};selectedLetter=null;
+renderPuzzle();renderMapping();
+}
+
+function checkSolution(){
+if(!gameActive||paused)return;
+const msg=document.getElementById('msg');
+let correct=true;
+const encoded=encode(originalText).toLowerCase();
+const usedLetters=new Set();
+for(const c of encoded)if(/[a-z]/.test(c))usedLetters.add(c);
+for(const l of usedLetters){
+if(!userMap[l]||userMap[l]!==reverseMap[l]){correct=false;break;}
+}
+if(correct){
+const pts=Math.max(10-hintsUsed*2,1);
+score+=pts;
+document.getElementById('score').textContent=score;
+msg.textContent=`Correct! +${pts} points`;msg.style.color='#22c55e';
+currentPuzzle++;
+if(currentPuzzle>=QUOTES.length){
+gameActive=false;
+if(score>highScore){highScore=score;save();}
+document.getElementById('finalScore').textContent=score;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),1000);
+}else{
+setTimeout(()=>{loadPuzzle();msg.textContent='';},1500);
+}
+}else{
+msg.textContent='Not quite right. Keep trying!';msg.style.color='#ef4444';
+}
+}
+
+function loadPuzzle(){
+originalText=QUOTES[currentPuzzle];
+generateCipher();
+userMap={};selectedLetter=null;hintsUsed=0;
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+renderPuzzle();renderMapping();renderHints();
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+currentPuzzle=0;score=0;
+document.getElementById('score').textContent='0';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+loadPuzzle();
+}
+
+document.addEventListener('keydown',e=>{
+if(!gameActive||paused)return;
+if(e.key==='p'||e.key==='P'){togglePause();return;}
+if(selectedLetter&&/^[a-z]$/i.test(e.key)){
+const val=e.key.toLowerCase();
+// remove previous assignment of this value
+for(const k in userMap)if(userMap[k]===val)delete userMap[k];
+userMap[selectedLetter]=val;
+// move to next unmapped letter
+const encoded=encode(originalText).toLowerCase();
+const letters=[...new Set(encoded.split('').filter(c=>/[a-z]/.test(c)))];
+const idx=letters.indexOf(selectedLetter);
+for(let i=1;i<letters.length;i++){
+const next=letters[(idx+i)%letters.length];
+if(!userMap[next]){selectedLetter=next;break;}
+}
+renderPuzzle();renderMapping();
+}
+if(e.key==='Backspace'&&selectedLetter){
+delete userMap[selectedLetter];
+renderPuzzle();renderMapping();
+}
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'cipher-decode',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='cipher-decode'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

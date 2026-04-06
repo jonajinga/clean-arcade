@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slot Car Racing</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.controls{display:flex;gap:8px;margin:6px 0}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Slot Car Racing</h1>
+<div class="wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Slot Car Racing</h2>
+<p>Hold to accelerate, release to brake. Too fast on turns = fly off! Complete 3 laps.</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Race Complete!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Lap: 0/3 | Speed: 0</div>
+<div class="controls">
+<button class="btn-primary" id="gas-btn">Hold to Accelerate</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const SLUG='slot-car';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=400,H=400,cx=200,cy=200;
+let car,speed,maxSpeed,angle,lap,lapTime,bestLap,totalTime,laps,holding,paused,running,offTrack,highScore=Infinity;
+const trackA=160,trackB=120;// ellipse radii
+const trackW=30;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||Infinity});
+
+function resize(){
+  let w=Math.min(400,window.innerWidth*.95);
+  canvas.style.width=w+'px';canvas.style.height=w+'px';
+}
+resize();window.addEventListener('resize',resize);
+
+function trackPos(a){return{x:cx+trackA*Math.cos(a),y:cy+trackB*Math.sin(a)}}
+function turnSharpness(a){
+  let dx=-trackA*Math.sin(a),dy=trackB*Math.cos(a);
+  let d2x=-trackA*Math.cos(a),d2y=-trackB*Math.sin(a);
+  let num=Math.abs(dx*d2y-dy*d2x);
+  let den=Math.pow(dx*dx+dy*dy,1.5);
+  return num/den;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Track
+  ctx.strokeStyle='#334155';ctx.lineWidth=trackW;
+  ctx.beginPath();ctx.ellipse(cx,cy,trackA,trackB,0,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;
+  ctx.beginPath();ctx.ellipse(cx,cy,trackA-trackW/2,trackB-trackW/2,0,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.ellipse(cx,cy,trackA+trackW/2,trackB+trackW/2,0,0,Math.PI*2);ctx.stroke();
+  // Start line
+  let sl=trackPos(0);
+  ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(sl.x,sl.y-trackW/2);ctx.lineTo(sl.x,sl.y+trackW/2);ctx.stroke();
+  // Car
+  let p=trackPos(angle);
+  ctx.fillStyle=offTrack?'#ef4444':'#22c55e';
+  ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fill();
+  // Speed indicator
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';
+  ctx.fillText('SPD: '+speed.toFixed(1),10,20);
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',cx,cy);ctx.textAlign='start'}
+}
+
+let lastTime=0,prevAngle=0;
+function update(ts){
+  if(!running){return}
+  if(!lastTime)lastTime=ts;
+  let dt=Math.min((ts-lastTime)/1000,.05);lastTime=ts;
+  if(paused){requestAnimationFrame(update);draw();return}
+
+  let sharp=turnSharpness(angle);
+  let maxSafe=2/(sharp*30+1);
+
+  if(holding)speed=Math.min(speed+3*dt,4);
+  else speed=Math.max(speed-4*dt,0);
+
+  if(speed>maxSafe+0.5){
+    offTrack=true;speed*=0.7;
+  } else offTrack=false;
+
+  prevAngle=angle;
+  angle+=speed*dt*0.8;
+
+  // Lap detection
+  if(angle>=Math.PI*2*laps+Math.PI*2){
+    laps++;lap++;
+    let lt=(Date.now()-lapTime)/1000;
+    lapTime=Date.now();
+    if(lt<bestLap)bestLap=lt;
+    if(lap>=3){finish();return}
+  }
+
+  totalTime=(Date.now()-car)/1000;
+  document.getElementById('info').textContent=`Lap: ${Math.min(lap+1,3)}/3 | Speed: ${speed.toFixed(1)} | Time: ${totalTime.toFixed(1)}s`;
+  draw();requestAnimationFrame(update);
+}
+
+function finish(){
+  running=false;
+  if(totalTime<highScore)highScore=totalTime;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent='Race Complete!';
+  document.getElementById('over-msg').textContent=`Time: ${totalTime.toFixed(2)}s | Best Lap: ${bestLap.toFixed(2)}s | Record: ${highScore===Infinity?'-':highScore.toFixed(2)+'s'}`;
+  save();
+}
+
+function togglePause(){
+  if(!running)return;paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(paused)save();
+}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause()});
+
+// Input
+let gasBtn=document.getElementById('gas-btn');
+gasBtn.addEventListener('mousedown',()=>holding=true);gasBtn.addEventListener('mouseup',()=>holding=false);
+gasBtn.addEventListener('touchstart',e=>{e.preventDefault();holding=true});
+gasBtn.addEventListener('touchend',e=>{e.preventDefault();holding=false});
+document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='ArrowUp')holding=true});
+document.addEventListener('keyup',e=>{if(e.key===' '||e.key==='ArrowUp')holding=false});
+canvas.addEventListener('mousedown',()=>holding=true);
+canvas.addEventListener('mouseup',()=>holding=false);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();holding=true});
+canvas.addEventListener('touchend',e=>{e.preventDefault();holding=false});
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  speed=0;angle=0;lap=0;laps=0;holding=false;paused=false;offTrack=false;
+  bestLap=Infinity;car=Date.now();lapTime=Date.now();totalTime=0;
+  running=true;lastTime=0;
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

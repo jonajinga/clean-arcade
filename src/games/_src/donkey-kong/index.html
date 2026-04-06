@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Donkey Kong</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}
+.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+.touch-controls{display:grid;grid-template-columns:60px 60px 60px;grid-template-rows:50px 50px;gap:4px;margin:0.25rem 0}
+.touch-controls button{width:100%;height:100%;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>Donkey Kong</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Donkey Kong</h2>
+<p>Arrow keys to move, Space to jump</p>
+<p>Climb ladders, dodge barrels, reach the top!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-controls">
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowUp=true" ontouchend="event.preventDefault();keys.ArrowUp=false">▲</button>
+<button class="btn-primary" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false" style="font-size:0.7rem">JUMP</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowDown=true" ontouchend="event.preventDefault();keys.ArrowDown=false">▼</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=500;
+let gameRunning=false,paused=false,animId;
+let player,barrels,platforms,ladders,goal,score,lives,level,highScore=0;
+let barrelTimer,gravity=0.5;
+let keys={};
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=(400*s)+'px';canvas.style.height=(500*s)+'px';}
+resize();window.addEventListener('resize',resize);
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='donkey-kong'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'donkey-kong',state:{highScore}},'*');}catch(e){}}
+
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function buildLevel(lvl){
+  platforms=[];
+  ladders=[];
+  // 6 platforms with alternating slant
+  const py=[440,370,300,230,160,90];
+  for(let i=0;i<6;i++){
+    let slant=(i%2===0)?0.03:-0.03;
+    slant*=(1+lvl*0.2);
+    platforms.push({y:py[i],slant,xStart:i===0?0:20,xEnd:i===0?W:W-20});
+  }
+  // Ladders between platforms
+  const ladderPositions=[
+    {x:340,top:1,bot:0},{x:60,top:2,bot:1},{x:300,top:3,bot:2},
+    {x:100,top:4,bot:3},{x:260,top:5,bot:4}
+  ];
+  ladderPositions.forEach(l=>{
+    ladders.push({x:l.x,y1:py[l.top],y2:py[l.bot],w:20});
+  });
+  goal={x:180,y:py[5]-30,w:30,h:30};
+  player={x:30,y:py[0]-20,w:16,h:20,vx:0,vy:0,onGround:false,onLadder:false,jumping:false};
+  barrels=[];
+  barrelTimer=0;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;
+  buildLevel(level);
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+function platYAt(p,x){return p.y+p.slant*(x-W/2);}
+
+function onPlatform(x,y,w){
+  for(let p of platforms){
+    let py=platYAt(p,x+w/2);
+    if(x+w>p.xStart&&x<p.xEnd&&y+20>=py-2&&y+20<=py+8)return p;
+  }
+  return null;
+}
+
+function onLadder(x,y,w){
+  for(let l of ladders){
+    if(x+w/2>l.x&&x+w/2<l.x+l.w&&y+20>l.y1&&y<l.y2)return l;
+  }
+  return null;
+}
+
+function loop(){
+  if(!gameRunning||paused)return;
+  update();draw();
+  animId=requestAnimationFrame(loop);
+}
+
+function update(){
+  const p=player;
+  const spd=2.5;
+
+  let lad=onLadder(p.x,p.y,p.w);
+
+  if(lad&&(keys.ArrowUp||keys.ArrowDown)){
+    p.onLadder=true;
+    p.vy=0;
+  }
+
+  if(p.onLadder){
+    if(keys.ArrowUp)p.y-=2;
+    if(keys.ArrowDown)p.y+=2;
+    if(keys.ArrowLeft)p.x-=spd;
+    if(keys.ArrowRight)p.x+=spd;
+    if(!onLadder(p.x,p.y,p.w))p.onLadder=false;
+  } else {
+    if(keys.ArrowLeft)p.x-=spd;
+    if(keys.ArrowRight)p.x+=spd;
+    if(keys[' ']&&p.onGround&&!p.jumping){p.vy=-8;p.jumping=true;p.onGround=false;}
+    p.vy+=gravity;
+    p.y+=p.vy;
+
+    let plat=onPlatform(p.x,p.y,p.w);
+    if(plat&&p.vy>=0){
+      p.y=platYAt(plat,p.x+p.w/2)-20;
+      p.vy=0;p.onGround=true;p.jumping=false;
+    } else {
+      p.onGround=false;
+    }
+  }
+
+  if(p.x<0)p.x=0;
+  if(p.x>W-p.w)p.x=W-p.w;
+  if(p.y>H)loseLife();
+
+  // Goal check
+  if(p.x<goal.x+goal.w&&p.x+p.w>goal.x&&p.y<goal.y+goal.h&&p.y+p.h>goal.y){
+    score+=500*level;
+    level=Math.min(level+1,3);
+    buildLevel(level);
+    updateHUD();
+  }
+
+  // Barrels
+  barrelTimer++;
+  let interval=Math.max(40,120-level*30);
+  if(barrelTimer>=interval){
+    barrelTimer=0;
+    barrels.push({x:180,y:60,vx:2+Math.random(),vy:0,r:8,platIdx:5});
+  }
+
+  barrels.forEach(b=>{
+    b.vy+=gravity*0.7;
+    b.x+=b.vx;
+    b.y+=b.vy;
+
+    let plat=onPlatform(b.x-b.r,b.y-b.r,b.r*2);
+    if(plat&&b.vy>=0){
+      b.y=platYAt(plat,b.x)-b.r;
+      b.vy=0;
+      let idx=platforms.indexOf(plat);
+      if(idx!==b.platIdx){b.vx=-b.vx;b.platIdx=idx;}
+    }
+
+    // Fall off edges or use ladder randomly
+    if(b.x<10||b.x>W-10)b.vx=-b.vx;
+
+    // Random ladder descent
+    ladders.forEach(l=>{
+      if(Math.abs(b.x-l.x-10)<15&&Math.random()<0.02){
+        b.vy=2;
+      }
+    });
+
+    // Hit player
+    if(Math.abs(b.x-p.x-p.w/2)<16&&Math.abs(b.y-p.y-p.h/2)<16){
+      loseLife();
+    }
+
+    // Jump over barrel = score
+    if(p.jumping&&Math.abs(b.x-p.x)<24&&p.y<b.y&&!b.scored){
+      b.scored=true;
+      score+=100;
+      updateHUD();
+    }
+  });
+
+  barrels=barrels.filter(b=>b.y<H+20);
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{player.x=30;player.y=platforms[0].y-20;player.vx=0;player.vy=0;barrels=[];}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Platforms
+  ctx.strokeStyle='#ef4444';ctx.lineWidth=4;
+  platforms.forEach(p=>{
+    ctx.beginPath();
+    ctx.moveTo(p.xStart,platYAt(p,p.xStart));
+    ctx.lineTo(p.xEnd,platYAt(p,p.xEnd));
+    ctx.stroke();
+  });
+
+  // Ladders
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=2;
+  ladders.forEach(l=>{
+    ctx.strokeRect(l.x,l.y1,l.w,l.y2-l.y1);
+    for(let y=l.y1+12;y<l.y2;y+=12){
+      ctx.beginPath();ctx.moveTo(l.x,y);ctx.lineTo(l.x+l.w,y);ctx.stroke();
+    }
+  });
+
+  // DK (simplified)
+  ctx.fillStyle='#ef4444';
+  ctx.fillRect(165,55,50,35);
+  ctx.fillStyle='#facc15';
+  ctx.font='10px system-ui';
+  ctx.fillText('DK',178,77);
+
+  // Goal
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(goal.x,goal.y,goal.w,goal.h);
+  ctx.fillStyle='#0f172a';
+  ctx.font='10px system-ui';
+  ctx.fillText('♥',goal.x+9,goal.y+20);
+
+  // Barrels
+  ctx.fillStyle='#ef4444';
+  barrels.forEach(b=>{
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#facc15';ctx.lineWidth=1;ctx.stroke();
+  });
+
+  // Player
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(player.x,player.y,player.w,player.h);
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(player.x+2,player.y,player.w-4,6);
+}
+</script>
+</body>
+</html>

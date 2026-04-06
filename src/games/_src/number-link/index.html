@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Link</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+#clear-btn{background:#334155;padding:8px 16px;font-size:0.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Number Link</h1>
+<div id="hud"><span id="level-txt">Level 1</span><span id="status">Connect all pairs</span></div>
+<canvas id="c"></canvas>
+<button id="clear-btn" onclick="clearPaths()">Clear All</button>
+
+<div class="overlay" id="start-overlay">
+<h2>Number Link</h2>
+<p>Draw paths connecting pairs of same numbers.<br>Paths cannot cross and must fill every cell.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Level Complete!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Level</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Levels Done!</h2>
+<p>Congratulations!</p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#a855f7','#f97316','#06b6d4','#ec4899'];
+let cellSize,currentLevel=0,highScore=0;
+let gridSize,endpoints=[],paths={},currentPath=null,currentNum=-1;
+// grid[r][c] = {num: number or -1, pathNum: -1 or number}
+let grid=[];
+
+// Puzzles: {size, pairs:[[r1,c1,r2,c2,num],...]}
+const LEVELS=[
+  {size:5,pairs:[[0,0,4,4,1],[0,4,4,0,2],[1,1,3,3,3],[2,0,2,4,4],[0,2,4,2,5]]},
+  {size:5,pairs:[[0,0,2,2,1],[0,4,4,4,2],[2,0,4,0,3],[1,3,3,1,4],[4,1,4,3,5]]},
+  {size:5,pairs:[[0,0,4,0,1],[0,2,2,4,2],[0,4,4,4,3],[2,0,4,2,4],[1,1,3,3,5]]},
+  {size:6,pairs:[[0,0,5,5,1],[0,5,5,0,2],[1,1,4,4,3],[2,0,2,5,4],[0,3,5,3,5],[1,3,4,1,6]]},
+  {size:6,pairs:[[0,0,3,3,1],[0,5,5,5,2],[2,0,5,0,3],[1,2,4,5,4],[0,3,3,0,5],[4,1,5,3,6]]},
+  {size:6,pairs:[[0,0,5,0,1],[0,2,5,4,2],[0,5,3,5,3],[2,1,5,2,4],[1,3,4,0,5],[3,2,5,5,6]]},
+  {size:7,pairs:[[0,0,6,6,1],[0,6,6,0,2],[1,1,5,5,3],[2,0,4,6,4],[0,3,6,3,5],[3,1,3,5,6],[1,4,5,2,7]]},
+  {size:7,pairs:[[0,0,4,4,1],[0,6,6,6,2],[2,0,6,0,3],[1,2,5,6,4],[0,3,3,0,5],[4,1,6,3,6],[3,3,6,5,7]]}
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='number-link'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'number-link',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,380);
+  cellSize=Math.floor(maxW/gridSize);
+  canvas.width=cellSize*gridSize;
+  canvas.height=cellSize*gridSize;
+  draw();
+}
+
+function loadLevel(idx){
+  const lvl=LEVELS[idx%LEVELS.length];
+  gridSize=lvl.size;
+  endpoints=lvl.pairs;
+  grid=[];
+  for(let r=0;r<gridSize;r++){
+    grid[r]=[];
+    for(let c=0;c<gridSize;c++)grid[r][c]={num:-1,pathNum:-1};
+  }
+  endpoints.forEach(p=>{
+    grid[p[0]][p[1]].num=p[4];
+    grid[p[2]][p[3]].num=p[4];
+  });
+  paths={};
+  currentPath=null;currentNum=-1;
+  document.getElementById('level-txt').textContent='Level '+(idx+1);
+  resize();
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // grid lines
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let r=0;r<=gridSize;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=gridSize;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // paths
+  for(const num in paths){
+    const path=paths[num];
+    if(path.length<2)continue;
+    ctx.strokeStyle=COLORS[(num-1)%COLORS.length];
+    ctx.lineWidth=cellSize*0.4;
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();
+    ctx.moveTo(path[0].c*cellSize+cellSize/2,path[0].r*cellSize+cellSize/2);
+    for(let i=1;i<path.length;i++){
+      ctx.lineTo(path[i].c*cellSize+cellSize/2,path[i].r*cellSize+cellSize/2);
+    }
+    ctx.stroke();
+  }
+  // current path being drawn
+  if(currentPath&&currentPath.length>1){
+    ctx.strokeStyle=COLORS[(currentNum-1)%COLORS.length];
+    ctx.lineWidth=cellSize*0.4;
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.globalAlpha=0.6;
+    ctx.beginPath();
+    ctx.moveTo(currentPath[0].c*cellSize+cellSize/2,currentPath[0].r*cellSize+cellSize/2);
+    for(let i=1;i<currentPath.length;i++){
+      ctx.lineTo(currentPath[i].c*cellSize+cellSize/2,currentPath[i].r*cellSize+cellSize/2);
+    }
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  // endpoints
+  endpoints.forEach(p=>{
+    const n=p[4];
+    [[p[0],p[1]],[p[2],p[3]]].forEach(([r,c])=>{
+      const cx=c*cellSize+cellSize/2,cy=r*cellSize+cellSize/2;
+      ctx.fillStyle=COLORS[(n-1)%COLORS.length];
+      ctx.beginPath();ctx.arc(cx,cy,cellSize*0.32,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.font='bold '+Math.floor(cellSize*0.35)+'px system-ui';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(n,cx,cy);
+    });
+  });
+}
+
+function getCell(e){
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  return{r:Math.floor(y/cellSize),c:Math.floor(x/cellSize)};
+}
+
+function isEndpoint(r,c){
+  for(const p of endpoints){
+    if((p[0]===r&&p[1]===c)||(p[2]===r&&p[3]===c))return p[4];
+  }
+  return -1;
+}
+
+function isAdjacent(a,b){return Math.abs(a.r-b.r)+Math.abs(a.c-b.c)===1}
+
+canvas.addEventListener('pointerdown',e=>{
+  const cell=getCell(e);
+  if(cell.r<0||cell.r>=gridSize||cell.c<0||cell.c>=gridSize)return;
+  const num=isEndpoint(cell.r,cell.c);
+  if(num>0){
+    // remove existing path for this number
+    delete paths[num];
+    currentNum=num;
+    currentPath=[{r:cell.r,c:cell.c}];
+    rebuildGrid();
+    draw();
+  }
+});
+
+canvas.addEventListener('pointermove',e=>{
+  if(!currentPath)return;
+  const cell=getCell(e);
+  if(cell.r<0||cell.r>=gridSize||cell.c<0||cell.c>=gridSize)return;
+  const last=currentPath[currentPath.length-1];
+  if(cell.r===last.r&&cell.c===last.c)return;
+  if(!isAdjacent(last,cell))return;
+  // don't revisit
+  if(currentPath.some(p=>p.r===cell.r&&p.c===cell.c))return;
+  // don't cross other paths (except endpoints)
+  const epNum=isEndpoint(cell.r,cell.c);
+  if(epNum>0&&epNum!==currentNum)return;
+  // check if cell is occupied by another path
+  for(const num in paths){
+    if(parseInt(num)===currentNum)continue;
+    if(paths[num].some(p=>p.r===cell.r&&p.c===cell.c))return;
+  }
+  currentPath.push({r:cell.r,c:cell.c});
+  draw();
+  // if reached other endpoint
+  if(epNum===currentNum&&currentPath.length>1){
+    paths[currentNum]=currentPath.slice();
+    currentPath=null;currentNum=-1;
+    rebuildGrid();
+    draw();
+    checkWin();
+  }
+});
+
+canvas.addEventListener('pointerup',()=>{currentPath=null;currentNum=-1;draw()});
+
+function rebuildGrid(){
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++)grid[r][c].pathNum=-1;
+  for(const num in paths){
+    paths[num].forEach(p=>{grid[p.r][p.c].pathNum=parseInt(num)});
+  }
+}
+
+function checkWin(){
+  // all pairs connected?
+  if(Object.keys(paths).length!==endpoints.length)return;
+  // all cells filled?
+  for(let r=0;r<gridSize;r++)for(let c=0;c<gridSize;c++){
+    if(grid[r][c].pathNum===-1&&grid[r][c].num===-1)return;
+  }
+  const score=currentLevel+1;
+  if(score>highScore){highScore=score;save()}
+  setTimeout(()=>{
+    if(currentLevel>=LEVELS.length-1){
+      document.getElementById('gameover-overlay').classList.remove('hidden');
+    } else {
+      document.getElementById('win-msg').textContent='All pairs connected!';
+      document.getElementById('win-overlay').classList.remove('hidden');
+    }
+  },300);
+}
+
+function clearPaths(){paths={};currentPath=null;currentNum=-1;rebuildGrid();draw()}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentLevel++;loadLevel(currentLevel);
+}
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentLevel=0;loadLevel(0);
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

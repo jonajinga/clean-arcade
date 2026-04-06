@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Water Sort</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.85rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem}
+#game-area{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;padding:10px;max-width:500px}
+.tube{width:44px;cursor:pointer;display:flex;flex-direction:column-reverse;border:2px solid #6366f1;border-top:none;border-radius:0 0 6px 6px;height:160px;position:relative;padding:2px;background:#1e293b}
+.tube.selected{border-color:#facc15;box-shadow:0 0 8px #facc1580}
+.layer{width:100%;height:34px;border-radius:0 0 4px 4px;transition:background 0.2s}
+.layer:last-child{border-radius:4px 4px 0 0}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#moves{color:#3b82f6;font-size:0.9rem;margin:0.25rem 0}
+#level-info{color:#22c55e;font-size:0.9rem}
+#undo-btn{background:#334155;padding:8px 16px;font-size:0.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Water Sort Puzzle</h1>
+<div id="info">Tap a tube to select, tap another to pour</div>
+<div id="level-info">Level 1</div>
+<div id="moves">Moves: 0</div>
+<div id="game-area"></div>
+<button id="undo-btn" onclick="undo()">Undo</button>
+
+<div class="overlay" id="start-overlay">
+<h2>Water Sort Puzzle</h2>
+<p>Sort the colored water so each tube<br>contains only one color.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Level Complete!</h2>
+<p id="win-msg"></p>
+<button onclick="nextLevel()">Next Level</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Levels Complete!</h2>
+<p id="go-msg"></p>
+<button onclick="resetGame()">Play Again</button>
+</div>
+
+<script>
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#a855f7','#f97316','#06b6d4','#ec4899','#84cc16','#f43f5e'];
+const MAX_LAYERS=4;
+let tubes=[], selected=-1, moves=0, level=0, highScore=0, history=[];
+const LEVELS=[
+  {colors:4,tubes:6},{colors:5,tubes:7},{colors:6,tubes:8},{colors:7,tubes:9},{colors:8,tubes:10},
+  {colors:6,tubes:8},{colors:7,tubes:9},{colors:8,tubes:10},{colors:5,tubes:7},{colors:6,tubes:8}
+];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='water-sort'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'water-sort',state:{highScore}},'*')}catch(e){}}
+
+function generateLevel(lvl){
+  const cfg=LEVELS[lvl%LEVELS.length];
+  const nColors=cfg.colors, nTubes=cfg.tubes;
+  let pool=[];
+  for(let c=0;c<nColors;c++)for(let i=0;i<MAX_LAYERS;i++)pool.push(c);
+  for(let i=pool.length-1;i>0;i--){const j=Math.random()*i+1|0;[pool[i],pool[j]]=[pool[j],pool[i]]}
+  tubes=[];
+  for(let t=0;t<nColors;t++){
+    tubes.push(pool.splice(0,MAX_LAYERS));
+  }
+  for(let t=nColors;t<nTubes;t++)tubes.push([]);
+}
+
+function render(){
+  const area=document.getElementById('game-area');
+  area.innerHTML='';
+  tubes.forEach((tube,i)=>{
+    const div=document.createElement('div');
+    div.className='tube'+(selected===i?' selected':'');
+    div.onclick=()=>tapTube(i);
+    for(let l=0;l<MAX_LAYERS;l++){
+      const layer=document.createElement('div');
+      layer.className='layer';
+      if(l<tube.length)layer.style.background=COLORS[tube[l]];
+      else layer.style.background='transparent';
+      div.appendChild(layer);
+    }
+    area.appendChild(div);
+  });
+  document.getElementById('moves').textContent='Moves: '+moves;
+  document.getElementById('level-info').textContent='Level '+(level+1);
+}
+
+function tapTube(i){
+  if(selected===-1){
+    if(tubes[i].length>0){selected=i;render()}
+  } else if(selected===i){
+    selected=-1;render();
+  } else {
+    if(canPour(selected,i)){
+      history.push(JSON.parse(JSON.stringify(tubes)));
+      pour(selected,i);
+      moves++;
+      selected=-1;
+      render();
+      if(checkWin()){
+        const totalMoves=moves;
+        if(highScore===0||totalMoves<highScore){highScore=totalMoves;save()}
+        if(level>=LEVELS.length-1){
+          document.getElementById('go-msg').textContent='You completed all levels! Best: '+highScore+' moves';
+          document.getElementById('gameover-overlay').classList.remove('hidden');
+        } else {
+          document.getElementById('win-msg').textContent='Completed in '+totalMoves+' moves';
+          document.getElementById('win-overlay').classList.remove('hidden');
+        }
+      }
+    } else {
+      selected=i;
+      if(tubes[i].length===0)selected=-1;
+      render();
+    }
+  }
+}
+
+function canPour(from,to){
+  if(tubes[from].length===0)return false;
+  if(tubes[to].length>=MAX_LAYERS)return false;
+  if(tubes[to].length===0)return true;
+  return tubes[to][tubes[to].length-1]===tubes[from][tubes[from].length-1];
+}
+
+function pour(from,to){
+  const color=tubes[from][tubes[from].length-1];
+  while(tubes[from].length>0&&tubes[from][tubes[from].length-1]===color&&tubes[to].length<MAX_LAYERS){
+    tubes[to].push(tubes[from].pop());
+  }
+}
+
+function checkWin(){
+  return tubes.every(t=>t.length===0||(t.length===MAX_LAYERS&&t.every(c=>c===t[0])));
+}
+
+function undo(){
+  if(history.length>0){tubes=history.pop();moves--;selected=-1;render()}
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  level=0;moves=0;history=[];
+  generateLevel(level);render();
+}
+
+function nextLevel(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  level++;moves=0;history=[];selected=-1;
+  generateLevel(level);render();
+}
+
+function resetGame(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  level=0;moves=0;history=[];selected=-1;
+  generateLevel(level);render();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tempest</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+.touch-row{display:flex;gap:0.5rem;margin:0.25rem 0}
+</style>
+</head>
+<body>
+<h1>Tempest</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Tempest</h2>
+<p>Arrow keys / touch to rotate</p>
+<p>Space / tap to shoot down the tube</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-row">
+<button class="btn-secondary" style="width:80px;height:50px;font-size:1.3rem" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-primary" style="width:80px;height:50px" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false">FIRE</button>
+<button class="btn-secondary" style="width:80px;height:50px;font-size:1.3rem" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,CX=W/2,CY=H/2;
+let gameRunning=false,paused=false,animId;
+let playerSeg,bullets,enemies,score,lives,level,highScore=0;
+let keys={},shootCd=0;
+const SEGMENTS=16;
+const INNER_R=40,OUTER_R=180;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=canvas.style.height=(400*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tempest'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'tempest',state:{highScore}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function segAngle(seg){return(seg/SEGMENTS)*Math.PI*2-Math.PI/2;}
+function segPos(seg,depth){
+  let a=segAngle(seg);
+  let r=OUTER_R-(OUTER_R-INNER_R)*depth;
+  return{x:CX+Math.cos(a)*r,y:CY+Math.sin(a)*r};
+}
+
+function spawnWave(){
+  let count=3+level*2;
+  for(let i=0;i<count;i++){
+    let seg=Math.floor(Math.random()*SEGMENTS);
+    enemies.push({seg,depth:0,speed:0.003+level*0.001+Math.random()*0.002,type:Math.random()<0.3?'tanker':'flipper',alive:true});
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;playerSeg=0;
+  bullets=[];enemies=[];
+  spawnWave();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+let moveCd=0;
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function update(){
+  moveCd--;
+  if(keys.ArrowLeft&&moveCd<=0){playerSeg=(playerSeg-1+SEGMENTS)%SEGMENTS;moveCd=6;}
+  if(keys.ArrowRight&&moveCd<=0){playerSeg=(playerSeg+1)%SEGMENTS;moveCd=6;}
+
+  if(keys[' ']){shootCd--;if(shootCd<=0){bullets.push({seg:playerSeg,depth:1,speed:0.03});shootCd=6;}}
+
+  // Bullets
+  bullets.forEach(b=>{b.depth-=b.speed;});
+  bullets=bullets.filter(b=>b.depth>0);
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    e.depth+=e.speed;
+    // At the rim, move along segments
+    if(e.depth>=1){
+      e.depth=1;
+      if(Math.random()<0.02){
+        e.seg=(e.seg+(Math.random()<0.5?1:-1)+SEGMENTS)%SEGMENTS;
+      }
+      // Hit player
+      if(e.seg===playerSeg){loseLife();e.alive=false;}
+    }
+  });
+
+  // Bullet vs enemy
+  bullets.forEach(b=>{
+    enemies.forEach(e=>{
+      if(!e.alive)return;
+      if(b.seg===e.seg&&Math.abs(b.depth-e.depth)<0.06){
+        e.alive=false;b.depth=-1;
+        score+=e.type==='tanker'?150:100;
+        if(e.type==='tanker'){
+          // Spawn 2 smaller enemies
+          enemies.push({seg:(e.seg+1)%SEGMENTS,depth:e.depth,speed:e.speed*1.5,type:'flipper',alive:true});
+          enemies.push({seg:(e.seg-1+SEGMENTS)%SEGMENTS,depth:e.depth,speed:e.speed*1.5,type:'flipper',alive:true});
+        }
+        updateHUD();
+      }
+    });
+  });
+
+  // Wave clear
+  if(enemies.filter(e=>e.alive).length===0){
+    level++;spawnWave();updateHUD();
+  }
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Draw tube
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let i=0;i<SEGMENTS;i++){
+    let a1=segAngle(i),a2=segAngle(i+1);
+    let ox1=CX+Math.cos(a1)*OUTER_R,oy1=CY+Math.sin(a1)*OUTER_R;
+    let ox2=CX+Math.cos(a2)*OUTER_R,oy2=CY+Math.sin(a2)*OUTER_R;
+    let ix1=CX+Math.cos(a1)*INNER_R,iy1=CY+Math.sin(a1)*INNER_R;
+    let ix2=CX+Math.cos(a2)*INNER_R,iy2=CY+Math.sin(a2)*INNER_R;
+
+    // Segment lane
+    ctx.strokeStyle=i===playerSeg?'#6366f1':'#334155';
+    ctx.beginPath();ctx.moveTo(ix1,iy1);ctx.lineTo(ox1,oy1);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ox1,oy1);ctx.lineTo(ox2,oy2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ix1,iy1);ctx.lineTo(ix2,iy2);ctx.stroke();
+  }
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    let p=segPos(e.seg,e.depth);
+    let p2=segPos(e.seg+1,e.depth);
+    let mx=(p.x+p2.x)/2,my=(p.y+p2.y)/2;
+    ctx.fillStyle=e.type==='tanker'?'#ef4444':'#22c55e';
+    let sz=4+e.depth*6;
+    ctx.fillRect(mx-sz/2,my-sz/2,sz,sz);
+  });
+
+  // Bullets
+  ctx.fillStyle='#facc15';
+  bullets.forEach(b=>{
+    let p=segPos(b.seg,b.depth);
+    let p2=segPos(b.seg+1,b.depth);
+    let mx=(p.x+p2.x)/2,my=(p.y+p2.y)/2;
+    ctx.beginPath();ctx.arc(mx,my,3,0,Math.PI*2);ctx.fill();
+  });
+
+  // Player
+  let pp=segPos(playerSeg,1);
+  let pp2=segPos(playerSeg+1,1);
+  let pmx=(pp.x+pp2.x)/2,pmy=(pp.y+pp2.y)/2;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();
+  let a=segAngle(playerSeg+0.5);
+  ctx.moveTo(pmx+Math.cos(a)*12,pmy+Math.sin(a)*12);
+  ctx.lineTo(pmx+Math.cos(a+0.4)*-6,pmy+Math.sin(a+0.4)*-6);
+  ctx.lineTo(pmx+Math.cos(a-0.4)*-6,pmy+Math.sin(a-0.4)*-6);
+  ctx.closePath();ctx.fill();
+}
+</script>
+</body>
+</html>

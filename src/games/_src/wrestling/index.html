@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wrestling</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Wrestling</h1>
+<div class="hud">
+  <span id="roundDisp">Round 1/3</span>
+  <span id="pWinsDisp">You: 0</span>
+  <span id="cWinsDisp">CPU: 0</span>
+  <span id="pinDisp">Pin: 0/3</span>
+  <span id="hScore">Wins: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="350"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Wrestling</h2>
+    <p>Grab beats Dodge, Push beats Grab, Dodge beats Push!</p>
+    <p>Pin opponent for 3 seconds to win a round.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2 id="goTitle">Match Over!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="doMove('grab')" style="background:#ef4444">Grab</button>
+  <button onclick="doMove('push')" style="background:#3b82f6">Push</button>
+  <button onclick="doMove('dodge')" style="background:#22c55e">Dodge</button>
+  <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=350;
+const MOVES=['grab','push','dodge'];
+// grab > dodge, push > grab, dodge > push
+const WINS={grab:'dodge',push:'grab',dodge:'push'};
+
+let p1Stamina,p2Stamina,p1Move,p2Move,pinCount,isPinning,pinTarget;
+let round,pWins,cWins,highScore=0,msg='',msgTimer=0;
+let paused=false,running=false,interval,cooldown=false;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  round=1;pWins=0;cWins=0;
+  resetRound();
+  running=true;paused=false;
+  clearInterval(interval);
+  interval=setInterval(tick,1000);
+  loop();
+}
+
+function resetRound(){
+  p1Stamina=100;p2Stamina=100;
+  p1Move='';p2Move='';pinCount=0;isPinning=false;pinTarget='';
+  cooldown=false;
+  updateHUD();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key==='1')doMove('grab');
+  if(e.key==='2')doMove('push');
+  if(e.key==='3')doMove('dodge');
+});
+
+function doMove(move){
+  if(!running||paused||cooldown)return;
+  p1Move=move;
+  p2Move=MOVES[Math.floor(Math.random()*3)];
+  cooldown=true;
+  p1Stamina=Math.max(0,p1Stamina-8);
+  p2Stamina=Math.max(0,p2Stamina-5);
+
+  if(WINS[p1Move]===p2Move){
+    // player wins exchange
+    p2Stamina-=15;
+    msg='You '+p1Move+'! Beats '+p2Move+'!';
+    if(p2Stamina<=20){isPinning=true;pinTarget='cpu';}
+  } else if(WINS[p2Move]===p1Move){
+    // cpu wins
+    p1Stamina-=15;
+    msg='CPU '+p2Move+'! Beats '+p1Move+'!';
+    if(p1Stamina<=20){isPinning=true;pinTarget='player';}
+  } else {
+    msg='Both '+p1Move+'! Clash!';
+  }
+  msgTimer=60;
+  setTimeout(()=>{cooldown=false;},800);
+  updateHUD();
+}
+
+function tick(){
+  if(paused||!running)return;
+  p1Stamina=Math.min(100,p1Stamina+2);
+  p2Stamina=Math.min(100,p2Stamina+2);
+  if(isPinning){
+    pinCount++;
+    if(pinCount>=3){
+      if(pinTarget==='cpu'){pWins++;msg='You pinned CPU!';msgTimer=60;}
+      else{cWins++;msg='CPU pinned you!';msgTimer=60;}
+      isPinning=false;pinCount=0;
+      if(pWins>=2||cWins>=2||round>=3){endMatch();return;}
+      round++;resetRound();
+    }
+  }
+  // cpu auto-acts
+  if(!cooldown&&Math.random()<0.3){
+    p2Move=MOVES[Math.floor(Math.random()*3)];
+  }
+  updateHUD();
+}
+
+function endMatch(){
+  running=false;clearInterval(interval);
+  const winner=pWins>cWins?'You':'CPU';
+  if(pWins>cWins){highScore++;saveState();}
+  document.getElementById('goTitle').textContent=winner+' wins the match!';
+  document.getElementById('finalScore').textContent='You: '+pWins+' - CPU: '+cWins;
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('roundDisp').textContent='Round '+round+'/3';
+  document.getElementById('pWinsDisp').textContent='You: '+pWins;
+  document.getElementById('cWinsDisp').textContent='CPU: '+cWins;
+  document.getElementById('pinDisp').textContent='Pin: '+(isPinning?pinCount:0)+'/3';
+  document.getElementById('hScore').textContent='Wins: '+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // mat (circle)
+  ctx.fillStyle='#78350f';ctx.beginPath();ctx.arc(W/2,H/2+20,120,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.beginPath();ctx.arc(W/2,H/2+20,120,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.arc(W/2,H/2+20,40,0,Math.PI*2);ctx.stroke();
+
+  // wrestlers
+  drawWrestler(130,H/2+10,'#3b82f6','YOU',p1Move,p1Stamina);
+  drawWrestler(270,H/2+10,'#ef4444','CPU',p2Move,p2Stamina);
+
+  // stamina bars
+  ctx.fillStyle='#1e293b';ctx.fillRect(30,15,150,12);ctx.fillRect(W-180,15,150,12);
+  ctx.fillStyle='#22c55e';ctx.fillRect(30,15,150*p1Stamina/100,12);
+  ctx.fillStyle='#22c55e';ctx.fillRect(W-180,15,150*p2Stamina/100,12);
+  ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';
+  ctx.fillText('YOU',30,12);ctx.fillText('CPU',W-180,12);
+
+  // pin indicator
+  if(isPinning){
+    ctx.fillStyle='#facc15';ctx.font='bold 20px system-ui';ctx.textAlign='center';
+    ctx.fillText('PIN! '+pinCount+'/3',W/2,50);ctx.textAlign='start';
+  }
+
+  // message
+  if(msgTimer>0){
+    msgTimer--;
+    ctx.fillStyle='#facc15';ctx.font='bold 16px system-ui';ctx.textAlign='center';
+    ctx.fillText(msg,W/2,H-20);ctx.textAlign='start';
+  }
+}
+
+function drawWrestler(x,y,color,label,move,stamina){
+  // body
+  ctx.fillStyle=color;
+  ctx.fillRect(x-15,y-20,30,40);
+  // head
+  ctx.beginPath();ctx.arc(x,y-30,12,0,Math.PI*2);ctx.fill();
+  // arms based on move
+  ctx.strokeStyle=color;ctx.lineWidth=4;
+  if(move==='grab'){
+    ctx.beginPath();ctx.moveTo(x-15,y-10);ctx.lineTo(x-30,y-25);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+15,y-10);ctx.lineTo(x+30,y-25);ctx.stroke();
+  } else if(move==='push'){
+    ctx.beginPath();ctx.moveTo(x-15,y-10);ctx.lineTo(x-35,y-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+15,y-10);ctx.lineTo(x+35,y-5);ctx.stroke();
+  } else if(move==='dodge'){
+    ctx.beginPath();ctx.moveTo(x-15,y-10);ctx.lineTo(x-20,y+10);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+15,y-10);ctx.lineTo(x+20,y+10);ctx.stroke();
+  } else {
+    ctx.beginPath();ctx.moveTo(x-15,y-10);ctx.lineTo(x-25,y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+15,y-10);ctx.lineTo(x+25,y);ctx.stroke();
+  }
+  // legs
+  ctx.beginPath();ctx.moveTo(x-5,y+20);ctx.lineTo(x-10,y+40);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x+5,y+20);ctx.lineTo(x+10,y+40);ctx.stroke();
+  // label
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';ctx.textAlign='center';
+  ctx.fillText(label,x,y+55);ctx.textAlign='start';
+}
+
+function loop(){
+  if(paused||!running)return;
+  draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'wrestling',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='wrestling'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soccer Keepaway</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+</style>
+</head>
+<body>
+<h1>Soccer Keepaway</h1>
+<div class="hud">
+  <span id="timerDisp">60s</span>
+  <span id="savesDisp">Saves: 0</span>
+  <span id="goalsDisp">Goals: 0</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="350"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Soccer Keepaway</h2>
+    <p>Move keeper to block shots!</p>
+    <p>Arrow keys / touch to move.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Full Time!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=350;
+let keeperX=W/2,keeperW=50,keeperH=40;
+let balls=[],saves=0,goals=0,timer=60,highScore=0;
+let paused=false,running=false,interval,keys={};
+let touchX=null;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('pauseBtn').style.display='inline-block';
+  keeperX=W/2;balls=[];saves=0;goals=0;timer=60;
+  paused=false;running=true;
+  clearInterval(interval);
+  interval=setInterval(()=>{
+    if(paused||!running)return;
+    timer--;
+    if(timer<=0)endGame();
+    if(Math.random()<0.05+0.02*(60-timer)/60)spawnBall();
+    updateHUD();
+  },1000);
+  loop();
+}
+
+function spawnBall(){
+  const x=30+Math.random()*(W-60);
+  const angle=Math.atan2(H-30-0,keeperX-x)+((Math.random()-0.5)*0.8);
+  const speed=3+Math.random()*2;
+  balls.push({x,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,r:8,active:true});
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+canvas.addEventListener('touchstart',e=>{e.preventDefault();touchX=e.touches[0].clientX;},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  keeperX=(e.touches[0].clientX-r.left)/r.width*W;
+  keeperX=Math.max(keeperW/2,Math.min(W-keeperW/2,keeperX));
+},{passive:false});
+
+function endGame(){
+  running=false;clearInterval(interval);
+  if(saves>highScore){highScore=saves;saveState();}
+  document.getElementById('finalScore').textContent='Saves: '+saves+' | Goals Against: '+goals;
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('timerDisp').textContent=timer+'s';
+  document.getElementById('savesDisp').textContent='Saves: '+saves;
+  document.getElementById('goalsDisp').textContent='Goals: '+goals;
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+function update(){
+  if(keys['ArrowLeft']||keys['a'])keeperX-=6;
+  if(keys['ArrowRight']||keys['d'])keeperX+=6;
+  keeperX=Math.max(keeperW/2,Math.min(W-keeperW/2,keeperX));
+
+  for(let b of balls){
+    if(!b.active)continue;
+    b.x+=b.vx;b.y+=b.vy;
+    // keeper collision
+    const ky=H-30;
+    if(b.y+b.r>=ky&&b.y-b.r<=ky+keeperH&&b.x>=keeperX-keeperW/2&&b.x<=keeperX+keeperW/2){
+      b.active=false;saves++;
+    }
+    // goal line
+    if(b.y>H){b.active=false;goals++;}
+    // out of bounds
+    if(b.x<-20||b.x>W+20)b.active=false;
+  }
+  balls=balls.filter(b=>b.active||b.y<=H);
+  updateHUD();
+}
+
+function draw(){
+  ctx.fillStyle='#166534';ctx.fillRect(0,0,W,H);
+  // goal
+  ctx.strokeStyle='#fff';ctx.lineWidth=3;
+  ctx.strokeRect(50,H-10,W-100,10);
+  // keeper
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(keeperX-keeperW/2,H-30,keeperW,keeperH);
+  // gloves
+  ctx.fillStyle='#22c55e';
+  ctx.fillRect(keeperX-keeperW/2-5,H-28,10,15);
+  ctx.fillRect(keeperX+keeperW/2-5,H-28,10,15);
+  // balls
+  for(let b of balls){
+    if(!b.active)continue;
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.stroke();
+  }
+}
+
+function loop(){
+  if(paused||!running)return;
+  update();draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'soccer-keepaway',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='soccer-keepaway'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

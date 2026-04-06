@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aquarium Builder</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.85rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.shop{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>Aquarium Builder</h1>
+<div class="hud">
+  <span id="coinsDisp">Coins: 100</span>
+  <span id="fishDisp">Fish: 0</span>
+  <span id="hScore">Best: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="300"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Aquarium Builder</h2>
+    <p>Build your dream aquarium!</p>
+    <p>Place decorations, add fish, earn coins!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+</div>
+<div class="shop" id="shop"></div>
+<div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=300;
+const ITEMS=[
+  {name:'Goldfish',cost:20,type:'fish',color:'#facc15'},
+  {name:'Bluefin',cost:30,type:'fish',color:'#3b82f6'},
+  {name:'Clown',cost:40,type:'fish',color:'#ef4444'},
+  {name:'Rock',cost:10,type:'deco',color:'#6b7280'},
+  {name:'Plant',cost:15,type:'deco',color:'#22c55e'},
+  {name:'Chest',cost:25,type:'deco',color:'#d4a017'},
+  {name:'Castle',cost:50,type:'deco',color:'#a855f7'}
+];
+let coins,fish,decos,highScore=0,selected=0,paused=false,running=false,interval;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('pauseBtn').style.display='inline-block';
+  coins=100;fish=[];decos=[];selected=0;paused=false;running=true;
+  buildShop();updateHUD();
+  clearInterval(interval);
+  interval=setInterval(()=>{
+    if(paused||!running)return;
+    coins+=fish.length;// each fish earns 1 coin/sec
+    if(coins>highScore){highScore=coins;saveState();}
+    updateHUD();
+  },1000);
+  loop();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)loop();}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function buildShop(){
+  const p=document.getElementById('shop');p.innerHTML='';
+  ITEMS.forEach((it,i)=>{
+    const b=document.createElement('button');
+    b.textContent=it.name+' $'+it.cost;
+    b.style.background=i===selected?'#facc15':'#334155';
+    b.style.color=i===selected?'#0f172a':'#e2e8f0';
+    b.onclick=()=>{selected=i;buildShop();};
+    p.appendChild(b);
+  });
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||paused)return;
+  const r=canvas.getBoundingClientRect();
+  const mx=(e.clientX-r.left)/r.width*W;
+  const my=(e.clientY-r.top)/r.height*H;
+  const it=ITEMS[selected];
+  if(coins<it.cost)return;
+  coins-=it.cost;
+  if(it.type==='fish'){
+    fish.push({x:mx,y:my,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*1,color:it.color,size:8+Math.random()*6});
+  } else {
+    decos.push({x:mx,y:my,color:it.color,name:it.name});
+  }
+  updateHUD();
+});
+
+function updateHUD(){
+  document.getElementById('coinsDisp').textContent='Coins: '+coins;
+  document.getElementById('fishDisp').textContent='Fish: '+fish.length;
+  document.getElementById('hScore').textContent='Best: '+highScore;
+}
+
+function draw(){
+  // water bg
+  ctx.fillStyle='#0c4a6e';ctx.fillRect(0,0,W,H);
+  // sand
+  ctx.fillStyle='#d4a017';ctx.fillRect(0,H-30,W,30);
+  // bubbles
+  for(let i=0;i<5;i++){
+    ctx.fillStyle='rgba(147,197,253,0.3)';
+    ctx.beginPath();ctx.arc(50+i*80,50+Math.sin(Date.now()/1000+i)*20,4+i%3,0,Math.PI*2);ctx.fill();
+  }
+  // decorations
+  for(let d of decos){
+    ctx.fillStyle=d.color;
+    if(d.name==='Rock'){ctx.beginPath();ctx.ellipse(d.x,d.y,15,10,0,0,Math.PI*2);ctx.fill();}
+    else if(d.name==='Plant'){
+      ctx.fillRect(d.x-2,d.y-25,4,25);
+      ctx.beginPath();ctx.ellipse(d.x,d.y-28,8,12,0,0,Math.PI*2);ctx.fill();
+    }
+    else if(d.name==='Chest'){ctx.fillRect(d.x-12,d.y-10,24,16);}
+    else if(d.name==='Castle'){
+      ctx.fillRect(d.x-15,d.y-30,30,30);
+      ctx.fillRect(d.x-18,d.y-40,8,15);
+      ctx.fillRect(d.x+10,d.y-40,8,15);
+    }
+  }
+  // fish
+  for(let f of fish){
+    f.x+=f.vx;f.y+=f.vy;
+    if(f.x<10||f.x>W-10)f.vx*=-1;
+    if(f.y<10||f.y>H-40)f.vy*=-1;
+    ctx.fillStyle=f.color;
+    ctx.beginPath();
+    ctx.ellipse(f.x,f.y,f.size,f.size*0.6,0,0,Math.PI*2);ctx.fill();
+    // tail
+    const dir=f.vx>0?-1:1;
+    ctx.beginPath();ctx.moveTo(f.x+dir*f.size,f.y);
+    ctx.lineTo(f.x+dir*(f.size+8),f.y-5);
+    ctx.lineTo(f.x+dir*(f.size+8),f.y+5);ctx.fill();
+    // eye
+    ctx.fillStyle='#0f172a';
+    ctx.beginPath();ctx.arc(f.x-dir*3,f.y-2,2,0,Math.PI*2);ctx.fill();
+  }
+}
+
+function loop(){
+  if(paused||!running)return;
+  draw();requestAnimationFrame(loop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'aquarium-builder',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='aquarium-builder'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

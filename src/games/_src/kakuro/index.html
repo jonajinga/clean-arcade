@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kakuro</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;margin:0.5rem;display:inline-block}
+.grid{display:grid;gap:0}
+.cell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #334155;font-size:1.1rem;font-weight:bold;position:relative}
+.cell.black{background:#1e293b}
+.cell.white{background:#0f172a;cursor:pointer}
+.cell.white.selected{background:#334155;outline:2px solid #facc15}
+.cell.white input{width:100%;height:100%;background:transparent;border:none;color:#e2e8f0;text-align:center;font-size:1.1rem;font-weight:bold;outline:none}
+.cell .clue{position:absolute;font-size:0.55rem;color:#94a3b8;font-weight:normal}
+.cell .clue-down{bottom:2px;right:2px}
+.cell .clue-right{top:2px;left:2px}
+.cell .clue-slash{position:absolute;width:100%;height:100%;pointer-events:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.numpad{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;margin:0.25rem 0}
+.numpad button{padding:0.5rem;font-size:1rem;min-width:36px}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{font-size:0.9rem;min-height:1.1rem;text-align:center;margin:0.25rem}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Kakuro</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/3</div>
+<div class="game-area" id="gameArea"></div>
+<div class="numpad" id="numpad"></div>
+<div class="controls">
+<button onclick="clearGrid()" style="background:#ef4444">Clear</button>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg"></div>
+<div class="info">Click a white cell, then type 1-9. Groups must sum to the clue, no repeated digits.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Kakuro</h2>
+<p>Cross-sum number puzzle</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Fill white cells with digits 1-9. Each group sums to its clue. No digit repeats within a group.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Solved!</h2>
+<p>Excellent!</p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+// Puzzle format: grid[r][c] = null (black), 0 (empty white), or {d:down_clue, r:right_clue} (clue cell)
+// Solution: sol[r][c] = digit for white cells
+const PUZZLES=[
+{
+size:6,
+grid:[
+[null,{d:16,r:null},{d:3,r:null},null,{d:17,r:null},null],
+[{d:null,r:7},0,0,{d:6,r:4},0,0],
+[{d:null,r:16},0,0,0,0,null],
+[null,{d:null,r:6},0,0,{d:null,r:3},null],
+[{d:null,r:17},0,0,0,0,null],
+[{d:null,r:9},0,0,{d:null,r:9},0,0]
+],
+solution:[
+[0,0,0,0,0,0],
+[0,3,4,0,1,3],
+[0,9,2,1,4,0],
+[0,0,4,2,0,0],
+[0,8,1,3,5,0],
+[0,7,2,0,6,3]
+]
+},
+{
+size:6,
+grid:[
+[null,{d:10,r:null},{d:11,r:null},null,{d:4,r:null},{d:7,r:null}],
+[{d:null,r:3},0,0,{d:3,r:13},0,0],
+[{d:null,r:11},0,0,0,0,0],
+[null,null,{d:null,r:3},0,0,null],
+[{d:null,r:7},0,0,0,{d:null,r:null},null],
+[{d:null,r:11},0,0,0,0,null]
+],
+solution:[
+[0,0,0,0,0,0],
+[0,1,2,0,1,3],
+[0,9,5,3,2,4],
+[0,0,0,1,2,0],
+[0,3,4,2,0,0],
+[0,8,1,6,3,0]
+]
+},
+{
+size:6,
+grid:[
+[null,{d:11,r:null},{d:6,r:null},null,null,null],
+[{d:null,r:3},0,0,null,{d:10,r:null},null],
+[{d:null,r:14},0,0,{d:3,r:7},0,0],
+[null,{d:null,r:9},0,0,0,0],
+[null,{d:null,r:7},0,0,{d:null,r:null},null],
+[null,null,{d:null,r:4},0,0,null]
+],
+solution:[
+[0,0,0,0,0,0],
+[0,2,1,0,0,0],
+[0,9,5,0,3,4],
+[0,0,2,3,1,6],
+[0,0,3,4,0,0],
+[0,0,0,1,3,0]
+]
+}
+];
+
+let currentPuzzle=0;
+let playerGrid=[];
+let selectedCell=null;
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function buildGrid(){
+const p=PUZZLES[currentPuzzle];
+const area=document.getElementById('gameArea');
+area.innerHTML='';
+playerGrid=Array.from({length:p.size},()=>Array(p.size).fill(0));
+const grid=document.createElement('div');
+grid.className='grid';
+grid.style.gridTemplateColumns=`repeat(${p.size},44px)`;
+for(let r=0;r<p.size;r++){
+for(let c=0;c<p.size;c++){
+const cell=document.createElement('div');
+cell.className='cell';
+const val=p.grid[r][c];
+if(val===null){
+cell.classList.add('black');
+}else if(typeof val==='object'){
+cell.classList.add('black');
+// draw diagonal
+const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+svg.setAttribute('viewBox','0 0 44 44');
+svg.style.cssText='position:absolute;width:100%;height:100%;top:0;left:0;pointer-events:none';
+const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+line.setAttribute('x1','0');line.setAttribute('y1','0');
+line.setAttribute('x2','44');line.setAttribute('y2','44');
+line.setAttribute('stroke','#334155');line.setAttribute('stroke-width','1');
+svg.appendChild(line);
+cell.appendChild(svg);
+if(val.d!==null&&val.d!==undefined){
+const s=document.createElement('span');s.className='clue clue-down';s.textContent=val.d;
+cell.appendChild(s);
+}
+if(val.r!==null&&val.r!==undefined){
+const s=document.createElement('span');s.className='clue clue-right';s.textContent=val.r;
+cell.appendChild(s);
+}
+}else{
+cell.classList.add('white');
+cell.dataset.r=r;cell.dataset.c=c;
+cell.addEventListener('click',()=>{
+if(!gameActive||paused)return;
+document.querySelectorAll('.cell.selected').forEach(c=>c.classList.remove('selected'));
+cell.classList.add('selected');
+selectedCell={r,c};
+});
+}
+grid.appendChild(cell);
+}
+}
+area.appendChild(grid);
+// Numpad
+const numpad=document.getElementById('numpad');
+numpad.innerHTML='';
+for(let n=1;n<=9;n++){
+const btn=document.createElement('button');
+btn.textContent=n;
+btn.addEventListener('click',()=>enterNumber(n));
+numpad.appendChild(btn);
+}
+const clr=document.createElement('button');
+clr.textContent='⌫';clr.style.background='#ef4444';
+clr.addEventListener('click',()=>enterNumber(0));
+numpad.appendChild(clr);
+}
+
+function enterNumber(n){
+if(!gameActive||paused||!selectedCell)return;
+const{r,c}=selectedCell;
+playerGrid[r][c]=n;
+const cells=document.querySelectorAll('.cell.white');
+cells.forEach(cell=>{
+if(parseInt(cell.dataset.r)===r&&parseInt(cell.dataset.c)===c){
+cell.textContent=n||'';
+}
+});
+}
+
+function clearGrid(){
+if(!gameActive||paused)return;
+const p=PUZZLES[currentPuzzle];
+for(let r=0;r<p.size;r++)for(let c=0;c<p.size;c++)playerGrid[r][c]=0;
+document.querySelectorAll('.cell.white').forEach(c=>{c.textContent='';});
+selectedCell=null;
+}
+
+function checkSolution(){
+if(!gameActive||paused)return;
+const p=PUZZLES[currentPuzzle];
+const msg=document.getElementById('msg');
+let correct=true;
+for(let r=0;r<p.size;r++){
+for(let c=0;c<p.size;c++){
+if(p.grid[r][c]===0){
+if(playerGrid[r][c]!==p.solution[r][c])correct=false;
+}
+}
+}
+if(correct){
+msg.textContent='Correct!';msg.style.color='#22c55e';
+currentPuzzle++;
+if(currentPuzzle>=PUZZLES.length){
+gameActive=false;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+}else{
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+setTimeout(()=>{buildGrid();msg.textContent='';},1000);
+}
+}else{
+msg.textContent='Not quite right. Check your sums!';msg.style.color='#ef4444';
+}
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P'){togglePause();return;}
+if(!gameActive||paused)return;
+if(e.key>='1'&&e.key<='9')enterNumber(parseInt(e.key));
+if(e.key==='Backspace'||e.key==='Delete')enterNumber(0);
+});
+
+function startGame(){
+currentPuzzle=0;
+document.getElementById('puzzleNum').textContent='1';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+buildGrid();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'kakuro',state:{highScore:currentPuzzle}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='kakuro'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

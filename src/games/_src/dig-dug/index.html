@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dig Dug</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+.touch-controls{display:grid;grid-template-columns:60px 60px 60px;grid-template-rows:50px 50px;gap:4px;margin:0.25rem 0}
+.touch-controls button{width:100%;height:100%;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>Dig Dug</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-level">Level: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Dig Dug</h2>
+<p>Arrow keys to dig, Space to inflate enemies</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-controls">
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowUp=true" ontouchend="event.preventDefault();keys.ArrowUp=false">▲</button>
+<div></div>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowDown=true" ontouchend="event.preventDefault();keys.ArrowDown=false">▼</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<button class="btn-primary" style="margin:0.25rem;width:188px;height:44px" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false">PUMP</button>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,TILE=20,COLS=W/TILE,ROWS=H/TILE;
+let gameRunning=false,paused=false,animId;
+let player,enemies,rocks,grid,score,lives,level,highScore=0;
+let keys={},pumpTarget=null,pumpTimer=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=canvas.style.height=(400*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='dig-dug'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'dig-dug',state:{highScore}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function initGrid(){
+  grid=[];
+  for(let r=0;r<ROWS;r++){
+    grid[r]=[];
+    for(let c=0;c<COLS;c++){
+      grid[r][c]=r>=2?1:0; // 1=dirt, 0=empty, top 2 rows empty
+    }
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;level=1;
+  buildLevel();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function buildLevel(){
+  initGrid();
+  player={gx:COLS/2|0,gy:1,x:(COLS/2|0)*TILE,y:1*TILE,dir:0,w:TILE,h:TILE,moveTimer:0};
+  grid[player.gy][player.gx]=0;
+  enemies=[];
+  let count=3+level;
+  for(let i=0;i<count;i++){
+    let gx,gy;
+    do{gx=2+Math.floor(Math.random()*(COLS-4));gy=4+Math.floor(Math.random()*(ROWS-6));}
+    while(enemies.find(e=>e.gx===gx&&e.gy===gy));
+    enemies.push({gx,gy,x:gx*TILE,y:gy*TILE,type:i<count/2?'pooka':'fygar',inflate:0,alive:true,dir:Math.random()<0.5?-1:1,moveTimer:0,speed:Math.max(6,15-level)});
+    // Clear around enemy
+    grid[gy][gx]=0;
+  }
+  rocks=[];
+  for(let i=0;i<3;i++){
+    let rx=2+Math.floor(Math.random()*(COLS-4));
+    rocks.push({gx:rx,gy:3,x:rx*TILE,y:3*TILE,falling:false,settled:true});
+    grid[3][rx]=0;
+  }
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-level').textContent='Level: '+level;
+}
+
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function update(){
+  // Player movement
+  player.moveTimer++;
+  if(player.moveTimer>=4){
+    player.moveTimer=0;
+    let dx=0,dy=0;
+    if(keys.ArrowLeft){dx=-1;player.dir=2;}
+    else if(keys.ArrowRight){dx=1;player.dir=0;}
+    else if(keys.ArrowUp){dy=-1;player.dir=3;}
+    else if(keys.ArrowDown){dy=1;player.dir=1;}
+
+    let nx=player.gx+dx,ny=player.gy+dy;
+    if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&!rocks.find(r=>r.gx===nx&&r.gy===ny&&r.settled)){
+      player.gx=nx;player.gy=ny;
+      grid[ny][nx]=0; // Dig
+    }
+    player.x=player.gx*TILE;player.y=player.gy*TILE;
+  }
+
+  // Pump
+  if(keys[' ']){
+    let closest=null,minDist=3;
+    enemies.forEach(e=>{
+      if(!e.alive)return;
+      let d=Math.abs(e.gx-player.gx)+Math.abs(e.gy-player.gy);
+      // Must be in the direction player faces
+      let valid=false;
+      if(player.dir===0&&e.gx>player.gx&&e.gy===player.gy)valid=true;
+      if(player.dir===2&&e.gx<player.gx&&e.gy===player.gy)valid=true;
+      if(player.dir===1&&e.gy>player.gy&&e.gx===player.gx)valid=true;
+      if(player.dir===3&&e.gy<player.gy&&e.gx===player.gx)valid=true;
+      if(valid&&d<minDist){minDist=d;closest=e;}
+    });
+    if(closest){
+      closest.inflate+=0.05;
+      if(closest.inflate>=3){
+        closest.alive=false;
+        score+=closest.type==='fygar'?300:200;
+        updateHUD();
+      }
+    }
+  }
+
+  // Enemies deflate
+  enemies.forEach(e=>{if(e.alive&&e.inflate>0&&!keys[' '])e.inflate=Math.max(0,e.inflate-0.02);});
+
+  // Enemy movement
+  enemies.forEach(e=>{
+    if(!e.alive||e.inflate>0.5)return;
+    e.moveTimer++;
+    if(e.moveTimer<e.speed)return;
+    e.moveTimer=0;
+
+    // Move toward player through dug tunnels or randomly
+    let dx=player.gx-e.gx,dy=player.gy-e.gy;
+    let moves=[];
+    [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}].forEach(m=>{
+      let nx=e.gx+m.dx,ny=e.gy+m.dy;
+      if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&grid[ny][nx]===0)moves.push(m);
+    });
+
+    if(moves.length>0){
+      // Prefer toward player
+      moves.sort((a,b)=>{
+        let da=Math.abs(e.gx+a.dx-player.gx)+Math.abs(e.gy+a.dy-player.gy);
+        let db=Math.abs(e.gx+b.dx-player.gx)+Math.abs(e.gy+b.dy-player.gy);
+        return da-db;
+      });
+      let m=Math.random()<0.7?moves[0]:moves[Math.floor(Math.random()*moves.length)];
+      e.gx+=m.dx;e.gy+=m.dy;
+    }
+    e.x=e.gx*TILE;e.y=e.gy*TILE;
+
+    // Hit player
+    if(e.gx===player.gx&&e.gy===player.gy)loseLife();
+  });
+
+  // Rocks
+  rocks.forEach(r=>{
+    if(!r.settled)return;
+    // Check if ground below is dug
+    if(r.gy+1<ROWS&&grid[r.gy+1][r.gx]===0){
+      r.falling=true;r.settled=false;
+    }
+  });
+  rocks.forEach(r=>{
+    if(!r.falling)return;
+    r.y+=3;
+    let newGy=Math.floor(r.y/TILE);
+    if(newGy>=ROWS-1||grid[newGy+1]&&grid[newGy+1][r.gx]===1){
+      r.gy=newGy;r.y=newGy*TILE;r.falling=false;r.settled=true;
+    } else {
+      r.gy=newGy;
+    }
+    // Crush enemies
+    enemies.forEach(e=>{
+      if(e.alive&&e.gx===r.gx&&Math.abs(e.y-r.y)<TILE){
+        e.alive=false;score+=500;updateHUD();
+      }
+    });
+    // Crush player
+    if(player.gx===r.gx&&Math.abs(player.y-r.y)<TILE)loseLife();
+  });
+
+  // Level clear
+  if(enemies.filter(e=>e.alive).length===0){level++;buildLevel();updateHUD();}
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{player.gx=COLS/2|0;player.gy=1;player.x=player.gx*TILE;player.y=player.gy*TILE;}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Dirt layers
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(grid[r][c]===1){
+        let depth=r/ROWS;
+        let r1=Math.floor(80+depth*40),g1=Math.floor(50+depth*20),b1=20;
+        ctx.fillStyle=`rgb(${r1},${g1},${b1})`;
+        ctx.fillRect(c*TILE,r*TILE,TILE,TILE);
+      }
+    }
+  }
+
+  // Rocks
+  rocks.forEach(r=>{
+    ctx.fillStyle='#94a3b8';ctx.fillRect(r.x+1,r.y+1,TILE-2,TILE-2);
+    ctx.fillStyle='#64748b';ctx.fillRect(r.x+4,r.y+4,TILE-8,TILE-8);
+  });
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    let size=TILE-4+e.inflate*4;
+    ctx.fillStyle=e.type==='pooka'?'#ef4444':'#22c55e';
+    ctx.beginPath();ctx.arc(e.x+TILE/2,e.y+TILE/2,size/2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.fillRect(e.x+5,e.y+5,4,4);ctx.fillRect(e.x+11,e.y+5,4,4);
+  });
+
+  // Player
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(player.x+2,player.y+2,TILE-4,TILE-4);
+  // Pump hose direction
+  if(keys[' ']){
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.beginPath();
+    let cx=player.x+TILE/2,cy=player.y+TILE/2;
+    ctx.moveTo(cx,cy);
+    if(player.dir===0)ctx.lineTo(cx+TILE*2,cy);
+    else if(player.dir===2)ctx.lineTo(cx-TILE*2,cy);
+    else if(player.dir===1)ctx.lineTo(cx,cy+TILE*2);
+    else ctx.lineTo(cx,cy-TILE*2);
+    ctx.stroke();
+  }
+  // Helmet
+  ctx.fillStyle='#facc15';ctx.fillRect(player.x+4,player.y,TILE-8,4);
+}
+</script>
+</body>
+</html>

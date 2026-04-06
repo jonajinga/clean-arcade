@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Block Slide</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#info{font-size:0.85rem;color:#94a3b8;text-align:center;margin-bottom:0.25rem}
+canvas{border:2px solid #6366f1;display:block;margin:0 auto}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#fff;border:none;padding:12px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{background:#4f46e5}
+#hud{display:flex;gap:1rem;justify-content:center;font-size:0.85rem;color:#94a3b8;margin:0.25rem 0}
+</style>
+</head>
+<body>
+<h1>Block Slide</h1>
+<div id="hud"><span id="level-txt">Puzzle 1/15</span><span id="moves-txt">Moves: 0</span></div>
+<canvas id="c"></canvas>
+
+<div class="overlay" id="start-overlay">
+<h2>Block Slide</h2>
+<p>Slide blocks to move the red block<br>to the exit on the right.</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="win-overlay">
+<h2>Puzzle Solved!</h2>
+<p id="win-msg"></p>
+<button id="next-btn" onclick="nextPuzzle()">Next Puzzle</button>
+</div>
+
+<div class="overlay hidden" id="gameover-overlay">
+<h2>All Puzzles Complete!</h2>
+<p id="go-msg"></p>
+<button onclick="resetAll()">Play Again</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const COLS=6,ROWS=6;
+let cellSize,moves=0,currentPuzzle=0,highScore=0,dragging=null,dragStart={x:0,y:0},blockStart={r:0,c:0};
+let blocks=[];
+
+// Each block: {r,c,h,w,isTarget,color}
+// h=horizontal length, v=vertical length
+// blocks defined as [row,col,len,dir('h'/'v'),isTarget]
+const PUZZLES=[
+  [[2,0,2,'h',1],[0,0,3,'v',0],[0,2,2,'v',0],[0,4,2,'h',0],[1,4,2,'v',0],[3,0,2,'v',0],[3,1,3,'h',0],[4,3,3,'v',0],[5,0,2,'h',0],[5,4,2,'h',0]],
+  [[2,1,2,'h',1],[0,0,2,'h',0],[0,3,3,'h',0],[1,0,3,'v',0],[1,2,2,'v',0],[1,5,2,'v',0],[3,2,2,'h',0],[4,0,2,'h',0],[4,4,2,'v',0],[5,1,3,'h',0]],
+  [[2,0,2,'h',1],[0,0,2,'v',0],[0,2,2,'h',0],[0,5,3,'v',0],[1,3,2,'h',0],[3,0,3,'h',0],[3,3,2,'v',0],[4,0,2,'v',0],[4,1,2,'h',0],[5,4,2,'h',0]],
+  [[2,0,2,'h',1],[0,0,2,'h',0],[0,3,2,'v',0],[0,4,2,'h',0],[1,1,2,'v',0],[2,5,3,'v',0],[3,0,2,'h',0],[3,3,3,'h',0],[4,0,2,'v',0],[5,2,2,'h',0]],
+  [[2,1,2,'h',1],[0,0,3,'v',0],[0,1,2,'h',0],[0,4,2,'v',0],[1,2,2,'v',0],[2,4,2,'h',0],[3,1,2,'h',0],[3,3,3,'v',0],[4,4,2,'v',0],[5,0,3,'h',0]],
+  [[2,0,2,'h',1],[0,0,2,'h',0],[0,3,3,'v',0],[0,4,2,'v',0],[1,1,2,'v',0],[2,2,2,'v',0],[3,4,2,'h',0],[4,0,3,'h',0],[4,5,2,'v',0],[5,3,2,'h',0]],
+  [[2,0,2,'h',1],[0,0,3,'h',0],[0,4,2,'v',0],[1,1,2,'v',0],[1,3,2,'v',0],[2,5,3,'v',0],[3,0,2,'h',0],[4,2,2,'h',0],[4,4,2,'v',0],[5,0,3,'h',0]],
+  [[2,2,2,'h',1],[0,0,2,'v',0],[0,1,2,'h',0],[0,4,3,'v',0],[1,3,2,'v',0],[2,0,2,'v',0],[2,5,2,'v',0],[3,1,3,'h',0],[4,4,2,'h',0],[5,0,2,'h',0],[5,3,2,'v',0]],
+  [[2,0,2,'h',1],[0,0,2,'h',0],[0,3,2,'v',0],[0,5,3,'v',0],[1,1,2,'v',0],[2,2,3,'v',0],[3,3,3,'h',0],[4,0,2,'h',0],[4,4,2,'v',0],[5,2,2,'h',0]],
+  [[2,1,2,'h',1],[0,0,2,'v',0],[0,2,2,'h',0],[0,5,3,'v',0],[1,3,2,'v',0],[2,0,2,'v',0],[3,1,3,'h',0],[3,4,2,'v',0],[4,0,2,'h',0],[5,2,3,'h',0]],
+  [[2,0,2,'h',1],[0,1,2,'v',0],[0,2,3,'h',0],[0,5,2,'v',0],[1,0,2,'v',0],[2,3,2,'v',0],[3,1,2,'h',0],[3,4,2,'h',0],[4,0,3,'v',0],[4,3,3,'h',0],[5,1,2,'h',0]],
+  [[2,0,2,'h',1],[0,0,3,'h',0],[0,4,2,'v',0],[1,1,2,'v',0],[1,3,2,'v',0],[2,5,2,'v',0],[3,0,3,'h',0],[4,3,2,'h',0],[4,5,2,'v',0],[5,0,2,'h',0],[5,2,2,'h',0]],
+  [[2,1,2,'h',1],[0,0,2,'v',0],[0,2,2,'h',0],[0,5,2,'v',0],[1,3,2,'h',0],[2,0,3,'v',0],[2,5,2,'v',0],[3,1,2,'h',0],[3,3,3,'v',0],[4,4,2,'h',0],[5,1,3,'h',0]],
+  [[2,0,2,'h',1],[0,0,2,'h',0],[0,3,3,'v',0],[0,4,2,'h',0],[1,1,2,'v',0],[2,2,2,'v',0],[2,4,2,'v',0],[3,5,3,'v',0],[4,0,3,'h',0],[4,3,2,'h',0],[5,1,2,'h',0]],
+  [[2,0,2,'h',1],[0,0,3,'v',0],[0,1,2,'h',0],[0,4,2,'v',0],[1,2,2,'v',0],[1,5,3,'v',0],[2,3,2,'h',0],[3,1,3,'h',0],[4,0,2,'h',0],[4,3,3,'v',0],[4,4,2,'h',0],[5,1,2,'h',0]]
+];
+
+const BLOCK_COLORS=['#3b82f6','#22c55e','#a855f7','#f97316','#06b6d4','#ec4899','#84cc16','#f43f5e','#64748b','#d946ef','#14b8a6','#fb923c'];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='block-slide'){const s=e.data.state;if(s&&s.highScore)highScore=s.highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'block-slide',state:{highScore}},'*')}catch(e){}}
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-20,400);
+  cellSize=Math.floor(maxW/COLS);
+  canvas.width=cellSize*COLS;
+  canvas.height=cellSize*ROWS;
+  draw();
+}
+
+function loadPuzzle(idx){
+  const p=PUZZLES[idx%PUZZLES.length];
+  blocks=p.map((b,i)=>{
+    const len=b[2],dir=b[3],isTarget=b[4];
+    return {r:b[0],c:b[1],rows:dir==='v'?len:1,cols:dir==='h'?len:1,isTarget,color:isTarget?'#ef4444':BLOCK_COLORS[i%BLOCK_COLORS.length]};
+  });
+  moves=0;
+  updateHUD();
+}
+
+function updateHUD(){
+  document.getElementById('level-txt').textContent='Puzzle '+(currentPuzzle+1)+'/'+PUZZLES.length;
+  document.getElementById('moves-txt').textContent='Moves: '+moves;
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // exit marker
+  ctx.fillStyle='#22c55e';
+  const exitRow=2;
+  ctx.fillRect(canvas.width-4,exitRow*cellSize,4,cellSize);
+  // grid
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*cellSize);ctx.lineTo(canvas.width,r*cellSize);ctx.stroke()}
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*cellSize,0);ctx.lineTo(c*cellSize,canvas.height);ctx.stroke()}
+  // blocks
+  blocks.forEach(b=>{
+    ctx.fillStyle=b.color;
+    ctx.fillRect(b.c*cellSize+2,b.r*cellSize+2,b.cols*cellSize-4,b.rows*cellSize-4);
+    if(b.isTarget){
+      ctx.fillStyle='#fff';ctx.font='bold '+Math.floor(cellSize*0.4)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('★',b.c*cellSize+b.cols*cellSize/2,b.r*cellSize+b.rows*cellSize/2);
+    }
+  });
+}
+
+function getBlockAt(r,c){return blocks.find(b=>r>=b.r&&r<b.r+b.rows&&c>=b.c&&c<b.c+b.cols);}
+
+function occupied(block,r,c){
+  for(let dr=0;dr<block.rows;dr++)for(let dc=0;dc<block.cols;dc++){
+    const nr=r+dr,nc=c+dc;
+    if(nr<0||nr>=ROWS||nc<0||nc>=COLS)return true;
+    const other=blocks.find(b=>b!==block&&nr>=b.r&&nr<b.r+b.rows&&nc>=b.c&&nc<b.c+b.cols);
+    if(other)return true;
+  }
+  // allow target block to exit right
+  if(block.isTarget){
+    for(let dr=0;dr<block.rows;dr++)for(let dc=0;dc<block.cols;dc++){
+      if(c+dc>=COLS&&r+dr===2)continue;
+      if(c+dc<0||r+dr<0||r+dr>=ROWS)return true;
+    }
+  }
+  return false;
+}
+
+function canMove(block,dr,dc){
+  const nr=block.r+dr,nc=block.c+dc;
+  for(let r=0;r<block.rows;r++)for(let c=0;c<block.cols;c++){
+    const tr=nr+r,tc=nc+c;
+    if(block.isTarget&&block.rows===1&&tc>=COLS&&tr===2)continue;
+    if(tr<0||tr>=ROWS||tc<0||tc>=COLS)return false;
+    const other=blocks.find(b=>b!==block&&tr>=b.r&&tr<b.r+b.rows&&tc>=b.c&&tc<b.c+b.cols);
+    if(other)return false;
+  }
+  return true;
+}
+
+canvas.addEventListener('pointerdown',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const c=Math.floor(x/cellSize),r=Math.floor(y/cellSize);
+  const block=getBlockAt(r,c);
+  if(block){dragging=block;dragStart={x:e.clientX,y:e.clientY};blockStart={r:block.r,c:block.c}}
+});
+
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
+  const isHoriz=dragging.cols>1;
+  if(isHoriz){
+    const dc=Math.round(dx/cellSize);
+    if(dc!==0){
+      const step=dc>0?1:-1;
+      let moved=false;
+      for(let i=0;i<Math.abs(dc);i++){
+        if(canMove(dragging,0,step)){dragging.c+=step;moved=true}
+      }
+      if(moved){dragStart.x=e.clientX;moves++;updateHUD();draw();checkWinState()}
+    }
+  } else {
+    const dr=Math.round(dy/cellSize);
+    if(dr!==0){
+      const step=dr>0?1:-1;
+      let moved=false;
+      for(let i=0;i<Math.abs(dr);i++){
+        if(canMove(dragging,step,0)){dragging.r+=step;moved=true}
+      }
+      if(moved){dragStart.y=e.clientY;moves++;updateHUD();draw();checkWinState()}
+    }
+  }
+});
+
+canvas.addEventListener('pointerup',()=>{dragging=null});
+canvas.addEventListener('pointercancel',()=>{dragging=null});
+
+function checkWinState(){
+  const target=blocks.find(b=>b.isTarget);
+  if(target&&target.c+target.cols>=COLS){
+    setTimeout(()=>{
+      if(currentPuzzle>=PUZZLES.length-1){
+        if(highScore===0||moves<highScore){highScore=moves;save()}
+        document.getElementById('go-msg').textContent='Total moves: '+moves;
+        document.getElementById('gameover-overlay').classList.remove('hidden');
+      } else {
+        document.getElementById('win-msg').textContent='Solved in '+moves+' moves!';
+        document.getElementById('win-overlay').classList.remove('hidden');
+      }
+    },200);
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  currentPuzzle=0;loadPuzzle(0);resize();
+}
+function nextPuzzle(){
+  document.getElementById('win-overlay').classList.add('hidden');
+  currentPuzzle++;loadPuzzle(currentPuzzle);draw();
+}
+function resetAll(){
+  document.getElementById('gameover-overlay').classList.add('hidden');
+  currentPuzzle=0;loadPuzzle(0);draw();
+}
+
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>

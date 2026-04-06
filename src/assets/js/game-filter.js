@@ -218,6 +218,10 @@ document.addEventListener("keydown", function(e) {
 });
 
 document.addEventListener("DOMContentLoaded", function () {
+  /* Show filter buttons (hidden by default via CSS) */
+  var filters = document.getElementById("header-filters");
+  if (filters) filters.style.display = "flex";
+
   sortAlpha();
 
   /* Restore filters from hash */

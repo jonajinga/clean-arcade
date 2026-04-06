@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weather Station</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.pred{display:flex;gap:0.5rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center;align-items:center}
+.pred label{font-size:0.8rem}
+.pred input,.pred select{background:#1e293b;color:#e2e8f0;border:1px solid #334155;padding:0.3rem;border-radius:0;font-size:0.8rem;width:60px}
+</style>
+</head>
+<body>
+<h1>Weather Station</h1>
+<div class="hud">
+  <span id="dayDisp">Day: 1/30</span>
+  <span id="scoreDisp">Score: 0</span>
+  <span id="hScore">High Score: 0</span>
+</div>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>Weather Station</h2>
+    <p>Track weather &amp; predict tomorrow!</p>
+    <p>Earn points for accurate predictions</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>30 Days Complete!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="pred" id="predArea" style="display:none">
+  <label>Predict: Temp</label>
+  <input type="number" id="predTemp" value="70" min="-20" max="120">
+  <label>Rain%</label>
+  <input type="number" id="predRain" value="30" min="0" max="100">
+  <label>Wind</label>
+  <input type="number" id="predWind" value="10" min="0" max="80">
+  <button onclick="submitPrediction()">Next Day</button>
+</div>
+<div style="margin:0.3rem"><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=400,H=300;
+canvas.width=W;canvas.height=H;
+
+let days=[],day=0,score=0,highScore=0,paused=false,running=false;
+
+function genWeather(prev){
+  const t=prev?prev.temp+((Math.random()-0.5)*15):65+Math.random()*20;
+  const r=Math.max(0,Math.min(100,prev?prev.rain+((Math.random()-0.5)*30):Math.random()*60));
+  const w=Math.max(0,Math.min(80,prev?prev.wind+((Math.random()-0.5)*15):Math.random()*30));
+  return{temp:Math.round(t),rain:Math.round(r),wind:Math.round(w)};
+}
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('predArea').style.display='flex';
+  days=[];day=0;score=0;
+  days.push(genWeather(null));
+  updateHUD();draw();running=true;
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function submitPrediction(){
+  if(!running||paused)return;
+  const pt=parseInt(document.getElementById('predTemp').value)||70;
+  const pr=parseInt(document.getElementById('predRain').value)||30;
+  const pw=parseInt(document.getElementById('predWind').value)||10;
+  const actual=genWeather(days[days.length-1]);
+  days.push(actual);day++;
+  const tErr=Math.abs(pt-actual.temp);
+  const rErr=Math.abs(pr-actual.rain);
+  const wErr=Math.abs(pw-actual.wind);
+  const pts=Math.max(0,Math.round(100-tErr*2-rErr-wErr));
+  score+=pts;
+  document.getElementById('predTemp').value=actual.temp;
+  document.getElementById('predRain').value=actual.rain;
+  document.getElementById('predWind').value=actual.wind;
+  if(day>=29){
+    running=false;
+    if(score>highScore){highScore=score;saveState();}
+    document.getElementById('finalScore').textContent='Final Score: '+score;
+    document.getElementById('gameOverOverlay').style.display='flex';
+    document.getElementById('predArea').style.display='none';
+  }
+  updateHUD();draw();
+}
+
+function updateHUD(){
+  document.getElementById('dayDisp').textContent='Day: '+(day+1)+'/30';
+  document.getElementById('scoreDisp').textContent='Score: '+score;
+  document.getElementById('hScore').textContent='High Score: '+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  if(days.length===0)return;
+  const cur=days[days.length-1];
+  // current weather
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';
+  ctx.fillText('Today: '+cur.temp+'°F  Rain:'+cur.rain+'%  Wind:'+cur.wind+'mph',10,20);
+  // graph
+  const gx=40,gy=40,gw=W-60,gh=H-60;
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  ctx.strokeRect(gx,gy,gw,gh);
+  // temp line
+  if(days.length>1){
+    const step=gw/29;
+    // temp
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=2;ctx.beginPath();
+    for(let i=0;i<days.length;i++){
+      const x=gx+i*step;
+      const y=gy+gh-(days[i].temp+20)/140*gh;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // rain
+    ctx.strokeStyle='#3b82f6';ctx.beginPath();
+    for(let i=0;i<days.length;i++){
+      const x=gx+i*step;
+      const y=gy+gh-days[i].rain/100*gh;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // wind
+    ctx.strokeStyle='#22c55e';ctx.beginPath();
+    for(let i=0;i<days.length;i++){
+      const x=gx+i*step;
+      const y=gy+gh-days[i].wind/80*gh;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  // legend
+  ctx.font='11px system-ui';
+  ctx.fillStyle='#ef4444';ctx.fillText('Temp',gx+gw-120,gy+15);
+  ctx.fillStyle='#3b82f6';ctx.fillText('Rain%',gx+gw-75,gy+15);
+  ctx.fillStyle='#22c55e';ctx.fillText('Wind',gx+gw-30,gy+15);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'weather-station',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='weather-station'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+    updateHUD();
+  }
+});
+</script>
+</body>
+</html>

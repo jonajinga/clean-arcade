@@ -61,9 +61,9 @@
   color: var(--accent);
 }
 
-/* Filter buttons — right-aligned */
+/* Filter buttons — hidden by default, shown by game-filter.js on home page */
 .site-header__filters {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 2px;
   margin-left: auto;

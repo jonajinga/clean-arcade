@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Joust</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+#score-bar{display:flex;justify-content:space-between;width:100%;max-width:400px;padding:0.25rem 0;font-size:0.85rem}
+.touch-row{display:flex;gap:0.5rem;margin:0.25rem 0}
+.touch-row button{width:70px;height:50px;font-size:1.2rem}
+</style>
+</head>
+<body>
+<h1>Joust</h1>
+<div id="score-bar"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-wave">Wave: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Joust</h2>
+<p>Arrow keys to move, Space to flap</p>
+<p>Be higher than enemies to defeat them!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2>Game Over</h2>
+<p id="final-score"></p>
+<p id="high-score-msg"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls"><button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button></div>
+<div class="touch-row">
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false">◀</button>
+<button class="btn-primary" ontouchstart="event.preventDefault();keys[' ']=true" ontouchend="event.preventDefault();keys[' ']=false">FLAP</button>
+<button class="btn-secondary" ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false">▶</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,GRAVITY=0.25,FLAP=-4;
+let gameRunning=false,paused=false,animId;
+let player,enemies,eggs,platforms,score,lives,wave,highScore=0;
+let keys={},flapCd=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,400)/400;canvas.style.width=canvas.style.height=(400*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='joust'&&e.data.state)highScore=e.data.state.highScore||0;});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'joust',state:{highScore}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key==='p'||e.key==='P')togglePause();if(e.key===' ')e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop();else saveState();}
+
+function initPlatforms(){
+  platforms=[
+    {x:0,y:H-10,w:W,h:10},
+    {x:50,y:300,w:120,h:10},
+    {x:230,y:300,w:120,h:10},
+    {x:130,y:210,w:140,h:10},
+    {x:20,y:130,w:100,h:10},
+    {x:280,y:130,w:100,h:10},
+  ];
+}
+
+function spawnEnemies(){
+  enemies=[];
+  let count=2+wave*2;
+  for(let i=0;i<count;i++){
+    let p=platforms[1+Math.floor(Math.random()*(platforms.length-1))];
+    enemies.push({x:p.x+Math.random()*p.w,y:p.y-20,w:18,h:18,vx:(Math.random()-0.5)*2,vy:0,
+      type:i<count/3?'shadow':i<count*2/3?'hunter':'bouncer',
+      speed:1+wave*0.2+Math.random(),alive:true,flapTimer:Math.random()*60});
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  score=0;lives=3;wave=1;
+  initPlatforms();
+  player={x:W/2,y:H-30,w:18,h:18,vx:0,vy:0};
+  eggs=[];
+  spawnEnemies();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateHUD();
+  if(animId)cancelAnimationFrame(animId);
+  loop();
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+  document.getElementById('hud-wave').textContent='Wave: '+wave;
+}
+
+function loop(){if(!gameRunning||paused)return;update();draw();animId=requestAnimationFrame(loop);}
+
+function collide(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+
+function applyPhysics(entity){
+  entity.vy+=GRAVITY;
+  entity.x+=entity.vx;
+  entity.y+=entity.vy;
+  // Platform collision
+  platforms.forEach(p=>{
+    if(entity.x+entity.w>p.x&&entity.x<p.x+p.w&&
+       entity.y+entity.h>p.y&&entity.y+entity.h<p.y+p.h+8&&entity.vy>0){
+      entity.y=p.y-entity.h;entity.vy=0;
+    }
+  });
+  // Screen wrap
+  if(entity.x<-entity.w)entity.x=W;
+  if(entity.x>W)entity.x=-entity.w;
+  if(entity.y<0){entity.y=0;entity.vy=0;}
+  if(entity.y>H-entity.h){entity.y=H-entity.h;entity.vy=0;}
+}
+
+function update(){
+  // Player
+  if(keys.ArrowLeft)player.vx=Math.max(player.vx-0.3,-4);
+  if(keys.ArrowRight)player.vx=Math.min(player.vx+0.3,4);
+  if(!keys.ArrowLeft&&!keys.ArrowRight)player.vx*=0.95;
+  if(keys[' ']){flapCd--;if(flapCd<=0){player.vy=FLAP;flapCd=8;}}else flapCd=0;
+  applyPhysics(player);
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    // AI: move toward player
+    let dx=player.x-e.x;
+    e.vx+=(dx>0?0.1:-0.1)*e.speed;
+    e.vx=Math.max(-3,Math.min(3,e.vx));
+
+    e.flapTimer--;
+    if(e.flapTimer<=0){
+      e.vy=FLAP*(0.6+Math.random()*0.4);
+      e.flapTimer=20+Math.random()*40;
+    }
+    applyPhysics(e);
+
+    // Joust collision
+    if(collide(player,e)){
+      if(player.y+player.h/2<e.y+e.h/2){
+        // Player wins
+        e.alive=false;
+        score+=100;
+        eggs.push({x:e.x,y:e.y,w:10,h:10,vy:0,timer:300});
+        player.vy=FLAP*0.5;
+        updateHUD();
+      } else if(player.y+player.h/2>e.y+e.h/2){
+        loseLife();
+      } else {
+        // Same height = bounce
+        player.vx=-player.vx*1.5;e.vx=-e.vx*1.5;
+      }
+    }
+  });
+
+  // Eggs
+  eggs.forEach(eg=>{
+    eg.vy+=GRAVITY;eg.y+=eg.vy;
+    platforms.forEach(p=>{
+      if(eg.x+eg.w>p.x&&eg.x<p.x+p.w&&eg.y+eg.h>p.y&&eg.y+eg.h<p.y+10&&eg.vy>0){
+        eg.y=p.y-eg.h;eg.vy=0;
+      }
+    });
+    eg.timer--;
+    // Collect egg
+    if(Math.abs(eg.x-player.x)<20&&Math.abs(eg.y-player.y)<20){
+      eg.timer=-1;score+=250;updateHUD();
+    }
+    // Hatch
+    if(eg.timer===0){
+      enemies.push({x:eg.x,y:eg.y-18,w:18,h:18,vx:(Math.random()-0.5)*2,vy:-2,
+        type:'hunter',speed:1.5+wave*0.3,alive:true,flapTimer:30});
+    }
+  });
+  eggs=eggs.filter(eg=>eg.timer>0);
+
+  // Wave clear
+  if(enemies.filter(e=>e.alive).length===0&&eggs.length===0){
+    wave++;spawnEnemies();updateHUD();
+  }
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0){gameRunning=false;if(score>highScore)highScore=score;document.getElementById('final-score').textContent='Score: '+score;document.getElementById('high-score-msg').textContent='High Score: '+highScore;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  else{player.x=W/2;player.y=H-30;player.vx=0;player.vy=0;}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+
+  // Platforms
+  ctx.fillStyle='#334155';
+  platforms.forEach(p=>ctx.fillRect(p.x,p.y,p.w,p.h));
+
+  // Lava at bottom
+  ctx.fillStyle='#ef4444';ctx.fillRect(0,H-3,W,3);
+
+  // Player (ostrich rider)
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(player.x,player.y+6,player.w,player.h-6);
+  ctx.fillStyle='#facc15';
+  ctx.fillRect(player.x+4,player.y,10,8);
+  // Lance
+  ctx.fillStyle='#e2e8f0';
+  let ldir=player.vx>=0?1:-1;
+  ctx.fillRect(player.x+(ldir>0?player.w:0)-2,player.y+8,ldir*12,2);
+  // Wings
+  let wingY=player.vy<0?-4:2;
+  ctx.fillStyle='#6366f1';
+  ctx.fillRect(player.x-4,player.y+4+wingY,6,3);
+  ctx.fillRect(player.x+player.w-2,player.y+4+wingY,6,3);
+
+  // Enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    let col=e.type==='shadow'?'#ef4444':e.type==='hunter'?'#22c55e':'#facc15';
+    ctx.fillStyle=col;
+    ctx.fillRect(e.x,e.y+6,e.w,e.h-6);
+    ctx.fillStyle='#fff';
+    ctx.fillRect(e.x+4,e.y,10,8);
+    let ed=e.vx>=0?1:-1;
+    ctx.fillStyle='#94a3b8';
+    ctx.fillRect(e.x+(ed>0?e.w:0)-2,e.y+8,ed*10,2);
+  });
+
+  // Eggs
+  ctx.fillStyle='#facc15';
+  eggs.forEach(eg=>{
+    ctx.beginPath();ctx.ellipse(eg.x+5,eg.y+5,5,7,0,0,Math.PI*2);ctx.fill();
+  });
+}
+</script>
+</body>
+</html>

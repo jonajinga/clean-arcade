@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rocket Dodge</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+.controls{display:flex;gap:8px;margin:6px 0}
+</style>
+</head>
+<body>
+<h1>Rocket Dodge</h1>
+<div class="wrap">
+<canvas id="c" width="360" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Rocket Dodge</h2>
+<p>Fly your rocket upward! Dodge asteroids and debris. Tap sides or use arrow keys to move. Score = altitude!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Destroyed!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Altitude: 0m</div>
+<div class="controls">
+<button class="btn-secondary" id="l-btn" onmousedown="moveL=true" onmouseup="moveL=false" ontouchstart="event.preventDefault();moveL=true" ontouchend="event.preventDefault();moveL=false">◀</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+<button class="btn-secondary" id="r-btn" onmousedown="moveR=true" onmouseup="moveR=false" ontouchstart="event.preventDefault();moveR=true" ontouchend="event.preventDefault();moveR=false">▶</button>
+</div>
+<script>
+const SLUG='rocket-dodge';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=360,H=500;
+let rocketX,altitude,speed,asteroids,stars,running,paused,highScore=0;
+let moveL=false,moveR=false;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function resize(){let w=Math.min(360,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*500/360)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')moveL=true;
+  if(e.key==='ArrowRight'||e.key==='d')moveR=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')moveL=false;
+  if(e.key==='ArrowRight'||e.key==='d')moveR=false;
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  let r=canvas.getBoundingClientRect();
+  let tx=(e.touches[0].clientX-r.left)/r.width*W;
+  if(tx<W/2)moveL=true;else moveR=true;
+});
+canvas.addEventListener('touchend',e=>{e.preventDefault();moveL=false;moveR=false});
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // stars
+  stars.forEach(s=>{
+    ctx.fillStyle=`rgba(255,255,255,${s.b})`;
+    ctx.fillRect(s.x,s.y,s.s,s.s);
+  });
+  // asteroids
+  asteroids.forEach(a=>{
+    ctx.fillStyle=a.type==='rock'?'#78716c':'#64748b';
+    ctx.beginPath();
+    // irregular shape
+    for(let i=0;i<6;i++){
+      let ang=i*Math.PI*2/6+a.rot;
+      let r=a.r*(0.7+0.3*Math.sin(i*3+a.seed));
+      let px=a.x+Math.cos(ang)*r,py=a.y+Math.sin(ang)*r;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#94a3b8';ctx.lineWidth=1;ctx.stroke();
+  });
+  // rocket
+  let rx=rocketX;
+  // flame
+  ctx.fillStyle='#ef4444';
+  ctx.beginPath();ctx.moveTo(rx-6,H-40);ctx.lineTo(rx+6,H-40);
+  ctx.lineTo(rx,H-40+12+Math.random()*6);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#facc15';
+  ctx.beginPath();ctx.moveTo(rx-3,H-40);ctx.lineTo(rx+3,H-40);
+  ctx.lineTo(rx,H-40+8+Math.random()*4);ctx.closePath();ctx.fill();
+  // body
+  ctx.fillStyle='#e2e8f0';
+  ctx.beginPath();ctx.moveTo(rx,H-70);ctx.lineTo(rx-8,H-40);ctx.lineTo(rx+8,H-40);ctx.closePath();ctx.fill();
+  // window
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.arc(rx,H-56,4,0,Math.PI*2);ctx.fill();
+  // fins
+  ctx.fillStyle='#ef4444';
+  ctx.beginPath();ctx.moveTo(rx-8,H-42);ctx.lineTo(rx-14,H-36);ctx.lineTo(rx-8,H-36);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(rx+8,H-42);ctx.lineTo(rx+14,H-36);ctx.lineTo(rx+8,H-36);ctx.closePath();ctx.fill();
+  // altitude
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+  ctx.fillText(`ALT: ${Math.floor(altitude)}m`,10,24);
+  ctx.fillText(`SPD: ${speed.toFixed(1)}x`,10,42);
+  if(paused){ctx.fillStyle='rgba(15,23,42,.7)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#facc15';ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText('PAUSED',W/2,H/2);ctx.textAlign='start'}
+}
+
+let lt=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  if(!paused){
+    speed=1+altitude/2000;
+    altitude+=speed*60*dt;
+    if(moveL)rocketX-=220*dt;
+    if(moveR)rocketX+=220*dt;
+    rocketX=Math.max(16,Math.min(W-16,rocketX));
+    // scroll stars
+    stars.forEach(s=>{s.y+=s.spd*speed*dt*60;if(s.y>H){s.y=-5;s.x=Math.random()*W}});
+    // spawn asteroids
+    if(Math.random()<0.02+altitude/50000){
+      let r=10+Math.random()*20;
+      asteroids.push({x:Math.random()*(W-40)+20,y:-r*2,r,rot:Math.random()*6,seed:Math.random()*10,
+        type:Math.random()<0.5?'rock':'debris',vy:60+Math.random()*80});
+    }
+    // move asteroids
+    asteroids.forEach(a=>{a.y+=a.vy*speed*dt;a.rot+=dt});
+    // collision
+    for(let a of asteroids){
+      let dx=rocketX-a.x,dy=(H-55)-a.y;
+      if(Math.sqrt(dx*dx+dy*dy)<a.r+8){crash();return}
+    }
+    asteroids=asteroids.filter(a=>a.y<H+40);
+  }
+  document.getElementById('info').textContent=`Altitude: ${Math.floor(altitude)}m | Speed: ${speed.toFixed(1)}x`;
+  draw();requestAnimationFrame(update);
+}
+
+function crash(){
+  running=false;
+  let sc=Math.floor(altitude);
+  if(sc>highScore)highScore=sc;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-msg').textContent=`Altitude: ${sc}m | Best: ${highScore}m`;
+  save();
+}
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)save()}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  rocketX=W/2;altitude=0;speed=1;asteroids=[];running=true;paused=false;lt=0;
+  stars=[];for(let i=0;i<60;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:1+Math.random()*2,b:0.3+Math.random()*0.7,spd:1+Math.random()*3});
+  document.getElementById('pause-btn').textContent='⏸';
+  requestAnimationFrame(update);
+}
+// init stars for start screen
+stars=[];for(let i=0;i<60;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:1+Math.random()*2,b:0.3+Math.random()*0.7,spd:1+Math.random()*3});
+draw();
+</script>
+</body>
+</html>

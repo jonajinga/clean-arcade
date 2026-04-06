@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>City Builder</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block;max-width:100%;cursor:pointer}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
+.overlay p{margin:0.3rem 0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.hud{display:flex;gap:0.8rem;font-size:0.8rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+#wrap{position:relative;display:inline-block}
+.controls{display:flex;gap:0.3rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<h1>City Builder</h1>
+<div class="hud">
+  <span id="moneyDisp">$500</span>
+  <span id="happyDisp">Happy: 50</span>
+  <span id="popDisp">Pop: 0</span>
+  <span id="timerDisp">10:00</span>
+  <span id="hScore">Best: $0</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="overlay" id="startOverlay">
+    <h2>City Builder</h2>
+    <p>Place buildings on a grid.</p>
+    <p>Balance money &amp; happiness!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="gameOverOverlay" style="display:none">
+    <h2>Time's Up!</h2>
+    <p id="finalScore"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div class="controls" id="buildBtns"></div>
+<div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,GRID=10,CELL=W/GRID;
+const BUILDINGS=[
+  {name:'House',cost:50,income:5,happy:5,color:'#3b82f6',pop:4,sym:'H'},
+  {name:'Shop',cost:80,income:15,happy:-2,color:'#22c55e',pop:0,sym:'S'},
+  {name:'Factory',cost:120,income:30,happy:-10,color:'#ef4444',pop:0,sym:'F'},
+  {name:'Park',cost:40,income:0,happy:15,color:'#22c55e',pop:0,sym:'P'}
+];
+let grid,money,happiness,population,timer,selected,highScore=0,paused=false,running=false,interval;
+
+function startGame(){
+  document.getElementById('startOverlay').style.display='none';
+  document.getElementById('gameOverOverlay').style.display='none';
+  document.getElementById('pauseBtn').style.display='inline-block';
+  grid=Array.from({length:GRID},()=>Array(GRID).fill(-1));
+  money=500;happiness=50;population=0;timer=600;selected=0;
+  paused=false;running=true;
+  buildBtns();updateHUD();draw();
+  clearInterval(interval);
+  interval=setInterval(()=>{
+    if(paused||!running)return;
+    timer--;
+    // income
+    for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
+      if(grid[y][x]>=0)money+=BUILDINGS[grid[y][x]].income/60;
+    }
+    if(timer<=0)endGame();
+    updateHUD();
+  },1000);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function buildBtns(){
+  const p=document.getElementById('buildBtns');p.innerHTML='';
+  BUILDINGS.forEach((b,i)=>{
+    const btn=document.createElement('button');
+    btn.textContent=b.name+' $'+b.cost;
+    btn.style.background=i===selected?'#facc15':'#334155';
+    btn.style.color=i===selected?'#0f172a':'#e2e8f0';
+    btn.onclick=()=>{selected=i;buildBtns();};
+    p.appendChild(btn);
+  });
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||paused)return;
+  const r=canvas.getBoundingClientRect();
+  const gx=Math.floor((e.clientX-r.left)/r.width*GRID);
+  const gy=Math.floor((e.clientY-r.top)/r.height*GRID);
+  if(gx<0||gx>=GRID||gy<0||gy>=GRID)return;
+  if(grid[gy][gx]>=0)return;
+  const b=BUILDINGS[selected];
+  if(money>=b.cost){
+    money-=b.cost;grid[gy][gx]=selected;
+    happiness+=b.happy;population+=b.pop;
+    happiness=Math.max(0,Math.min(100,happiness));
+    updateHUD();draw();
+  }
+});
+
+function endGame(){
+  running=false;clearInterval(interval);
+  const score=Math.floor(money);
+  if(score>highScore){highScore=score;saveState();}
+  document.getElementById('finalScore').textContent='Money: $'+score+' | Pop: '+population+' | Happy: '+happiness;
+  document.getElementById('gameOverOverlay').style.display='flex';
+}
+
+function updateHUD(){
+  document.getElementById('moneyDisp').textContent='$'+Math.floor(money);
+  document.getElementById('happyDisp').textContent='Happy: '+happiness;
+  document.getElementById('popDisp').textContent='Pop: '+population;
+  const m=Math.floor(timer/60),s=timer%60;
+  document.getElementById('timerDisp').textContent=m+':'+(s<10?'0':'')+s;
+  document.getElementById('hScore').textContent='Best: $'+highScore;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  for(let y=0;y<GRID;y++){
+    for(let x=0;x<GRID;x++){
+      ctx.strokeStyle='#1e293b';ctx.strokeRect(x*CELL,y*CELL,CELL,CELL);
+      if(grid[y][x]>=0){
+        const b=BUILDINGS[grid[y][x]];
+        ctx.fillStyle=b.color;ctx.fillRect(x*CELL+2,y*CELL+2,CELL-4,CELL-4);
+        ctx.fillStyle='#fff';ctx.font='bold 16px system-ui';ctx.textAlign='center';
+        ctx.fillText(b.sym,x*CELL+CELL/2,y*CELL+CELL/2+6);ctx.textAlign='start';
+      }
+    }
+  }
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'city-builder',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='city-builder'){
+    if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;updateHUD();
+  }
+});
+</script>
+</body>
+</html>

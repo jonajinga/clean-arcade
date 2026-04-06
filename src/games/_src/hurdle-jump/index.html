@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hurdle Jump</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.wrap{position:relative;display:inline-block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:10px 24px;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#info{font-size:.85rem;text-align:center;margin:4px 0}
+.controls{display:flex;gap:8px;margin:6px 0}
+</style>
+</head>
+<body>
+<h1>Hurdle Jump</h1>
+<div class="wrap">
+<canvas id="c" width="500" height="250"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Hurdle Jump</h2>
+<p>Auto-run, tap/space to jump over 10 hurdles. Miss = 2s penalty. Best time wins!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Race Complete!</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="info">Hurdles: 0/10 | Time: 0.00s</div>
+<div class="controls">
+<button class="btn-primary" id="jump-btn" onclick="doJump()">Jump!</button>
+</div>
+<script>
+const SLUG='hurdle-jump';
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=500,H=250;
+let runner,vy,onGround,hurdles,hurdlesPassed,hurdlesHit,scrollX,raceTime,running,penalty,highScore=Infinity;
+const GROUND=H-40,TOTAL_HURDLES=10;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||Infinity});
+
+function resize(){let w=Math.min(500,window.innerWidth*.95);canvas.style.width=w+'px';canvas.style.height=(w*250/500)+'px'}
+resize();window.addEventListener('resize',resize);
+
+document.addEventListener('keydown',e=>{if(e.key===' '||e.key==='ArrowUp')doJump()});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();doJump()});
+
+function doJump(){
+  if(!running||!onGround)return;
+  vy=-320;onGround=false;
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // ground
+  ctx.fillStyle='#78350f';ctx.fillRect(0,GROUND,W,H-GROUND);
+  // track lines
+  ctx.strokeStyle='#ffffff22';ctx.lineWidth=1;
+  for(let x=-scrollX%50;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,GROUND);ctx.lineTo(x,GROUND+5);ctx.stroke()}
+  // hurdles
+  hurdles.forEach(h=>{
+    let hx=h.x-scrollX;
+    if(hx<-20||hx>W+20)return;
+    ctx.fillStyle=h.hit?'#ef444466':'#ef4444';
+    ctx.fillRect(hx-2,GROUND-h.h,4,h.h);
+    ctx.fillRect(hx-12,GROUND-h.h,24,4);
+  });
+  // runner
+  let ry=runner.y;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.arc(runner.x,ry-24,8,0,Math.PI*2);ctx.fill();
+  ctx.fillRect(runner.x-3,ry-16,6,16);
+  let legA=Math.sin(scrollX*0.1)*5;
+  ctx.fillRect(runner.x-5,ry,4,8+legA);
+  ctx.fillRect(runner.x+1,ry,4,8-legA);
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';
+  ctx.fillText(`Hurdles: ${hurdlesPassed}/${TOTAL_HURDLES}  Penalties: ${penalty.toFixed(1)}s`,10,20);
+  // finish
+  let fx=hurdles[hurdles.length-1].x+200-scrollX;
+  if(fx>0&&fx<W+20){
+    ctx.fillStyle='#facc15';ctx.fillRect(fx,GROUND-60,3,60);
+    ctx.fillText('FINISH',fx-15,GROUND-64);
+  }
+}
+
+let lt=0,startT=0;
+function update(ts){
+  if(!running)return;
+  if(!lt)lt=ts;if(!startT)startT=ts;
+  let dt=Math.min((ts-lt)/1000,.05);lt=ts;
+  raceTime=(ts-startT)/1000;
+
+  let speed=200;
+  scrollX+=speed*dt;
+
+  // gravity
+  vy+=800*dt;
+  runner.y+=vy*dt;
+  if(runner.y>=GROUND){runner.y=GROUND;vy=0;onGround=true}
+
+  // hurdle collision
+  hurdles.forEach(h=>{
+    if(h.hit||h.cleared)return;
+    let hx=h.x-scrollX;
+    let dx=Math.abs(runner.x-hx);
+    if(dx<14){
+      if(runner.y>GROUND-h.h+5){
+        h.hit=true;penalty+=2;hurdlesPassed++;
+      } else if(dx<4){
+        h.cleared=true;hurdlesPassed++;
+      }
+    } else if(hx<runner.x-14&&!h.cleared){
+      h.cleared=true;hurdlesPassed++;
+    }
+  });
+
+  // finish
+  let fx=hurdles[hurdles.length-1].x+200-scrollX;
+  if(fx<=runner.x){
+    running=false;
+    let total=raceTime+penalty;
+    if(total<highScore)highScore=total;
+    document.getElementById('over-overlay').style.display='flex';
+    document.getElementById('over-title').textContent='Race Complete!';
+    document.getElementById('over-msg').textContent=`Time: ${raceTime.toFixed(2)}s + ${penalty.toFixed(1)}s penalty = ${total.toFixed(2)}s\nBest: ${highScore===Infinity?'-':highScore.toFixed(2)+'s'}`;
+    save();
+  }
+
+  document.getElementById('info').textContent=`Hurdles: ${hurdlesPassed}/${TOTAL_HURDLES} | Time: ${raceTime.toFixed(2)}s | Penalty: ${penalty.toFixed(1)}s`;
+  draw();requestAnimationFrame(update);
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  runner={x:60,y:GROUND};vy=0;onGround=true;scrollX=0;raceTime=0;penalty=0;hurdlesPassed=0;hurdlesHit=0;
+  hurdles=[];
+  for(let i=0;i<TOTAL_HURDLES;i++){
+    hurdles.push({x:250+i*180,h:40,hit:false,cleared:false});
+  }
+  running=true;lt=0;startT=0;
+  requestAnimationFrame(update);
+}
+draw();
+</script>
+</body>
+</html>

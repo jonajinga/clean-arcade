@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gin Rummy</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{border:2px solid #6366f1;width:min(600px,95vw);background:#1e293b;position:relative;padding:10px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;text-align:center;max-width:90%}
+button{border:none;padding:8px 20px;font-size:.9rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.hand{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.card{width:44px;height:66px;background:#fff;color:#1e293b;border:2px solid #475569;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;cursor:pointer;user-select:none}
+.card.red{color:#ef4444}.card.face-down{background:#6366f1;color:transparent}.card.face-down span{visibility:hidden}
+.card.selected{border-color:#facc15;transform:translateY(-6px)}
+.card.playable{border-color:#22c55e}
+.label{font-size:.7rem;color:#94a3b8;text-align:center;margin:3px 0}
+.center{display:flex;gap:12px;justify-content:center;align-items:center;margin:8px 0}
+#msg{text-align:center;color:#22c55e;min-height:1.3em;font-size:.85rem;margin:4px 0}
+.actions{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.scores{display:flex;justify-content:space-between;font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>Gin Rummy</h1>
+<div id="game-area">
+<div class="scores"><span id="sc-cpu">CPU: 0</span><span id="sc-you">You: 0</span></div>
+<div class="label">CPU Hand</div>
+<div class="hand" id="cpu-hand"></div>
+<div class="center">
+  <div><div class="card face-down" id="stock" onclick="drawStock()"><span>?</span></div><div class="label">Stock</div></div>
+  <div><div class="card" id="discard-top" onclick="drawDiscard()"><span>-</span></div><div class="label">Discard</div></div>
+</div>
+<div id="msg"></div>
+<div class="label">Your Hand (click to select, then discard)</div>
+<div class="hand" id="player-hand"></div>
+<div class="actions" id="actions"></div>
+<div class="overlay" id="start-overlay">
+<h2>Gin Rummy</h2>
+<p>Draw from stock or discard pile, form sets (same rank) and runs (same suit, consecutive), discard to get deadwood ≤10 then knock!</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2 id="over-title">Round Over</h2>
+<p id="over-msg"></p>
+<button class="btn-primary" onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const SLUG='rummy';
+let deck,pHand,cHand,discardPile,selected,phase,pScore,cScore,highScore=0;
+// phase: 'draw','discard','cpu','over'
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state)highScore=e.data.state.highScore||0});
+
+function makeDeck(){let d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){let j=Math.random()*i+1|0;[d[i],d[j]]=[d[j],d[i]]}return d}
+function rv(r){let i=RANKS.indexOf(r);return i===0?1:i<10?i+1:10}
+function suitIdx(s){return SUITS.indexOf(s)}
+function isRed(s){return s==='♥'||s==='♦'}
+
+function calcDeadwood(hand){
+  // Find best melds greedily
+  let cards=hand.map(c=>({...c,ri:RANKS.indexOf(c.rank),si:suitIdx(c.suit)}));
+  let used=new Array(cards.length).fill(false);
+  // Find runs first
+  cards.sort((a,b)=>a.si-b.si||a.ri-b.ri);
+  for(let i=0;i<cards.length;i++){
+    if(used[i])continue;
+    let run=[i];
+    for(let j=i+1;j<cards.length;j++){
+      if(used[j])continue;
+      let last=cards[run[run.length-1]];
+      if(cards[j].si===last.si&&cards[j].ri===last.ri+1)run.push(j);
+    }
+    if(run.length>=3)run.forEach(idx=>used[idx]=true);
+  }
+  // Find sets
+  for(let r=0;r<13;r++){
+    let group=[];
+    cards.forEach((c,i)=>{if(!used[i]&&c.ri===r)group.push(i)});
+    if(group.length>=3)group.forEach(idx=>used[idx]=true);
+  }
+  let dw=0;
+  cards.forEach((c,i)=>{if(!used[i])dw+=rv(c.rank)});
+  return dw;
+}
+
+function renderCard(c,fd,sel,idx,onclick){
+  let cls='card'+(isRed(c.suit)?' red':'')+(fd?' face-down':'')+(sel?' selected':'');
+  return `<div class="${cls}" ${onclick?'onclick="'+onclick+'"':''}><span>${c.rank}${c.suit}</span></div>`;
+}
+
+function render(){
+  document.getElementById('cpu-hand').innerHTML=cHand.map(c=>renderCard(c,true)).join('');
+  document.getElementById('player-hand').innerHTML=pHand.map((c,i)=>renderCard(c,false,selected===i,i,`selectCard(${i})`)).join('');
+  let dt=discardPile[discardPile.length-1];
+  let dEl=document.getElementById('discard-top');
+  if(dt){dEl.className='card'+(isRed(dt.suit)?' red':'');dEl.innerHTML=`<span>${dt.rank}${dt.suit}</span>`}
+  else{dEl.className='card';dEl.innerHTML='<span>-</span>'}
+  document.getElementById('sc-cpu').textContent='CPU: '+cScore;
+  document.getElementById('sc-you').textContent='You: '+pScore;
+  let acts=document.getElementById('actions');
+  if(phase==='discard'){
+    let dw=calcDeadwood(pHand);
+    acts.innerHTML=`<button class="btn-secondary" onclick="doDiscard()">Discard Selected</button>`+(dw<=10?`<button class="btn-primary" onclick="doKnock()">Knock (DW:${dw})</button>`:'');
+  } else acts.innerHTML='';
+}
+
+function selectCard(i){if(phase==='discard'){selected=i;render()}}
+function drawStock(){
+  if(phase!=='draw')return;
+  if(deck.length===0){endRound();return}
+  pHand.push(deck.pop());phase='discard';selected=pHand.length-1;
+  document.getElementById('msg').textContent='Select a card to discard';render();
+}
+function drawDiscard(){
+  if(phase!=='draw'||discardPile.length===0)return;
+  pHand.push(discardPile.pop());phase='discard';selected=pHand.length-1;
+  document.getElementById('msg').textContent='Select a card to discard';render();
+}
+function doDiscard(){
+  if(phase!=='discard'||selected===null)return;
+  discardPile.push(pHand.splice(selected,1)[0]);selected=null;
+  if(pHand.length===10){phase='cpu';render();setTimeout(cpuTurn,800)}
+}
+function doKnock(){
+  if(phase!=='discard')return;
+  if(selected!==null){discardPile.push(pHand.splice(selected,1)[0]);selected=null}
+  let pdw=calcDeadwood(pHand),cdw=calcDeadwood(cHand);
+  let diff=cdw-pdw;
+  if(diff>0)pScore+=diff; else cScore+=Math.abs(diff)+10;
+  endRound();
+}
+function cpuTurn(){
+  if(phase!=='cpu')return;
+  // CPU draws
+  let dt=discardPile[discardPile.length-1];
+  let testHand=[...cHand,dt];
+  let dwWith=dt?calcDeadwood(testHand):999;
+  if(dt&&dwWith<calcDeadwood(cHand)){cHand.push(discardPile.pop())}
+  else if(deck.length>0){cHand.push(deck.pop())}
+  else{endRound();return}
+  // CPU discards worst
+  let worst=0,worstDw=0;
+  cHand.forEach((c,i)=>{
+    let test=cHand.filter((_,j)=>j!==i);
+    let dw=rv(c.rank);if(dw>worstDw){worstDw=dw;worst=i}
+  });
+  discardPile.push(cHand.splice(worst,1)[0]);
+  let cdw=calcDeadwood(cHand);
+  if(cdw<=10&&Math.random()<0.5){
+    let pdw=calcDeadwood(pHand);
+    let diff=pdw-cdw;
+    if(diff>0)cScore+=diff; else pScore+=Math.abs(diff)+10;
+    endRound();return;
+  }
+  phase='draw';
+  document.getElementById('msg').textContent='Draw from stock or discard pile';render();
+}
+function endRound(){
+  phase='over';
+  if(pScore>highScore)highScore=pScore;
+  document.getElementById('over-overlay').style.display='flex';
+  document.getElementById('over-title').textContent='Round Over';
+  document.getElementById('over-msg').textContent=`You: ${pScore}  CPU: ${cScore}  Best: ${highScore}`;
+  save();render();
+}
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  pScore=0;cScore=0;newRound();
+}
+function newRound(){
+  deck=makeDeck();pHand=deck.splice(0,10);cHand=deck.splice(0,10);
+  discardPile=[deck.pop()];selected=null;phase='draw';
+  document.getElementById('msg').textContent='Draw from stock or discard pile';render();
+}
+</script>
+</body>
+</html>

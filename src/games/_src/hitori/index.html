@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hitori</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.game-area{border:2px solid #6366f1;margin:0.5rem}
+.grid{display:grid;gap:0}
+.cell{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:bold;cursor:pointer;border:1px solid #334155;user-select:none;transition:all 0.15s}
+.cell.normal{background:#1e293b;color:#e2e8f0}
+.cell.shaded{background:#0f172a;color:#475569}
+.cell.marked{background:#1e293b;color:#22c55e}
+.cell.error{border-color:#ef4444;border-width:2px}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.msg{font-size:0.9rem;min-height:1.1rem;text-align:center;margin:0.25rem}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem;max-width:400px}
+.rules{color:#94a3b8;font-size:0.75rem;text-align:left;max-width:350px;margin:0.25rem}
+.rules li{margin:0.1rem 0}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Hitori</h1>
+<div class="score-display">Puzzle: <span id="puzzleNum">1</span>/5</div>
+<div class="game-area" id="gameArea"></div>
+<div class="controls">
+<button onclick="clearGrid()" style="background:#ef4444">Clear</button>
+<button onclick="checkSolution()" style="background:#22c55e">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="msg" id="msg"></div>
+<ul class="rules">
+<li>Click to shade cells (dark = shaded)</li>
+<li>Right-click to mark as safe (green)</li>
+<li>No number repeats in any row/column (among unshaded)</li>
+<li>Shaded cells cannot be adjacent</li>
+<li>All unshaded cells must be connected</li>
+</ul>
+
+<div class="overlay" id="startOverlay">
+<h2>Hitori</h2>
+<p>Shade cells to eliminate duplicates</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">Shade cells so no number appears twice in any row or column. Shaded cells can't touch. Unshaded cells must all connect.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>All Puzzles Solved!</h2>
+<p>Excellent logic!</p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SIZE=5;
+// Each puzzle: grid of numbers, solution: set of shaded cell coords "r,c"
+const PUZZLES=[
+{grid:[[2,4,3,1,4],[1,3,2,4,1],[3,1,4,2,3],[4,2,1,3,2],[2,3,4,1,3]],shaded:new Set(['0,4','1,4','2,4','3,4','4,0'])},
+{grid:[[1,2,3,4,2],[3,4,1,2,3],[2,3,4,1,4],[4,1,2,3,1],[3,2,1,4,2]],shaded:new Set(['0,4','1,4','2,4','3,4','4,4'])},
+{grid:[[3,1,2,4,3],[1,4,3,2,1],[4,2,1,3,4],[2,3,4,1,2],[3,1,2,4,1]],shaded:new Set(['0,4','1,4','2,4','3,4','4,4'])},
+{grid:[[4,3,1,2,4],[2,1,4,3,2],[1,4,3,1,3],[3,2,2,4,1],[4,1,3,2,4]],shaded:new Set(['0,4','1,4','2,2','3,3','4,4'])},
+{grid:[[2,1,3,4,2],[4,3,2,1,4],[1,2,4,3,1],[3,4,1,2,3],[2,1,3,4,1]],shaded:new Set(['0,4','1,4','2,4','3,4','4,4'])}
+];
+
+// Generate proper puzzles
+function generatePuzzle(idx){
+const size=SIZE;
+// Create a valid Latin square first
+const base=[];
+for(let r=0;r<size;r++){
+base[r]=[];
+for(let c=0;c<size;c++){
+base[r][c]=((r+c)%size)+1;
+}
+}
+// Shuffle rows and columns
+for(let i=0;i<10;i++){
+const a=Math.floor(Math.random()*size),b=Math.floor(Math.random()*size);
+if(a!==b){[base[a],base[b]]=[base[b],base[a]];}
+}
+// Choose cells to shade (non-adjacent)
+const shaded=new Set();
+const candidates=[];
+for(let r=0;r<size;r++)for(let c=0;c<size;c++)candidates.push([r,c]);
+for(let i=candidates.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[candidates[i],candidates[j]]=[candidates[j],candidates[i]];}
+for(const[r,c] of candidates){
+if(shaded.size>=Math.floor(size*size*0.25))break;
+const key=`${r},${c}`;
+let adj=false;
+for(const[dr,dc] of[[0,1],[0,-1],[1,0],[-1,0]]){
+if(shaded.has(`${r+dr},${c+dc}`)){adj=true;break;}
+}
+if(!adj)shaded.add(key);
+}
+// For shaded cells, duplicate a number from same row/col
+const grid=base.map(r=>[...r]);
+for(const key of shaded){
+const[r,c]=key.split(',').map(Number);
+// find another unshaded cell in same row and copy its number
+for(let cc=0;cc<size;cc++){
+if(cc!==c&&!shaded.has(`${r},${cc}`)){
+grid[r][c]=grid[r][cc];break;
+}
+}
+}
+return{grid,shaded};
+}
+
+let currentPuzzle=0;
+let puzzleData=null;
+let cellStates=[];// 0=normal, 1=shaded, 2=marked
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function loadPuzzle(){
+// Use pre-built for simplicity
+puzzleData=PUZZLES[currentPuzzle];
+cellStates=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+renderGrid();
+}
+
+function renderGrid(){
+const area=document.getElementById('gameArea');
+area.innerHTML='';
+const grid=document.createElement('div');
+grid.className='grid';
+grid.style.gridTemplateColumns=`repeat(${SIZE},48px)`;
+for(let r=0;r<SIZE;r++){
+for(let c=0;c<SIZE;c++){
+const cell=document.createElement('div');
+cell.className='cell';
+cell.textContent=puzzleData.grid[r][c];
+if(cellStates[r][c]===0)cell.classList.add('normal');
+else if(cellStates[r][c]===1)cell.classList.add('shaded');
+else cell.classList.add('marked');
+cell.addEventListener('click',()=>{
+if(!gameActive||paused)return;
+cellStates[r][c]=cellStates[r][c]===1?0:1;
+renderGrid();
+});
+cell.addEventListener('contextmenu',e=>{
+e.preventDefault();
+if(!gameActive||paused)return;
+cellStates[r][c]=cellStates[r][c]===2?0:2;
+renderGrid();
+});
+grid.appendChild(cell);
+}
+}
+area.appendChild(grid);
+}
+
+function clearGrid(){
+if(!gameActive||paused)return;
+cellStates=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+renderGrid();
+}
+
+function checkSolution(){
+if(!gameActive||paused)return;
+const msg=document.getElementById('msg');
+const playerShaded=new Set();
+for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+if(cellStates[r][c]===1)playerShaded.add(`${r},${c}`);
+}
+// Check no adjacent shaded
+for(const key of playerShaded){
+const[r,c]=key.split(',').map(Number);
+for(const[dr,dc] of[[0,1],[0,-1],[1,0],[-1,0]]){
+if(playerShaded.has(`${r+dr},${c+dc}`)){
+msg.textContent='Shaded cells are adjacent!';msg.style.color='#ef4444';return;
+}
+}
+}
+// Check no duplicates in rows/cols among unshaded
+for(let r=0;r<SIZE;r++){
+const vals=[];
+for(let c=0;c<SIZE;c++){
+if(!playerShaded.has(`${r},${c}`))vals.push(puzzleData.grid[r][c]);
+}
+if(new Set(vals).size!==vals.length){
+msg.textContent=`Row ${r+1} has duplicate numbers!`;msg.style.color='#ef4444';return;
+}
+}
+for(let c=0;c<SIZE;c++){
+const vals=[];
+for(let r=0;r<SIZE;r++){
+if(!playerShaded.has(`${r},${c}`))vals.push(puzzleData.grid[r][c]);
+}
+if(new Set(vals).size!==vals.length){
+msg.textContent=`Column ${c+1} has duplicate numbers!`;msg.style.color='#ef4444';return;
+}
+}
+// Check connectivity of unshaded
+const unshaded=[];
+for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+if(!playerShaded.has(`${r},${c}`))unshaded.push(`${r},${c}`);
+}
+if(unshaded.length===0){msg.textContent='Need unshaded cells!';msg.style.color='#ef4444';return;}
+const visited=new Set();
+const queue=[unshaded[0]];
+visited.add(unshaded[0]);
+while(queue.length){
+const key=queue.shift();
+const[r,c]=key.split(',').map(Number);
+for(const[dr,dc] of[[0,1],[0,-1],[1,0],[-1,0]]){
+const nk=`${r+dr},${c+dc}`;
+if(!visited.has(nk)&&unshaded.includes(nk)){visited.add(nk);queue.push(nk);}
+}
+}
+if(visited.size!==unshaded.length){
+msg.textContent='Unshaded cells are not all connected!';msg.style.color='#ef4444';return;
+}
+// Solved!
+msg.textContent='Correct!';msg.style.color='#22c55e';
+currentPuzzle++;
+if(currentPuzzle>=PUZZLES.length){
+gameActive=false;
+document.getElementById('overOverlay').classList.remove('hidden');
+save();
+}else{
+document.getElementById('puzzleNum').textContent=currentPuzzle+1;
+setTimeout(()=>{loadPuzzle();msg.textContent='';},1000);
+}
+}
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+currentPuzzle=0;
+document.getElementById('puzzleNum').textContent='1';
+document.getElementById('msg').textContent='';
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+gameActive=true;paused=false;
+loadPuzzle();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'hitori',state:{highScore:currentPuzzle}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='hitori'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>

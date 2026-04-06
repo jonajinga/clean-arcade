@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Backgammon</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;display:inline-block}
+canvas{display:block;border:2px solid #6366f1}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0}
+button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
+.btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+#controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+#info{font-size:0.85rem;text-align:center;padding:0.25rem}
+</style>
+</head>
+<body>
+<h1>Backgammon</h1>
+<div id="info"><span id="hud-dice">Roll dice to start</span> | <span id="hud-wins">Wins: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="420" height="360"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Backgammon</h2>
+<p>Click points to move checkers</p>
+<p>Bear off all 15 checkers to win</p>
+<button class="btn-primary" onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="over-overlay">
+<h2 id="win-msg">You Win!</h2>
+<p id="win-detail"></p>
+<button class="btn-primary" onclick="startGame()" style="margin-top:0.5rem">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="btn-primary" id="roll-btn" onclick="rollDice()">Roll Dice</button>
+<button class="btn-secondary" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=420,H=360,BAR_W=20;
+let gameRunning=false,paused=false;
+let board,dice,movesLeft,playerTurn,selected,wins=0,highScore=0;
+// board[0..23]: points, positive=player checkers, negative=AI
+// bar: checkers hit to bar, borne: checkers borne off
+let playerBar=0,aiBar=0,playerBorne=0,aiBorne=0;
+
+function resize(){const s=Math.min(window.innerWidth-16,420)/420;canvas.style.width=(420*s)+'px';canvas.style.height=(360*s)+'px';}
+resize();window.addEventListener('resize',resize);
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='backgammon'&&e.data.state){highScore=e.data.state.highScore||0;wins=highScore;}});
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'backgammon',state:{highScore:wins}},'*');}catch(e){}}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)saveState();}
+
+function initBoard(){
+  board=new Array(24).fill(0);
+  // Standard setup: player moves 23->0, AI moves 0->23
+  board[0]=-2;board[5]=5;board[7]=3;board[11]=-5;
+  board[12]=5;board[16]=-3;board[18]=-5;board[23]=2;
+  // Correction: standard backgammon starting position
+  // Player (positive) home=0-5, AI (negative) home=18-23
+  board=new Array(24).fill(0);
+  board[0]=2;board[5]=-5;board[7]=-3;board[11]=5;
+  board[12]=-5;board[16]=3;board[18]=5;board[23]=-2;
+  playerBar=0;aiBar=0;playerBorne=0;aiBorne=0;
+  dice=[];movesLeft=[];selected=-1;playerTurn=true;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('over-overlay').classList.add('hidden');
+  initBoard();
+  gameRunning=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  updateInfo();
+  draw();
+}
+
+function updateInfo(){
+  let diceStr=dice.length?'Dice: '+dice.join(', '):'Roll dice';
+  if(movesLeft.length)diceStr+=' (moves: '+movesLeft.join(',')+')';
+  document.getElementById('hud-dice').textContent=(playerTurn?'Your turn':'AI thinking')+' | '+diceStr;
+  document.getElementById('hud-wins').textContent='Wins: '+wins;
+}
+
+function rollDice(){
+  if(!gameRunning||paused||dice.length>0)return;
+  let d1=1+Math.floor(Math.random()*6),d2=1+Math.floor(Math.random()*6);
+  dice=[d1,d2];
+  movesLeft=d1===d2?[d1,d1,d1,d1]:[d1,d2];
+  updateInfo();
+
+  if(!playerTurn){
+    setTimeout(aiMove,500);
+  } else {
+    // Check if player has any valid moves
+    if(!hasValidMoves(1)){
+      movesLeft=[];dice=[];
+      playerTurn=false;
+      updateInfo();
+      setTimeout(()=>{rollDice();},800);
+    }
+  }
+  draw();
+}
+
+function canBearOff(player){
+  if(player===1){
+    if(playerBar>0)return false;
+    for(let i=6;i<24;i++)if(board[i]>0)return false;
+    return true;
+  } else {
+    if(aiBar>0)return false;
+    for(let i=0;i<18;i++)if(board[i]<0)return false;
+    return true;
+  }
+}
+
+function isValidMove(from,die,player){
+  if(player===1){
+    // Player moves from high to low (23->0)
+    if(from===-1){// From bar
+      if(playerBar<=0)return false;
+      let to=24-die;
+      return board[to]>=0||board[to]===-1;
+    }
+    if(board[from]<=0)return false;
+    let to=from-die;
+    if(to<0){
+      if(!canBearOff(1))return false;
+      // Must be exact or highest occupied
+      if(to<0){
+        let highest=-1;
+        for(let i=5;i>=0;i--)if(board[i]>0){highest=i;break;}
+        if(from!==highest&&to<0)return false;
+      }
+      return true;
+    }
+    return board[to]>=0||board[to]===-1;
+  } else {
+    if(from===-1){
+      if(aiBar<=0)return false;
+      let to=die-1;
+      return board[to]<=0||board[to]===1;
+    }
+    if(board[from]>=0)return false;
+    let to=from+die;
+    if(to>23){
+      if(!canBearOff(-1))return false;
+      let highest=-1;
+      for(let i=18;i<24;i++)if(board[i]<0){highest=i;break;}
+      if(from!==highest&&to>23)return false;
+      return true;
+    }
+    return board[to]<=0||board[to]===1;
+  }
+}
+
+function hasValidMoves(player){
+  for(let d of movesLeft){
+    if(player===1&&playerBar>0){if(isValidMove(-1,d,1))return true;continue;}
+    if(player===-1&&aiBar>0){if(isValidMove(-1,d,-1))return true;continue;}
+    for(let i=0;i<24;i++){
+      if(isValidMove(i,d,player))return true;
+    }
+  }
+  return false;
+}
+
+function executeMove(from,die,player){
+  if(player===1){
+    if(from===-1){playerBar--;let to=24-die;if(board[to]===-1){board[to]=0;aiBar++;}board[to]++;}
+    else{board[from]--;let to=from-die;if(to<0){playerBorne++;}else{if(board[to]===-1){board[to]=0;aiBar++;}board[to]++;}}
+  } else {
+    if(from===-1){aiBar--;let to=die-1;if(board[to]===1){board[to]=0;playerBar++;}board[to]--;}
+    else{board[from]++;let to=from+die;if(to>23){aiBorne++;}else{if(board[to]===1){board[to]=0;playerBar++;}board[to]--;}}
+  }
+  // Remove used die
+  let idx=movesLeft.indexOf(die);
+  if(idx>=0)movesLeft.splice(idx,1);
+
+  // Check win
+  if(playerBorne>=15){gameRunning=false;wins++;document.getElementById('win-msg').textContent='You Win!';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  if(aiBorne>=15){gameRunning=false;document.getElementById('win-msg').textContent='AI Wins';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+}
+
+canvas.addEventListener('click',e=>{
+  if(!gameRunning||paused||!playerTurn||movesLeft.length===0)return;
+  let rect=canvas.getBoundingClientRect();
+  let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
+
+  // Determine clicked point
+  let point=getPointFromClick(mx,my);
+
+  if(playerBar>0){
+    // Must move from bar
+    for(let d of movesLeft){
+      if(isValidMove(-1,d,1)){
+        executeMove(-1,d,1);
+        afterPlayerMove();
+        return;
+      }
+    }
+    return;
+  }
+
+  if(selected===-1){
+    if(point>=0&&point<24&&board[point]>0)selected=point;
+  } else {
+    if(point===selected){selected=-1;draw();return;}
+    let die=selected-point;
+    if(die<0)die=selected; // bearing off
+    if(point<0)die=selected+1; // bearing off click
+    if(movesLeft.includes(die)&&isValidMove(selected,die,1)){
+      executeMove(selected,die,1);
+      selected=-1;
+      afterPlayerMove();
+    } else {
+      // Try other die
+      for(let d of movesLeft){
+        if(isValidMove(selected,d,1)&&selected-d===point){
+          executeMove(selected,d,1);
+          selected=-1;
+          afterPlayerMove();
+          return;
+        }
+      }
+      selected=point>=0&&board[point]>0?point:-1;
+    }
+  }
+  draw();
+});
+
+function afterPlayerMove(){
+  updateInfo();draw();
+  if(movesLeft.length===0||!hasValidMoves(1)){
+    movesLeft=[];dice=[];
+    playerTurn=false;
+    selected=-1;
+    updateInfo();draw();
+    setTimeout(rollDice,600);
+  }
+}
+
+function aiMove(){
+  if(!gameRunning||movesLeft.length===0)return;
+
+  // Simple AI: try each move, prefer hitting, bearing off, advancing
+  let bestFrom=-2,bestDie=-1,bestScore=-9999;
+
+  for(let d of movesLeft){
+    let candidates=[];
+    if(aiBar>0){candidates.push(-1);}
+    else{for(let i=0;i<24;i++)if(board[i]<0)candidates.push(i);}
+
+    for(let from of candidates){
+      if(!isValidMove(from,d,-1))continue;
+      let sc=0;
+      let to=from===-1?d-1:from+d;
+      if(to>23)sc+=50; // bearing off
+      else{
+        if(board[to]===1)sc+=30; // hit
+        if(to>=18)sc+=10; // advance to home
+        sc+=to; // prefer advancing
+      }
+      if(sc>bestScore){bestScore=sc;bestFrom=from;bestDie=d;}
+    }
+  }
+
+  if(bestFrom>=-1&&bestDie>0){
+    executeMove(bestFrom,bestDie,-1);
+    updateInfo();draw();
+    if(movesLeft.length>0&&hasValidMoves(-1)){
+      setTimeout(aiMove,400);
+    } else {
+      movesLeft=[];dice=[];playerTurn=true;
+      updateInfo();draw();
+    }
+  } else {
+    movesLeft=[];dice=[];playerTurn=true;
+    updateInfo();draw();
+  }
+}
+
+function getPointFromClick(mx,my){
+  // Top row: points 12-23 (left to right, skipping bar)
+  // Bottom row: points 11-0 (left to right, skipping bar)
+  let leftW=(W-BAR_W)/2;
+  let pw=leftW/6;
+
+  for(let i=0;i<24;i++){
+    let px,py;
+    if(i>=12){
+      let col=i-12;
+      px=(col<6?col*pw:BAR_W+leftW+((col-6)*pw));
+      py=0;
+      if(mx>=px&&mx<px+pw&&my<H/2)return i;
+    } else {
+      let col=11-i;
+      px=(col<6?col*pw:BAR_W+leftW+((col-6)*pw));
+      py=H/2;
+      if(mx>=px&&mx<px+pw&&my>=H/2)return i;
+    }
+  }
+  return -1;
+}
+
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  let leftW=(W-BAR_W)/2;
+  let pw=leftW/6;
+
+  // Bar
+  ctx.fillStyle='#334155';ctx.fillRect(leftW,0,BAR_W,H);
+
+  // Points (triangles)
+  for(let i=0;i<24;i++){
+    let col,px,pointUp;
+    if(i>=12){col=i-12;pointUp=true;}
+    else{col=11-i;pointUp=false;}
+    px=(col<6?col*pw:(BAR_W+leftW+(col-6)*pw));
+
+    ctx.fillStyle=(i%2===0)?'#6366f1':'#ef4444';
+    if(selected===i)ctx.fillStyle='#facc15';
+    ctx.beginPath();
+    if(pointUp){
+      ctx.moveTo(px,0);ctx.lineTo(px+pw,0);ctx.lineTo(px+pw/2,H/2-20);
+    } else {
+      ctx.moveTo(px,H);ctx.lineTo(px+pw,H);ctx.lineTo(px+pw/2,H/2+20);
+    }
+    ctx.closePath();ctx.fill();
+
+    // Checkers
+    let count=Math.abs(board[i]);
+    let player=board[i]>0;
+    for(let j=0;j<Math.min(count,5);j++){
+      let cy;
+      if(pointUp)cy=12+j*22;
+      else cy=H-12-j*22;
+      ctx.fillStyle=player?'#3b82f6':'#e2e8f0';
+      ctx.beginPath();ctx.arc(px+pw/2,cy,9,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#0f172a';ctx.lineWidth=1;ctx.stroke();
+    }
+    if(count>5){
+      let cy=pointUp?12+4*22:H-12-4*22;
+      ctx.fillStyle='#facc15';ctx.font='10px system-ui';ctx.textAlign='center';
+      ctx.fillText(count,px+pw/2,cy+4);
+    }
+  }
+
+  // Bar checkers
+  if(playerBar>0){ctx.fillStyle='#3b82f6';ctx.beginPath();ctx.arc(W/2,H/2+30,9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#facc15';ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText(playerBar,W/2,H/2+34);}
+  if(aiBar>0){ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(W/2,H/2-30,9,0,Math.PI*2);ctx.fill();ctx.fillStyle='#0f172a';ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText(aiBar,W/2,H/2-26);}
+
+  // Borne off
+  ctx.fillStyle='#22c55e';ctx.font='12px system-ui';ctx.textAlign='center';
+  ctx.fillText('You: '+playerBorne,W-25,H/2+5);
+  ctx.fillText('AI: '+aiBorne,W-25,H/2-15);
+
+  // Dice
+  if(dice.length>0){
+    dice.forEach((d,i)=>{
+      let dx=W/2-20+i*25,dy=H/2-10;
+      ctx.fillStyle='#facc15';ctx.fillRect(dx,dy,20,20);
+      ctx.fillStyle='#0f172a';ctx.font='bold 14px system-ui';ctx.textAlign='center';
+      ctx.fillText(d,dx+10,dy+15);
+    });
+  }
+}
+
+draw();
+</script>
+</body>
+</html>

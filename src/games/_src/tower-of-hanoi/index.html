@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tower of Hanoi</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1.1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center;align-items:center}
+.score-display{color:#22c55e;font-size:1rem;font-weight:bold}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin:0.25rem}
+select{background:#1e293b;border:1px solid #6366f1;color:#e2e8f0;padding:0.4rem;font-size:0.9rem;border-radius:0}
+.pause-btn{background:#334155}
+</style>
+</head>
+<body>
+<h1>Tower of Hanoi</h1>
+<div class="score-display">Moves: <span id="moves">0</span> | Optimal: <span id="optimal">7</span></div>
+<canvas id="game" width="500" height="350"></canvas>
+<div class="controls">
+<label style="color:#94a3b8;font-size:0.85rem">Disks:</label>
+<select id="diskCount" onchange="startGame()">
+<option value="3">3</option><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option>
+</select>
+<button onclick="startGame()" style="background:#ef4444">Restart</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="info">Click a peg to pick up the top disk, then click another peg to place it.</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Tower of Hanoi</h2>
+<p>Move all disks to the right peg</p>
+<p style="font-size:0.9rem;color:#94a3b8;max-width:300px;text-align:center">You can only move one disk at a time. A larger disk cannot be placed on a smaller disk.</p>
+<button id="startBtn">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2>Congratulations!</h2>
+<p>Solved in <span id="finalMoves">0</span> moves</p>
+<p>Optimal was <span id="finalOptimal">0</span></p>
+<button id="againBtn">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const COLORS=['#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#6366f1','#ec4899'];
+let pegs=[[],[],[]];
+let numDisks=5;
+let moves=0;
+let selectedPeg=-1;
+let floatingDisk=-1;
+let gameActive=false;
+let paused=false;
+let highScore=0;
+
+function resize(){
+const w=Math.min(window.innerWidth-20,500);
+const h=Math.round(w*0.7);
+canvas.width=w;canvas.height=h;
+draw();
+}
+
+function draw(){
+const W=canvas.width,H=canvas.height;
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+const pegW=6,baseY=H-30;
+const pegSpacing=W/3;
+const maxDiskW=pegSpacing*0.85;
+const diskH=Math.min(25,((H-80)/numDisks));
+// Draw base
+ctx.fillStyle='#334155';
+ctx.fillRect(10,baseY,W-20,8);
+// Draw pegs
+for(let p=0;p<3;p++){
+const px=pegSpacing*p+pegSpacing/2;
+ctx.fillStyle='#475569';
+ctx.fillRect(px-pegW/2,baseY-numDisks*diskH-20,pegW,numDisks*diskH+20);
+// Draw disks
+pegs[p].forEach((disk,i)=>{
+const dw=maxDiskW*(disk+1)/(numDisks+1);
+const dx=px-dw/2;
+const dy=baseY-(i+1)*diskH;
+ctx.fillStyle=COLORS[disk%COLORS.length];
+ctx.fillRect(dx,dy,dw,diskH-2);
+ctx.strokeStyle='#0f172a';
+ctx.strokeRect(dx,dy,dw,diskH-2);
+});
+// Highlight selected
+if(selectedPeg===p){
+ctx.strokeStyle='#facc15';
+ctx.lineWidth=2;
+ctx.strokeRect(px-pegSpacing/2+10,baseY-numDisks*diskH-30,pegSpacing-20,numDisks*diskH+40);
+ctx.lineWidth=1;
+}
+}
+// Draw floating disk
+if(floatingDisk>=0){
+const dw=maxDiskW*(floatingDisk+1)/(numDisks+1);
+const px=pegSpacing*selectedPeg+pegSpacing/2;
+ctx.fillStyle=COLORS[floatingDisk%COLORS.length];
+ctx.fillRect(px-dw/2,20,dw,diskH-2);
+ctx.strokeStyle='#facc15';
+ctx.strokeRect(px-dw/2,20,dw,diskH-2);
+}
+}
+
+function getPeg(x){
+const pegSpacing=canvas.width/3;
+return Math.floor(x/pegSpacing);
+}
+
+function handleClick(x){
+if(!gameActive||paused)return;
+const p=getPeg(x);
+if(p<0||p>2)return;
+if(selectedPeg===-1){
+if(pegs[p].length===0)return;
+selectedPeg=p;
+floatingDisk=pegs[p][pegs[p].length-1];
+pegs[p].pop();
+}else{
+if(p===selectedPeg){
+pegs[p].push(floatingDisk);
+selectedPeg=-1;floatingDisk=-1;
+}else{
+const topDisk=pegs[p].length>0?pegs[p][pegs[p].length-1]:-1;
+if(topDisk>=0&&floatingDisk>topDisk){
+pegs[selectedPeg].push(floatingDisk);
+selectedPeg=-1;floatingDisk=-1;
+}else{
+pegs[p].push(floatingDisk);
+moves++;
+document.getElementById('moves').textContent=moves;
+selectedPeg=-1;floatingDisk=-1;
+if(pegs[2].length===numDisks){
+gameActive=false;
+if(moves<highScore||highScore===0){highScore=moves;save();}
+document.getElementById('finalMoves').textContent=moves;
+document.getElementById('finalOptimal').textContent=Math.pow(2,numDisks)-1;
+setTimeout(()=>document.getElementById('overOverlay').classList.remove('hidden'),300);
+}
+}
+}
+}
+draw();
+}
+
+canvas.addEventListener('click',e=>{
+const rect=canvas.getBoundingClientRect();
+handleClick((e.clientX-rect.left)*(canvas.width/rect.width));
+});
+canvas.addEventListener('touchstart',e=>{
+e.preventDefault();
+const rect=canvas.getBoundingClientRect();
+const t=e.touches[0];
+handleClick((t.clientX-rect.left)*(canvas.width/rect.width));
+},{passive:false});
+
+function togglePause(){
+if(!gameActive)return;
+paused=!paused;
+document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+function startGame(){
+numDisks=parseInt(document.getElementById('diskCount').value);
+pegs=[[],[],[]];
+for(let i=numDisks-1;i>=0;i--)pegs[0].push(i);
+moves=0;selectedPeg=-1;floatingDisk=-1;paused=false;
+document.getElementById('moves').textContent='0';
+document.getElementById('optimal').textContent=Math.pow(2,numDisks)-1;
+document.getElementById('startOverlay').classList.add('hidden');
+document.getElementById('overOverlay').classList.add('hidden');
+document.getElementById('pauseOverlay').classList.add('hidden');
+document.getElementById('pauseBtn').textContent='⏸';
+gameActive=true;
+draw();
+}
+
+document.addEventListener('keydown',e=>{
+if(e.key==='p'||e.key==='P')togglePause();
+if(e.key>='1'&&e.key<='3')handleClick(canvas.width/3*(parseInt(e.key)-1)+canvas.width/6);
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'tower-of-hanoi',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tower-of-hanoi'){
+if(e.data.state&&e.data.state.highScore)highScore=e.data.state.highScore;
+}
+});
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('againBtn').addEventListener('click',startGame);
+window.addEventListener('resize',resize);
+resize();
+</script>
+</body>
+</html>
