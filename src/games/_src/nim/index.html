@@ -248,8 +248,13 @@ function endGame(playerWon){
   if(playerWon)wins++;else losses++;
   document.getElementById('winsEl').textContent=wins;
   document.getElementById('lossesEl').textContent=losses;
-  document.getElementById('overTitle').textContent=playerWon?'You Win!':'You Lose!';
-  document.getElementById('overMsg').textContent=playerWon?'AI took the last stone!':'You took the last stone!';
+  if(mode==='local'){
+    document.getElementById('overTitle').textContent=playerWon?'Player 1 Wins!':'Player 2 Wins!';
+    document.getElementById('overMsg').textContent='Last stone taken!';
+  }else{
+    document.getElementById('overTitle').textContent=playerWon?'You Win!':'You Lose!';
+    document.getElementById('overMsg').textContent=playerWon?'AI took the last stone!':'You took the last stone!';
+  }
   document.getElementById('overRecord').textContent=`Record: ${wins}W — ${losses}L`;
   document.getElementById('overOverlay').classList.remove('hidden');
   saveState();

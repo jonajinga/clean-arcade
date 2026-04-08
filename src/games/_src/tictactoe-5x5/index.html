@@ -22,12 +22,19 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
 button:hover{background:#4f46e5}
 .hidden{display:none}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
 <h1>5x5 Tic-Tac-Toe</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div class="info" id="info">Get 4 in a row to win!</div>
-<div class="score"><span>You (X): <strong id="pScore">0</strong></span><span>AI (O): <strong id="aScore">0</strong></span></div>
+<div class="score"><span id="pLabel">You (X)</span>: <strong id="pScore">0</strong> | <span id="aLabel">AI (O)</span>: <strong id="aScore">0</strong></div>
 <div class="board" id="board"></div>
 
 <div class="overlay" id="startOverlay">
@@ -44,7 +51,7 @@ button:hover{background:#4f46e5}
 
 <script>
 const SIZE=5,WIN=4;
-let board,turn,gameOver,highScore=0,pScore=0,aScore=0;
+let board,turn,gameOver,highScore=0,pScore=0,aScore=0,mode='computer';
 const boardEl=document.getElementById('board'),info=document.getElementById('info');
 const startOv=document.getElementById('startOverlay'),overOv=document.getElementById('overOverlay');
 
@@ -62,15 +69,37 @@ boardEl.appendChild(c);
 }
 }
 
+function setMode(m){
+mode=m;
+document.getElementById('btnComputer').className=m==='computer'?'active':'';
+document.getElementById('btnLocal').className=m==='local'?'active':'';
+document.getElementById('pLabel').textContent=m==='local'?'P1 (X)':'You (X)';
+document.getElementById('aLabel').textContent=m==='local'?'P2 (O)':'AI (O)';
+startGame();
+}
 function startGame(){
 board=Array(SIZE*SIZE).fill(0);turn=1;gameOver=false;
 startOv.classList.add('hidden');overOv.classList.add('hidden');
-info.textContent="Your turn (X)";
+info.textContent=mode==='local'?'Player 1 (X)':'Your turn (X)';
 buildBoard();
 }
 
 function playerMove(i){
-if(gameOver||board[i]||turn!==1)return;
+if(gameOver||board[i])return;
+if(mode==='local'){
+  board[i]=turn;renderBoard();
+  const w=checkWin(turn);
+  if(w){
+    if(turn===1){endGame('Player 1 wins!',w);pScore++;document.getElementById('pScore').textContent=pScore;}
+    else{endGame('Player 2 wins!',w);aScore++;document.getElementById('aScore').textContent=aScore;}
+    return;
+  }
+  if(board.every(v=>v)){endGame('Draw!',null);return}
+  turn=turn===1?2:1;
+  info.textContent=turn===1?'Player 1 (X)':'Player 2 (O)';
+  return;
+}
+if(turn!==1)return;
 board[i]=1;turn=2;renderBoard();
 const w=checkWin(1);
 if(w){endGame('You win!',w);pScore++;document.getElementById('pScore').textContent=pScore;return}

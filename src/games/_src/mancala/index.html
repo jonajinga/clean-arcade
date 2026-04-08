@@ -16,11 +16,18 @@ canvas{display:block;border:2px solid #6366f1}
 .overlay p{color:#e2e8f0;margin:0.25rem 0}
 button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
 .btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 #info{font-size:0.85rem;text-align:center;padding:0.25rem}
 </style>
 </head>
 <body>
 <h1>Mancala</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div id="info"><span id="hud-turn">Your turn - click a pit</span> | <span id="hud-wins">Wins: 0</span></div>
 <div id="game-wrap">
 <canvas id="c" width="420" height="200"></canvas>
@@ -42,13 +49,19 @@ const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const W=420,H=200;
 // Board: indices 0-5 = player pits (left to right), 6 = player store
 // 7-12 = AI pits (right to left from AI perspective), 13 = AI store
-let board,playerTurn,gameRunning=false,wins=0;
+let board,playerTurn,gameRunning=false,wins=0,mode='computer';
 
 function resize(){const s=Math.min(window.innerWidth-16,420)/420;canvas.style.width=(420*s)+'px';canvas.style.height=(200*s)+'px';}
 resize();window.addEventListener('resize',resize);
 window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='mancala'&&e.data.state)wins=e.data.state.highScore||0;});
 function saveState(){try{parent.postMessage({type:'ca-save',slug:'mancala',state:{highScore:wins}},'*');}catch(e){}}
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function startGame(){
   document.getElementById('start-overlay').classList.add('hidden');
   document.getElementById('over-overlay').classList.add('hidden');
@@ -58,7 +71,11 @@ function startGame(){
 }
 
 function updateInfo(){
-  document.getElementById('hud-turn').textContent=playerTurn?'Your turn':'AI thinking';
+  if(mode==='local'){
+    document.getElementById('hud-turn').textContent=playerTurn?'Player 1 (bottom)':'Player 2 (top)';
+  }else{
+    document.getElementById('hud-turn').textContent=playerTurn?'Your turn':'AI thinking';
+  }
   document.getElementById('hud-wins').textContent='Wins: '+wins;
 }
 
@@ -106,26 +123,44 @@ function finishGame(){
   for(let i=7;i<13;i++){board[13]+=board[i];board[i]=0;}
   gameRunning=false;
   let msg;
-  if(board[6]>board[13]){wins++;msg='You Win!';}
-  else if(board[6]<board[13])msg='AI Wins';
-  else msg='Draw';
+  if(mode==='local'){
+    if(board[6]>board[13])msg='Player 1 Wins!';
+    else if(board[6]<board[13])msg='Player 2 Wins!';
+    else msg='Draw';
+  }else{
+    if(board[6]>board[13]){wins++;msg='You Win!';}
+    else if(board[6]<board[13])msg='AI Wins';
+    else msg='Draw';
+  }
   document.getElementById('win-msg').textContent=msg;
-  document.getElementById('win-detail').textContent='You: '+board[6]+' | AI: '+board[13]+' | Wins: '+wins;
+  document.getElementById('win-detail').textContent=(mode==='local'?'P1':'You')+': '+board[6]+' | '+(mode==='local'?'P2':'AI')+': '+board[13]+' | Wins: '+wins;
   document.getElementById('over-overlay').classList.remove('hidden');
   saveState();
 }
 
 canvas.addEventListener('click',e=>{
-  if(!gameRunning||!playerTurn)return;
+  if(!gameRunning)return;
+  if(mode==='computer'&&!playerTurn)return;
   let rect=canvas.getBoundingClientRect();
   let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
 
-  // Bottom row pits: 0-5
-  if(my>H/2){
+  // Bottom row pits: 0-5 (Player 1)
+  if(playerTurn&&my>H/2){
     for(let i=0;i<6;i++){
       let px=55+i*52,py=H*0.72;
       if(Math.sqrt((mx-px)**2+(my-py)**2)<22&&board[i]>0){
         doMove(i,true);
+        return;
+      }
+    }
+  }
+  // Top row pits: 7-12 (Player 2 in local mode)
+  if(mode==='local'&&!playerTurn&&my<H/2){
+    for(let i=0;i<6;i++){
+      let ai=12-i;
+      let px=55+i*52,py=H*0.28;
+      if(Math.sqrt((mx-px)**2+(my-py)**2)<22&&board[ai]>0){
+        doMove(ai,false);
         return;
       }
     }
@@ -142,12 +177,12 @@ function doMove(pit,isPlayer){
   // Extra turn if last stone in own store
   let extraTurn=(isPlayer&&last===6)||(!isPlayer&&last===13);
   if(extraTurn){
-    if(!isPlayer)setTimeout(aiMove,400);
+    if(!isPlayer&&mode==='computer')setTimeout(aiMove,400);
     else updateInfo();
   } else {
     playerTurn=!playerTurn;
     updateInfo();
-    if(!playerTurn)setTimeout(aiMove,500);
+    if(!playerTurn&&mode==='computer')setTimeout(aiMove,500);
   }
   draw();
 }

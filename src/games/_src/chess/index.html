@@ -244,7 +244,11 @@ function checkEndCondition(){
     gameActive=false;
     let title,m;
     if(inCheck){
-      title=turn==='W'?'Checkmate — You Lose':'Checkmate — You Win!';
+      if(mode==='local'){
+        title=turn==='W'?'Checkmate — Player 2 Wins!':'Checkmate — Player 1 Wins!';
+      }else{
+        title=turn==='W'?'Checkmate — You Lose':'Checkmate — You Win!';
+      }
       if(turn==='B')wins++;
     } else {
       title='Stalemate — Draw';

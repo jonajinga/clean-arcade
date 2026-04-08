@@ -16,12 +16,19 @@ canvas{display:block;border:2px solid #6366f1}
 .overlay p{color:#e2e8f0;margin:0.25rem 0}
 button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
 .btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 #controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
 #info{font-size:0.85rem;text-align:center;padding:0.25rem}
 </style>
 </head>
 <body>
 <h1>Backgammon</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div id="info"><span id="hud-dice">Roll dice to start</span> | <span id="hud-wins">Wins: 0</span></div>
 <div id="game-wrap">
 <canvas id="c" width="420" height="360"></canvas>
@@ -44,7 +51,7 @@ button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const W=420,H=360,BAR_W=20;
-let gameRunning=false,paused=false;
+let gameRunning=false,paused=false,mode='computer';
 let board,dice,movesLeft,playerTurn,selected,wins=0,highScore=0;
 // board[0..23]: points, positive=player checkers, negative=AI
 // bar: checkers hit to bar, borne: checkers borne off
@@ -57,6 +64,12 @@ function saveState(){try{parent.postMessage({type:'ca-save',slug:'backgammon',st
 document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
 function togglePause(){if(!gameRunning)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(paused)saveState();}
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function initBoard(){
   board=new Array(24).fill(0);
   // Standard setup: player moves 23->0, AI moves 0->23
@@ -84,7 +97,10 @@ function startGame(){
 function updateInfo(){
   let diceStr=dice.length?'Dice: '+dice.join(', '):'Roll dice';
   if(movesLeft.length)diceStr+=' (moves: '+movesLeft.join(',')+')';
-  document.getElementById('hud-dice').textContent=(playerTurn?'Your turn':'AI thinking')+' | '+diceStr;
+  let turnLabel;
+  if(mode==='local'){turnLabel=playerTurn?'Player 1':'Player 2';}
+  else{turnLabel=playerTurn?'Your turn':'AI thinking';}
+  document.getElementById('hud-dice').textContent=turnLabel+' | '+diceStr;
   document.getElementById('hud-wins').textContent='Wins: '+wins;
 }
 
@@ -95,8 +111,16 @@ function rollDice(){
   movesLeft=d1===d2?[d1,d1,d1,d1]:[d1,d2];
   updateInfo();
 
-  if(!playerTurn){
+  if(!playerTurn&&mode==='computer'){
     setTimeout(aiMove,500);
+  } else if(!playerTurn&&mode==='local'){
+    // In local mode, Player 2 clicks to move (negative checkers)
+    if(!hasValidMoves(-1)){
+      movesLeft=[];dice=[];
+      playerTurn=true;
+      updateInfo();
+      draw();
+    }
   } else {
     // Check if player has any valid moves
     if(!hasValidMoves(1)){
@@ -185,23 +209,25 @@ function executeMove(from,die,player){
   if(idx>=0)movesLeft.splice(idx,1);
 
   // Check win
-  if(playerBorne>=15){gameRunning=false;wins++;document.getElementById('win-msg').textContent='You Win!';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
-  if(aiBorne>=15){gameRunning=false;document.getElementById('win-msg').textContent='AI Wins';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  if(playerBorne>=15){gameRunning=false;wins++;document.getElementById('win-msg').textContent=mode==='local'?'Player 1 Wins!':'You Win!';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
+  if(aiBorne>=15){gameRunning=false;document.getElementById('win-msg').textContent=mode==='local'?'Player 2 Wins!':'AI Wins';document.getElementById('win-detail').textContent='Wins: '+wins;document.getElementById('over-overlay').classList.remove('hidden');saveState();}
 }
 
 canvas.addEventListener('click',e=>{
-  if(!gameRunning||paused||!playerTurn||movesLeft.length===0)return;
+  if(!gameRunning||paused||movesLeft.length===0)return;
+  if(mode==='computer'&&!playerTurn)return;
   let rect=canvas.getBoundingClientRect();
   let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
 
   // Determine clicked point
   let point=getPointFromClick(mx,my);
+  let curPlayer=playerTurn?1:-1;
+  let curBar=playerTurn?playerBar:aiBar;
 
-  if(playerBar>0){
-    // Must move from bar
+  if(curBar>0){
     for(let d of movesLeft){
-      if(isValidMove(-1,d,1)){
-        executeMove(-1,d,1);
+      if(isValidMove(-1,d,curPlayer)){
+        executeMove(-1,d,curPlayer);
         afterPlayerMove();
         return;
       }
@@ -210,27 +236,33 @@ canvas.addEventListener('click',e=>{
   }
 
   if(selected===-1){
-    if(point>=0&&point<24&&board[point]>0)selected=point;
+    if(point>=0&&point<24&&((playerTurn&&board[point]>0)||(!playerTurn&&mode==='local'&&board[point]<0)))selected=point;
   } else {
     if(point===selected){selected=-1;draw();return;}
-    let die=selected-point;
-    if(die<0)die=selected; // bearing off
-    if(point<0)die=selected+1; // bearing off click
-    if(movesLeft.includes(die)&&isValidMove(selected,die,1)){
-      executeMove(selected,die,1);
-      selected=-1;
-      afterPlayerMove();
-    } else {
-      // Try other die
-      for(let d of movesLeft){
-        if(isValidMove(selected,d,1)&&selected-d===point){
-          executeMove(selected,d,1);
-          selected=-1;
-          afterPlayerMove();
-          return;
+    if(playerTurn){
+      let die=selected-point;
+      if(die<0)die=selected;
+      if(point<0)die=selected+1;
+      if(movesLeft.includes(die)&&isValidMove(selected,die,1)){
+        executeMove(selected,die,1);selected=-1;afterPlayerMove();
+      } else {
+        for(let d of movesLeft){
+          if(isValidMove(selected,d,1)&&selected-d===point){executeMove(selected,d,1);selected=-1;afterPlayerMove();return;}
         }
+        selected=point>=0&&board[point]>0?point:-1;
       }
-      selected=point>=0&&board[point]>0?point:-1;
+    }else if(mode==='local'){
+      let die=point-selected;
+      if(die<0)die=24-selected;
+      if(point<0)die=24-selected;
+      if(movesLeft.includes(die)&&isValidMove(selected,die,-1)){
+        executeMove(selected,die,-1);selected=-1;afterPlayerMove();
+      } else {
+        for(let d of movesLeft){
+          if(isValidMove(selected,d,-1)&&selected+d===point){executeMove(selected,d,-1);selected=-1;afterPlayerMove();return;}
+        }
+        selected=point>=0&&board[point]<0?point:-1;
+      }
     }
   }
   draw();
@@ -238,12 +270,16 @@ canvas.addEventListener('click',e=>{
 
 function afterPlayerMove(){
   updateInfo();draw();
-  if(movesLeft.length===0||!hasValidMoves(1)){
+  let curPlayer=playerTurn?1:-1;
+  if(movesLeft.length===0||!hasValidMoves(curPlayer)){
     movesLeft=[];dice=[];
-    playerTurn=false;
+    playerTurn=!playerTurn;
     selected=-1;
     updateInfo();draw();
-    setTimeout(rollDice,600);
+    if(mode==='computer'&&!playerTurn){
+      setTimeout(rollDice,600);
+    }
+    // In local mode, next player clicks Roll Dice manually
   }
 }
 

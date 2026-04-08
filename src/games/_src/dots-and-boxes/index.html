@@ -14,6 +14,9 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:0;cursor:pointer;font-family:inherit}
 .btn:hover{background:#818cf8}
 .hidden{display:none!important}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 #game{max-width:500px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
 .scores{display:flex;gap:1.5rem;margin:.5rem 0;font-size:.95rem}
 .scores div{background:#1e293b;padding:.3rem 1rem;border-radius:.25rem}
@@ -35,9 +38,13 @@ canvas{display:block;max-width:100%;cursor:pointer;touch-action:none}
 </div>
 <div id="game">
 <h1>Dots and Boxes</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div class="scores">
-<div style="border-left:4px solid #3b82f6;padding-left:.75rem">You: <b id="pScore">0</b></div>
-<div style="border-left:4px solid #ef4444;padding-left:.75rem">CPU: <b id="cScore">0</b></div>
+<div style="border-left:4px solid #3b82f6;padding-left:.75rem"><span id="pLabel">You</span>: <b id="pScore">0</b></div>
+<div style="border-left:4px solid #ef4444;padding-left:.75rem"><span id="cLabel">CPU</span>: <b id="cScore">0</b></div>
 </div>
 <div class="msg" id="msg">Your turn</div>
 <canvas id="canvas"></canvas>
@@ -46,7 +53,7 @@ canvas{display:block;max-width:100%;cursor:pointer;touch-action:none}
 <script>
 const N=5; // 5x5 grid of boxes = 6x6 dots
 const DOTS=N+1;
-let hLines,vLines,boxes,pScore,cScore,turn,gameActive,highScore=0;
+let hLines,vLines,boxes,pScore,cScore,turn,gameActive,highScore=0,mode='computer';
 let cellSize,pad,canvasW,canvasH;
 const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
@@ -130,13 +137,24 @@ function placeLine(type,r,c,who){
   }
   return completed;
 }
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function checkEnd(){
   if(pScore+cScore===N*N){
     gameActive=false;
-    let title=pScore>cScore?'You Win!':pScore<cScore?'CPU Wins':'Tie!';
+    let title;
+    if(mode==='local'){
+      title=pScore>cScore?'Player 1 Wins!':pScore<cScore?'Player 2 Wins!':'Tie!';
+    }else{
+      title=pScore>cScore?'You Win!':pScore<cScore?'CPU Wins':'Tie!';
+    }
     if(pScore>highScore)highScore=pScore;
     document.getElementById('endTitle').textContent=title;
-    document.getElementById('endMsg').textContent=`You: ${pScore} — CPU: ${cScore} | Best: ${highScore}`;
+    document.getElementById('endMsg').textContent=`${mode==='local'?'P1':'You'}: ${pScore} — ${mode==='local'?'P2':'CPU'}: ${cScore} | Best: ${highScore}`;
     document.getElementById('endOverlay').classList.remove('hidden');
     saveState();
     return true;
@@ -144,7 +162,8 @@ function checkEnd(){
   return false;
 }
 canvas.addEventListener('click',e=>{
-  if(!gameActive||turn!=='player')return;
+  if(!gameActive)return;
+  if(mode==='computer'&&turn!=='player')return;
   let rect=canvas.getBoundingClientRect();
   let sx=canvasW/rect.width,sy=canvasH/rect.height;
   let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
@@ -163,11 +182,20 @@ canvas.addEventListener('click',e=>{
     if(d<bestDist&&d<cellSize*0.6){bestDist=d;bestLine={type:'v',r,c};}
   }
   if(!bestLine)return;
-  let completed=placeLine(bestLine.type,bestLine.r,bestLine.c,'player');
+  let completed=placeLine(bestLine.type,bestLine.r,bestLine.c,turn);
   draw();
   if(checkEnd())return;
-  if(!completed){turn='cpu';document.getElementById('msg').textContent='CPU thinking...';setTimeout(aiTurn,400);}
-  else{document.getElementById('msg').textContent='You completed a box! Go again.';}
+  if(mode==='local'){
+    if(!completed){
+      turn=turn==='player'?'cpu':'player';
+      document.getElementById('msg').textContent=turn==='player'?"Player 1's turn":"Player 2's turn";
+    }else{
+      document.getElementById('msg').textContent=(turn==='player'?'Player 1':'Player 2')+' completed a box! Go again.';
+    }
+  }else{
+    if(!completed){turn='cpu';document.getElementById('msg').textContent='CPU thinking...';setTimeout(aiTurn,400);}
+    else{document.getElementById('msg').textContent='You completed a box! Go again.';}
+  }
 });
 function aiTurn(){
   if(!gameActive)return;
@@ -209,7 +237,9 @@ function startGame(){
   document.getElementById('startOverlay').classList.add('hidden');
   document.getElementById('endOverlay').classList.add('hidden');
   init();draw();
-  document.getElementById('msg').textContent='Your turn — click between two dots.';
+  document.getElementById('pLabel').textContent=mode==='local'?'P1':'You';
+  document.getElementById('cLabel').textContent=mode==='local'?'P2':'CPU';
+  document.getElementById('msg').textContent=mode==='local'?"Player 1's turn — click between two dots.":'Your turn — click between two dots.';
 }
 function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'dots-and-boxes',state:{highScore}},'*');}catch(e){}}
 window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;}});

@@ -16,10 +16,17 @@ canvas{border:2px solid #6366f1;display:block;margin:0.25rem auto}
 button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
 button:hover{background:#4f46e5}
 .hidden{display:none}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
 <h1>Hex Game</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div class="info" id="info">Red (You): Connect Top-Bottom</div>
 <canvas id="canvas"></canvas>
 
@@ -37,7 +44,7 @@ button:hover{background:#4f46e5}
 
 <script>
 const N=11;
-let board,turn,gameOver,highScore=0,wins=0;
+let board,turn,gameOver,highScore=0,wins=0,mode='computer';
 const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
 const info=document.getElementById('info');
 
@@ -102,18 +109,34 @@ if(d<bestD&&d<hexSize){bestD=d;bestR=r;bestC=c}
 return bestR>=0?{r:bestR,c:bestC}:null;
 }
 
+function setMode(m){
+mode=m;
+document.getElementById('btnComputer').className=m==='computer'?'active':'';
+document.getElementById('btnLocal').className=m==='local'?'active':'';
+startGame();
+}
 canvas.addEventListener('click',e=>{
-if(gameOver||turn!==1)return;
+if(gameOver)return;
+if(mode==='computer'&&turn!==1)return;
 const rect=canvas.getBoundingClientRect();
 const px=(e.clientX-rect.left)*(canvas.width/rect.width);
 const py=(e.clientY-rect.top)*(canvas.height/rect.height);
 const h=pixelToHex(px,py);
 if(!h||board[h.r][h.c])return;
-board[h.r][h.c]=1;render();
-if(checkWin(1)){endGame('You win!');wins++;highScore=Math.max(highScore,wins);save();return}
+board[h.r][h.c]=turn;render();
+if(checkWin(turn)){
+  if(mode==='local'){endGame(turn===1?'Player 1 (Red) wins!':'Player 2 (Blue) wins!');}
+  else{endGame('You win!');wins++;highScore=Math.max(highScore,wins);save();}
+  return;
+}
 if(isFull()){endGame('Draw!');return}
-turn=2;info.textContent="AI thinking...";
-setTimeout(aiMove,150);
+turn=turn===1?2:1;
+if(mode==='local'){
+  info.textContent=turn===1?'Player 1 (Red: Top-Bottom)':'Player 2 (Blue: Left-Right)';
+}else{
+  info.textContent="AI thinking...";
+  setTimeout(aiMove,150);
+}
 });
 
 function aiMove(){
@@ -138,7 +161,7 @@ if(sc>bestScore){bestScore=sc;best={r,c}}
 if(best){board[best.r][best.c]=2;render()}
 if(checkWin(2)){endGame('AI wins!');return}
 if(isFull()){endGame('Draw!');return}
-turn=1;info.textContent="Your turn (Red: Top-Bottom)";
+turn=1;info.textContent=mode==='local'?'Player 1 (Red: Top-Bottom)':'Your turn (Red: Top-Bottom)';
 }
 
 function neighbors(r,c){
@@ -187,7 +210,7 @@ board=Array.from({length:N},()=>Array(N).fill(0));
 turn=1;gameOver=false;
 document.getElementById('startOverlay').classList.add('hidden');
 document.getElementById('overOverlay').classList.add('hidden');
-info.textContent="Your turn (Red: Top-Bottom)";
+info.textContent=mode==='local'?'Player 1 (Red: Top-Bottom)':'Your turn (Red: Top-Bottom)';
 resize();
 }
 </script>
