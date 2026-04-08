@@ -18,6 +18,10 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600;transition:background .2s}
 .btn:hover{background:#4f46e5}
 #pauseBtn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;background:#3b82f6;color:#fff;border:none;border-radius:0;cursor:pointer}
+.dpad{display:none;justify-content:center;gap:4px;margin:4px auto}
+.dpad button{width:48px;height:40px;font-size:1.2rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer;touch-action:manipulation}
+.dpad button:active{background:#475569}
+@media(pointer:coarse){.dpad{display:flex}}
 .hidden{display:none!important}
 </style>
 </head>
@@ -29,6 +33,12 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
   <span>High: <b id="highEl">0</b></span>
 </div>
 <canvas id="c"></canvas>
+<div class="dpad">
+  <button ontouchstart="event.preventDefault();moveFrog(-1,0)" aria-label="Left">&#9664;</button>
+  <button ontouchstart="event.preventDefault();moveFrog(0,-1)" aria-label="Up">&#9650;</button>
+  <button ontouchstart="event.preventDefault();moveFrog(0,1)" aria-label="Down">&#9660;</button>
+  <button ontouchstart="event.preventDefault();moveFrog(1,0)" aria-label="Right">&#9654;</button>
+</div>
 <button id="pauseBtn" class="hidden">⏸</button>
 
 <div id="startOverlay" class="overlay">

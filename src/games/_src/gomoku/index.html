@@ -19,10 +19,17 @@ canvas{display:block;border:2px solid #6366f1;cursor:pointer;touch-action:none}
 .btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
 .btn:hover{background:#4f46e5}
 .hidden{display:none!important}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
 <h1>Gomoku</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div id="info">
   <span>Wins: <b id="winsEl">0</b></span>
   <span>Losses: <b id="lossesEl">0</b></span>
@@ -51,7 +58,7 @@ const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 const SIZE=window.innerWidth<500?13:15;
 let CELL,PAD,W;
-let board,playerTurn,gameActive;
+let board,playerTurn,gameActive,mode='computer';
 let wins=0,losses=0,draws=0;
 let lastMove=null;
 let hoverPos=null;
@@ -66,12 +73,18 @@ function resize(){
 resize();
 window.addEventListener('resize',()=>{resize();if(gameActive)draw();});
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function initGame(){
   board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
   playerTurn=true;
   gameActive=true;
   lastMove=null;
-  setMessage('Your turn (Black)');
+  setMessage(mode==='local'?'Player 1 (Black)':'Your turn (Black)');
   draw();
 }
 
@@ -120,6 +133,15 @@ function place(row,col,player){
 
 function playerMove(row,col){
   if(!gameActive||!playerTurn)return;
+  var currentStone=mode==='local'?(board.flat().filter(v=>v===1).length<=board.flat().filter(v=>v===2).length?1:2):1;
+  if(mode==='local'){
+    if(!place(row,col,currentStone))return;
+    draw();
+    if(checkWin(row,col,currentStone)){endGame(currentStone===1?'win':'lose');return;}
+    if(isFull()){endGame('draw');return;}
+    setMessage(currentStone===1?'Player 2 (White)':'Player 1 (Black)');
+    return;
+  }
   if(!place(row,col,1))return;
   draw();
   if(checkWin(row,col,1)){endGame('win');return;}
@@ -299,8 +321,8 @@ function endGame(result){
   document.getElementById('winsEl').textContent=wins;
   document.getElementById('lossesEl').textContent=losses;
   document.getElementById('drawsEl').textContent=draws;
-  const titles={win:'You Win!',lose:'AI Wins!',draw:'Draw!'};
-  const msgs={win:'Five in a row!',lose:'AI got five in a row.',draw:'Board is full.'};
+  const titles=mode==='local'?{win:'Player 1 Wins!',lose:'Player 2 Wins!',draw:'Draw!'}:{win:'You Win!',lose:'AI Wins!',draw:'Draw!'};
+  const msgs=mode==='local'?{win:'Five in a row!',lose:'Five in a row!',draw:'Board is full.'}:{win:'Five in a row!',lose:'AI got five in a row.',draw:'Board is full.'};
   document.getElementById('overTitle').textContent=titles[result];
   document.getElementById('overMsg').textContent=msgs[result];
   document.getElementById('overRecord').textContent=`W: ${wins} / L: ${losses} / D: ${draws}`;

@@ -16,11 +16,18 @@ canvas{display:block;border:2px solid #6366f1;cursor:pointer}
 .overlay p{color:#e2e8f0;margin:0.25rem 0}
 button{border:none;padding:0.5rem 1.5rem;font-size:1rem;cursor:pointer;color:#e2e8f0;border-radius:0;font-family:inherit}
 .btn-primary{background:#6366f1}.btn-secondary{background:#334155}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 #info{font-size:0.85rem;text-align:center;padding:0.25rem}
 </style>
 </head>
 <body>
 <h1>Othello Classic</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div id="info">
 <span id="hud-turn">Your turn (Black)</span> |
 Black: <span id="hud-black">2</span> |
@@ -44,7 +51,7 @@ Wins: <span id="hud-wins">0</span>
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 const W=400,H=400,SZ=8,CELL=W/SZ;
-let board,currentPlayer,gameRunning=false,wins=0;
+let board,currentPlayer,gameRunning=false,wins=0,mode='computer';
 const BLACK=1,WHITE=-1,EMPTY=0;
 const DIRS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 
@@ -65,6 +72,12 @@ resize();window.addEventListener('resize',resize);
 window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='othello-classic'&&e.data.state)wins=e.data.state.highScore||0;});
 function saveState(){try{parent.postMessage({type:'ca-save',slug:'othello-classic',state:{highScore:wins}},'*');}catch(e){}}
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function startGame(){
   document.getElementById('start-overlay').classList.add('hidden');
   document.getElementById('over-overlay').classList.add('hidden');
@@ -77,7 +90,11 @@ function startGame(){
 function updateInfo(){
   let bc=0,wc=0;
   for(let r=0;r<SZ;r++)for(let c=0;c<SZ;c++){if(board[r][c]===BLACK)bc++;if(board[r][c]===WHITE)wc++;}
-  document.getElementById('hud-turn').textContent=currentPlayer===BLACK?'Your turn (Black)':'AI thinking (White)';
+  if(mode==='local'){
+    document.getElementById('hud-turn').textContent=currentPlayer===BLACK?'Player 1 (Black)':'Player 2 (White)';
+  }else{
+    document.getElementById('hud-turn').textContent=currentPlayer===BLACK?'Your turn (Black)':'AI thinking (White)';
+  }
   document.getElementById('hud-black').textContent=bc;
   document.getElementById('hud-white').textContent=wc;
   document.getElementById('hud-wins').textContent=wins;
@@ -115,19 +132,30 @@ function makeMove(b,r,c,player){
 }
 
 canvas.addEventListener('click',e=>{
-  if(!gameRunning||currentPlayer!==BLACK)return;
+  if(!gameRunning)return;
+  if(mode==='computer'&&currentPlayer!==BLACK)return;
   let rect=canvas.getBoundingClientRect();
   let mx=(e.clientX-rect.left)*(W/rect.width),my=(e.clientY-rect.top)*(H/rect.height);
   let c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
   if(r<0||r>=SZ||c<0||c>=SZ)return;
 
-  let flips=getFlips(board,r,c,BLACK);
+  let flips=getFlips(board,r,c,currentPlayer);
   if(flips.length===0)return;
 
-  makeMove(board,r,c,BLACK);
-  currentPlayer=WHITE;
+  makeMove(board,r,c,currentPlayer);
+  currentPlayer=currentPlayer===BLACK?WHITE:BLACK;
   updateInfo();draw();
-  setTimeout(()=>aiTurn(),300);
+  if(mode==='local'){
+    // Check if next player has moves
+    let nextMoves=getValidMoves(board,currentPlayer);
+    if(nextMoves.length===0){
+      let oppMoves=getValidMoves(board,-currentPlayer);
+      if(oppMoves.length===0){endGame();}
+      else{currentPlayer=-currentPlayer;updateInfo();draw();}
+    }
+  }else{
+    setTimeout(()=>aiTurn(),300);
+  }
 });
 
 function aiTurn(){
@@ -252,8 +280,8 @@ function draw(){
   }
 
   // Valid moves highlight
-  if(gameRunning&&currentPlayer===BLACK){
-    let moves=getValidMoves(board,BLACK);
+  if(gameRunning&&(mode==='local'||currentPlayer===BLACK)){
+    let moves=getValidMoves(board,currentPlayer);
     moves.forEach(m=>{
       let cx=m.c*CELL+CELL/2,cy=m.r*CELL+CELL/2;
       ctx.fillStyle='rgba(34,197,94,0.3)';

@@ -32,6 +32,9 @@ body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe
 @keyframes flip{0%{transform:scaleX(1)}50%{transform:scaleX(0)}100%{transform:scaleX(1)}}
 .stats{font-size:.85rem;color:#94a3b8;text-align:center}
 .new-game-btn{background:#3b82f6;color:#e2e8f0;border:none;padding:8px 20px;font-size:.9rem;cursor:pointer;border-radius:0;font-family:inherit}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
@@ -47,6 +50,10 @@ body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe
 <button class="btn" onclick="startGame()">Play Again</button>
 </div>
 <div class="game-area hidden" id="gameArea">
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div class="hud">
 <div class="score-pill"><div class="dot dot-black"></div><span id="blackCount">2</span></div>
 <div><span class="turn-text" id="turnText">Your turn</span></div>
@@ -63,7 +70,7 @@ const SLUG='reversi';
 const EMPTY=0,BLACK=1,WHITE=2;
 const DIRS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 let state={highScore:0,wins:0};
-let board,currentPlayer,gameOver,aiThinking;
+let board,currentPlayer,gameOver,aiThinking,mode='computer';
 
 window.addEventListener('message',e=>{
   if(e.data&&e.data.type==='ca-load'&&e.data.state){state={...state,...e.data.state};updateStats();}
@@ -71,6 +78,12 @@ window.addEventListener('message',e=>{
 function save(){parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}
 function updateStats(){document.getElementById('winsEl').textContent=state.wins||0;}
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function initBoard(){
   board=Array.from({length:8},()=>Array(8).fill(EMPTY));
   board[3][3]=WHITE;board[3][4]=BLACK;board[4][3]=BLACK;board[4][4]=WHITE;
@@ -126,7 +139,7 @@ function render(){
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
     const cell=document.createElement('div');
     cell.className='cell';
-    if(currentPlayer===BLACK&&validSet.has(r+','+c))cell.classList.add('valid');
+    if((mode==='local'||currentPlayer===BLACK)&&validSet.has(r+','+c))cell.classList.add('valid');
     if(board[r][c]!==EMPTY){
       const piece=document.createElement('div');
       piece.className='piece '+(board[r][c]===BLACK?'black':'white');
@@ -141,17 +154,24 @@ function render(){
 }
 
 function playerMove(r,c){
-  if(gameOver||currentPlayer!==BLACK||aiThinking)return;
-  const flips=getFlips(board,r,c,BLACK);
+  if(gameOver||aiThinking)return;
+  if(mode==='computer'&&currentPlayer!==BLACK)return;
+  const flips=getFlips(board,r,c,currentPlayer);
   if(flips.length===0)return;
-  makeMove(r,c,BLACK);
+  makeMove(r,c,currentPlayer);
   render();
-  currentPlayer=WHITE;
-  document.getElementById('turnText').textContent='AI thinking...';
-  checkGameState();
-  if(!gameOver){
-    aiThinking=true;
-    setTimeout(aiMove,500);
+  const prev=currentPlayer;
+  currentPlayer=currentPlayer===BLACK?WHITE:BLACK;
+  if(mode==='local'){
+    document.getElementById('turnText').textContent=currentPlayer===BLACK?'Player 1 (Black)':'Player 2 (White)';
+    checkGameState();
+  }else{
+    document.getElementById('turnText').textContent='AI thinking...';
+    checkGameState();
+    if(!gameOver){
+      aiThinking=true;
+      setTimeout(aiMove,500);
+    }
   }
 }
 
@@ -194,15 +214,27 @@ function checkGameState(){
   if(bMoves.length===0&&wMoves.length===0){
     endGame();return;
   }
-  if(currentPlayer===BLACK&&bMoves.length===0){
-    currentPlayer=WHITE;
-    document.getElementById('turnText').textContent='AI thinking...';
-    aiThinking=true;
-    setTimeout(aiMove,500);
-  }else if(currentPlayer===WHITE&&wMoves.length===0){
-    currentPlayer=BLACK;
-    document.getElementById('turnText').textContent='Your turn';
-    render();
+  if(mode==='local'){
+    if(currentPlayer===BLACK&&bMoves.length===0){
+      currentPlayer=WHITE;
+      document.getElementById('turnText').textContent='Player 2 (White) — opponent has no moves';
+      render();
+    }else if(currentPlayer===WHITE&&wMoves.length===0){
+      currentPlayer=BLACK;
+      document.getElementById('turnText').textContent='Player 1 (Black) — opponent has no moves';
+      render();
+    }
+  }else{
+    if(currentPlayer===BLACK&&bMoves.length===0){
+      currentPlayer=WHITE;
+      document.getElementById('turnText').textContent='AI thinking...';
+      aiThinking=true;
+      setTimeout(aiMove,500);
+    }else if(currentPlayer===WHITE&&wMoves.length===0){
+      currentPlayer=BLACK;
+      document.getElementById('turnText').textContent='Your turn';
+      render();
+    }
   }
 }
 
@@ -226,7 +258,7 @@ function startGame(){
   document.getElementById('gameArea').classList.remove('hidden');
   initBoard();
   currentPlayer=BLACK;gameOver=false;aiThinking=false;
-  document.getElementById('turnText').textContent='Your turn';
+  document.getElementById('turnText').textContent=mode==='local'?'Player 1 (Black)':'Your turn';
   updateStats();
   render();
 }

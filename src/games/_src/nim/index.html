@@ -32,10 +32,17 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
 .btn:hover{background:#4f46e5}
 .hidden{display:none!important}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
 <h1>Nim</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div id="info">
   <span>Wins: <b id="winsEl">0</b></span>
   <span>Losses: <b id="lossesEl">0</b></span>
@@ -69,7 +76,7 @@ let selected=[];
 let selectedRow=-1;
 let playerTurn=true;
 let wins=0,losses=0;
-let gameActive=false;
+let gameActive=false,mode='computer',currentNimPlayer=1;
 
 function remaining(r){return rows[r]-removed[r].length;}
 function totalRemaining(){return rows.reduce((s,_,i)=>s+remaining(i),0);}
@@ -139,8 +146,18 @@ function takeStones(){
   selected=[];selectedRow=-1;
 
   if(totalRemaining()===0){
-    // Player took last stone — player loses (misere)
+    if(mode==='local'){
+      endGame(currentNimPlayer===2);// whoever took last loses in misere
+      return;
+    }
     endGame(false);return;
+  }
+
+  if(mode==='local'){
+    currentNimPlayer=currentNimPlayer===1?2:1;
+    setMessage('Player '+currentNimPlayer+"'s turn — select stones from one row");
+    render();
+    return;
   }
 
   playerTurn=false;
@@ -245,10 +262,17 @@ function startGame(){
   selected=[];selectedRow=-1;
   playerTurn=true;
   gameActive=true;
-  setMessage('Your turn — select stones from one row');
+  currentNimPlayer=1;
+  setMessage(mode==='local'?"Player 1's turn — select stones from one row":'Your turn — select stones from one row');
   render();
 }
 
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 document.getElementById('playBtn').addEventListener('click',startGame);
 document.getElementById('replayBtn').addEventListener('click',startGame);
 

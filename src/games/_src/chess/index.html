@@ -14,6 +14,9 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .btn{background:#6366f1;color:#e2e8f0;border:none;padding:.7rem 1.8rem;font-size:1rem;border-radius:0;cursor:pointer;font-family:inherit}
 .btn:hover{background:#818cf8}
 .hidden{display:none!important}
+.modes{display:flex;gap:4px;justify-content:center;margin:4px 0}
+.modes button{padding:4px 12px;font-size:0.8rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.modes button.active{background:#6366f1;border-color:#6366f1}
 #game{max-width:560px;width:100%;padding:.5rem;display:flex;flex-direction:column;align-items:center}
 .msg{text-align:center;color:#facc15;font-size:.9rem;min-height:1.2rem;margin:.3rem 0}
 .board{display:grid;grid-template-columns:repeat(8,1fr);width:min(90vw,480px);height:min(90vw,480px);border:2px solid #6366f1}
@@ -40,6 +43,10 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 </div>
 <div id="game">
 <h1>Chess</h1>
+<div class="modes">
+<button class="active" id="btnComputer" onclick="setMode('computer')">vs Computer</button>
+<button id="btnLocal" onclick="setMode('local')">vs Player</button>
+</div>
 <div class="msg" id="msg">White to move</div>
 <div class="info"><div>Captured: <span class="captured" id="capW"></span></div><div>Captured: <span class="captured" id="capB"></span></div></div>
 <div class="board" id="board"></div>
@@ -47,7 +54,7 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 </div>
 <script>
 const P={WK:'♔',WQ:'♕',WR:'♖',WB:'♗',WN:'♘',WP:'♙',BK:'♚',BQ:'♛',BR:'♜',BB:'♝',BN:'♞',BP:'♟'};
-let board,turn,selected,legalMoves,capturedW,capturedB,gameActive,enPassant,castling,highScore=0,wins=0;
+let board,turn,selected,legalMoves,capturedW,capturedB,gameActive,enPassant,castling,highScore=0,wins=0,mode='computer';
 function init(){
   board=Array(8).fill(null).map(()=>Array(8).fill(null));
   const back=['R','N','B','Q','K','B','N','R'];
@@ -193,17 +200,27 @@ function render(){
   document.getElementById('capW').textContent=capturedW.map(p=>P[p]).join('');
   document.getElementById('capB').textContent=capturedB.map(p=>P[p]).join('');
 }
+function setMode(m){
+  mode=m;
+  document.getElementById('btnComputer').className=m==='computer'?'active':'';
+  document.getElementById('btnLocal').className=m==='local'?'active':'';
+  startGame();
+}
 function cellClick(r,c){
-  if(!gameActive||turn!=='W')return;
+  if(!gameActive)return;
+  if(mode==='computer'&&turn!=='W')return;
   if(selected){
     let mv=legalMoves.find(m=>m[0]===r&&m[1]===c);
     if(mv){
       doMove(selected[0],selected[1],r,c);
-      selected=null;legalMoves=[];turn='B';
+      selected=null;legalMoves=[];turn=opp(turn);
       render();checkEndCondition();
-      if(gameActive)setTimeout(aiMove,300);
+      if(gameActive&&mode==='computer'&&turn==='B')setTimeout(aiMove,300);
       return;
     }
+  }
+  if(mode==='local'&&board[r][c]&&color(board[r][c])===turn){
+    selected=[r,c];legalMoves=legalMovesFor(r,c);render();return;
   }
   if(board[r][c]&&color(board[r][c])==='W'){
     selected=[r,c];legalMoves=legalMovesFor(r,c);
@@ -239,14 +256,18 @@ function checkEndCondition(){
     saveState();
     return;
   }
-  document.getElementById('msg').textContent=(turn==='W'?'White':'Black')+' to move'+(inCheck?' — Check!':'');
+  if(mode==='local'){
+    document.getElementById('msg').textContent=(turn==='W'?'Player 1 (White)':'Player 2 (Black)')+' to move'+(inCheck?' — Check!':'');
+  }else{
+    document.getElementById('msg').textContent=(turn==='W'?'White':'Black')+' to move'+(inCheck?' — Check!':'');
+  }
 }
 function saveState(){try{window.parent.postMessage({type:'ca-save',slug:'chess',state:{highScore}},'*');}catch(e){}}
 function startGame(){
   document.getElementById('startOverlay').classList.add('hidden');
   document.getElementById('endOverlay').classList.add('hidden');
   init();render();
-  document.getElementById('msg').textContent='White to move';
+  document.getElementById('msg').textContent=mode==='local'?'Player 1 (White) to move':'White to move';
 }
 window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.state){highScore=e.data.state.highScore||0;wins=0;}});
 </script>
