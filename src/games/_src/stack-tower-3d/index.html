@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
-h1{font-size:1.5rem;margin:.5rem 0}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
 .overlay h2{font-size:2rem;color:#facc15}
 .overlay p{font-size:1.1rem;max-width:400px;text-align:center;line-height:1.5}
@@ -31,7 +31,7 @@ h1{font-size:1.5rem;margin:.5rem 0}
 <body>
 <h1>Stack Tower 3D</h1>
 <div id="hud"><div>Score: <span id="score">0</span></div><div>Best: <span id="high">0</span></div></div>
-<canvas id="c" width="320" height="480" style="border:1px solid #334155;border-radius:0;max-width:100%;cursor:pointer;touch-action:none"></canvas>
+<canvas id="c" width="320" height="480" style="border:2px solid #6366f1;border-radius:0;max-width:100%;cursor:pointer;touch-action:none"></canvas>
 <button id="pause-btn" onclick="togglePause()">⏸</button>
 <p id="tap-hint">Tap or click to place block</p>
 <div id="start-overlay" class="overlay">

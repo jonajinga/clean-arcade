@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem;touch-action:manipulation}
-h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .stats{display:flex;gap:1.5rem;margin:.75rem 0;font-size:1rem;color:#94a3b8}
 .stats span{color:#e2e8f0;font-weight:600}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;max-width:420px;width:100%;margin:0 auto}
@@ -17,11 +17,11 @@ h1{font-size:1.8rem;margin-bottom:.5rem;color:#facc15}
 .card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700}
 .card-back{background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;font-size:2rem}
 .card-back::after{content:'?';opacity:.6}
-.card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #334155;color:#e2e8f0}
+.card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #6366f1;color:#e2e8f0}
 .card.matched .card-front{border-color:#22c55e;background:#14532d33;color:#22c55e}
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
 .overlay.hidden{display:none}
-.overlay-box{background:#1e293b;border:2px solid #334155;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
+.overlay-box{background:#1e293b;border:2px solid #6366f1;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
 .overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
 .overlay-box p{margin:.5rem 0;color:#94a3b8}
 .overlay-box p span{color:#e2e8f0;font-weight:600}

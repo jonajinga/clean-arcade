@@ -7,15 +7,15 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:1rem;touch-action:manipulation}
-h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 #info{display:flex;gap:1.5rem;margin-bottom:.5rem;font-size:.9rem;flex-wrap:wrap;justify-content:center}
 #info span{color:#6366f1}
 #toolbar{display:flex;gap:.5rem;margin:.5rem 0;flex-wrap:wrap;justify-content:center}
-#toolbar button{padding:.5rem 1rem;font-size:.85rem;border:2px solid #334155;background:#1e293b;color:#e2e8f0;border-radius:0;cursor:pointer;transition:border-color .2s}
+#toolbar button{padding:.5rem 1rem;font-size:.85rem;border:2px solid #6366f1;background:#1e293b;color:#e2e8f0;border-radius:0;cursor:pointer;transition:border-color .2s}
 #toolbar button:hover,#toolbar button.active{border-color:#facc15;color:#facc15}
 #toolbar button:disabled{opacity:.4;cursor:not-allowed}
 #garden{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;max-width:480px;width:100%;margin:.5rem 0}
-.pot{background:#1e293b;border:2px solid #334155;border-radius:.75rem;padding:1rem;text-align:center;cursor:pointer;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;transition:border-color .2s;position:relative}
+.pot{background:#1e293b;border:2px solid #6366f1;border-radius:.75rem;padding:1rem;text-align:center;cursor:pointer;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;transition:border-color .2s;position:relative}
 .pot:hover{border-color:#6366f1}
 .pot .stage{font-size:.75rem;color:#94a3b8;margin-top:.25rem}
 .pot .water-bar{width:80%;height:6px;background:#334155;border-radius:3px;margin-top:.35rem;overflow:hidden}
@@ -27,7 +27,7 @@ h1{font-size:1.5rem;margin-bottom:.5rem;color:#facc15}
 #seedPicker{background:#1e293b;border:2px solid #6366f1;border-radius:.75rem;padding:1rem;margin:.5rem 0;max-width:480px;width:100%;text-align:center}
 #seedPicker h3{color:#facc15;margin-bottom:.5rem;font-size:1rem}
 #seedPicker .seeds{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap}
-#seedPicker .seed-opt{padding:.5rem 1rem;border:2px solid #334155;background:#0f172a;color:#e2e8f0;border-radius:0;cursor:pointer;font-size:.85rem}
+#seedPicker .seed-opt{padding:.5rem 1rem;border:2px solid #6366f1;background:#0f172a;color:#e2e8f0;border-radius:0;cursor:pointer;font-size:.85rem}
 #seedPicker .seed-opt:hover{border-color:#22c55e}
 #seedPicker .seed-opt .cost{color:#facc15;font-size:.75rem}
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}

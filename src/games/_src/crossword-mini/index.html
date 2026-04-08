@@ -8,7 +8,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:10px;touch-action:manipulation}
 .overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
-.overlay h1{font-size:2.5rem;margin-bottom:.5rem;color:#6366f1}
+.overlay h1{font-size:2rem;margin-bottom:.5rem;color:#facc15}
 .overlay h2{font-size:1.5rem;margin-bottom:1rem;color:#facc15}
 .overlay p{font-size:1.1rem;margin-bottom:1.5rem;color:#e2e8f0;max-width:400px;text-align:center}
 .btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:0}
@@ -17,7 +17,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe
 .game-area{display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:500px}
 .grid{display:grid;grid-template-columns:repeat(5,56px);grid-template-rows:repeat(5,56px);gap:2px}
 @media(max-width:400px){.grid{grid-template-columns:repeat(5,48px);grid-template-rows:repeat(5,48px)}}
-.cell{width:100%;height:100%;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.cell{width:100%;height:100%;background:#1e293b;border:2px solid #6366f1;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
 .cell.black{background:#0f172a;border-color:#0f172a;cursor:default}
 .cell.selected{border-color:#6366f1;background:#1e3a5f}
 .cell.highlight{border-color:#3b82f6;background:#172544}
