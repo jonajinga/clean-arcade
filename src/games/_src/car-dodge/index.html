@@ -16,6 +16,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .btn:hover{background:#4f46e5}
 .pause-btn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;border:none;border-radius:0;cursor:pointer;background:#334155;color:#fff;font-family:inherit}
 .pause-btn:hover{background:#2563eb}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
 #score-display{font-size:1rem;margin-top:.5rem;color:#facc15}
 .hidden{display:none}
 </style>
@@ -33,6 +36,10 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <button class="btn" onclick="startGame()">Play Again</button>
 </div>
 <canvas id="c"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();moveLane(-1)" onclick="moveLane(-1)">&#9664;</button>
+<button ontouchstart="event.preventDefault();moveLane(1)" onclick="moveLane(1)">&#9654;</button>
+</div>
 <button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
 <div id="score-display">Score: 0</div>
 

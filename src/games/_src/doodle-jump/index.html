@@ -17,6 +17,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .hidden{display:none}
 .hud{width:100%;max-width:400px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
 .pause-btn{margin-top:12px;background:#334155;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.5rem;cursor:pointer;font-family:inherit;border-radius:0}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
 </style>
 </head>
 <body>
@@ -38,6 +41,10 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <span>Hi: <span id="hiEl">0</span></span>
 </div>
 <canvas id="c" width="400" height="600"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();keys['ArrowLeft']=true" ontouchend="event.preventDefault();keys['ArrowLeft']=false" onmousedown="keys['ArrowLeft']=true" onmouseup="keys['ArrowLeft']=false">&#9664;</button>
+<button ontouchstart="event.preventDefault();keys['ArrowRight']=true" ontouchend="event.preventDefault();keys['ArrowRight']=false" onmousedown="keys['ArrowRight']=true" onmouseup="keys['ArrowRight']=false">&#9654;</button>
+</div>
 <button class="pause-btn hidden" id="pauseBtn" onclick="togglePause()">⏸</button>
 <script>
 const SLUG='doodle-jump';

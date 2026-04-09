@@ -20,6 +20,9 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 canvas{background:#1e293b;border-radius:0;display:block;max-width:100%;touch-action:none}
 .pause-row{margin-top:.75rem}
 .pause-btn{background:#334155;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.2rem;border-radius:0;cursor:pointer;font-family:inherit}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
 </style>
 </head>
 <body>
@@ -41,6 +44,10 @@ canvas{background:#1e293b;border-radius:0;display:block;max-width:100%;touch-act
 <span>High: <b id="high">0</b></span>
 </div>
 <canvas id="canvas" width="400" height="500"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();keys.ArrowLeft=true" ontouchend="event.preventDefault();keys.ArrowLeft=false" onmousedown="keys.ArrowLeft=true" onmouseup="keys.ArrowLeft=false">&#9664;</button>
+<button ontouchstart="event.preventDefault();keys.ArrowRight=true" ontouchend="event.preventDefault();keys.ArrowRight=false" onmousedown="keys.ArrowRight=true" onmouseup="keys.ArrowRight=false">&#9654;</button>
+</div>
 <div class="pause-row"><button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button></div>
 </div>
 <script>

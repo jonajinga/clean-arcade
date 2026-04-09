@@ -81,6 +81,10 @@
 <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
 </div>
 <canvas style="max-width:100%" id="c"></canvas>
+<div class="game-controls">
+  <button ontouchstart="event.preventDefault();keys['ArrowLeft']=true" ontouchend="event.preventDefault();keys['ArrowLeft']=false" onmousedown="keys['ArrowLeft']=true" onmouseup="keys['ArrowLeft']=false">&#9664;</button>
+  <button ontouchstart="event.preventDefault();keys['ArrowRight']=true" ontouchend="event.preventDefault();keys['ArrowRight']=false" onmousedown="keys['ArrowRight']=true" onmouseup="keys['ArrowRight']=false">&#9654;</button>
+</div>
 <div id="overlay">
   <h1 id="overlayTitle">Breakout</h1>
   <p class="final-score hidden" id="finalScore"></p>
@@ -114,6 +118,7 @@
   var ball, paddle, bricks;
   var ballSpeed, ballLaunched, running, gameOverFlag, paused;
   var keys = {};
+  window.keys = keys;
   var pauseBtn = document.getElementById("pauseBtn");
 
   /* ---- parent save/load ---- */

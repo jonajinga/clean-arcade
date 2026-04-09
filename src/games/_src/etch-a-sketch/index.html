@@ -26,6 +26,9 @@ canvas{display:block;border:2px solid #6366f1;border-radius:12px;background:#c4b
 .shake-btn{background:#ef4444;color:#e2e8f0;border:none;padding:8px 20px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit;min-height:44px}
 .shake-btn:hover{background:#f87171}
 .info{font-size:.8rem;color:#94a3b8;text-align:center}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
 </style>
 </head>
 <body>
@@ -51,6 +54,12 @@ canvas{display:block;border:2px solid #6366f1;border-radius:12px;background:#c4b
 <button class="shake-btn" onclick="shakeClear()">Shake! Clear</button>
 </div>
 <canvas id="c" width="480" height="400"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();keys['ArrowLeft']=true" ontouchend="event.preventDefault();keys['ArrowLeft']=false" onmousedown="keys['ArrowLeft']=true" onmouseup="keys['ArrowLeft']=false">&#9664;</button>
+<button ontouchstart="event.preventDefault();keys['ArrowUp']=true" ontouchend="event.preventDefault();keys['ArrowUp']=false" onmousedown="keys['ArrowUp']=true" onmouseup="keys['ArrowUp']=false">&#9650;</button>
+<button ontouchstart="event.preventDefault();keys['ArrowDown']=true" ontouchend="event.preventDefault();keys['ArrowDown']=false" onmousedown="keys['ArrowDown']=true" onmouseup="keys['ArrowDown']=false">&#9660;</button>
+<button ontouchstart="event.preventDefault();keys['ArrowRight']=true" ontouchend="event.preventDefault();keys['ArrowRight']=false" onmousedown="keys['ArrowRight']=true" onmouseup="keys['ArrowRight']=false">&#9654;</button>
+</div>
 <div class="info">Arrow keys or drag to draw. Your drawing is auto-saved.</div>
 </div>
 <script>

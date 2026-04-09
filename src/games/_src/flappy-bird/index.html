@@ -73,6 +73,10 @@
     cursor: pointer;
   }
   .play-again:hover { background: #4f46e5; }
+  .game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+  .game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+  .game-controls button:active{background:#475569}
+  .game-controls .wide-btn{width:auto;padding:0 16px;font-size:0.9rem}
 </style>
 </head>
 <body>
@@ -81,6 +85,9 @@
   Score: <span id="scoreEl">0</span> &nbsp;&nbsp; BEST: <span id="hiEl">0</span>
 </div>
 <canvas style="max-width:100%" id="c"></canvas>
+<div class="game-controls">
+<button class="wide-btn" ontouchstart="event.preventDefault();window._flap&&window._flap()" onclick="window._flap&&window._flap()">FLAP</button>
+</div>
 <div class="pause-wrap" id="pause-wrap">
   <button id="pauseBtn" onclick="window._togglePause()">&#9208;</button>
 </div>
@@ -195,6 +202,8 @@
     if (!paused) loop();
     else save();
   };
+
+  window._flap = flap;
 
   window._restart = function() {
     cancelAnimationFrame(animId);

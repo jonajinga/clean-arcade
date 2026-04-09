@@ -17,6 +17,9 @@ button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-si
 button:hover{background:#4f46e5}
 .hidden{display:none}
 .pause-btn{background:#334155;margin:0.25rem;padding:0.5rem 1rem;font-size:0.85rem}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
 </style>
 </head>
 <body>
@@ -27,6 +30,10 @@ button:hover{background:#4f46e5}
 <span>HP: <strong id="hpEl">3</strong></span>
 </div>
 <canvas id="canvas"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();keys.left=true" ontouchend="event.preventDefault();keys.left=false" onmousedown="keys.left=true" onmouseup="keys.left=false">&#9664;</button>
+<button ontouchstart="event.preventDefault();keys.right=true" ontouchend="event.preventDefault();keys.right=false" onmousedown="keys.right=true" onmouseup="keys.right=false">&#9654;</button>
+</div>
 <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
 
 <div class="overlay" id="startOverlay">

@@ -24,6 +24,10 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .btn{padding:.75rem 2rem;font-size:1.1rem;border:none;border-radius:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600}
 .btn:hover{background:#4f46e5}
 #pauseBtn{margin-top:.75rem;padding:.5rem 1.5rem;font-size:1.3rem;background:#3b82f6;color:#fff;border:none;border-radius:0;cursor:pointer}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
+.game-controls .wide-btn{width:auto;padding:0 16px;font-size:0.9rem}
 .hidden{display:none!important}
 #controls{text-align:center;margin-top:.5rem;font-size:.85rem;color:#94a3b8}
 </style>
@@ -36,6 +40,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
   <span>High Game: <b id="highEl">0</b></span>
 </div>
 <canvas id="c"></canvas>
+<div class="game-controls">
+<button ontouchstart="event.preventDefault();if(state&&phase==='aim'){aim=Math.max(-1,aim-0.05)}" onclick="if(state&&phase==='aim'){aim=Math.max(-1,aim-0.05)}">&#9664;</button>
+<button class="wide-btn" ontouchstart="event.preventDefault();if(state&&phase==='aim'){phase='power';power=0;powerDir=1}else if(state&&phase==='power'){throwBall()}" onclick="if(state&&phase==='aim'){phase='power';power=0;powerDir=1}else if(state&&phase==='power'){throwBall()}">THROW</button>
+<button ontouchstart="event.preventDefault();if(state&&phase==='aim'){aim=Math.min(1,aim+0.05)}" onclick="if(state&&phase==='aim'){aim=Math.min(1,aim+0.05)}">&#9654;</button>
+</div>
 <div id="controls">Arrow keys or touch drag to aim. Space/tap to start power, again to throw.</div>
 <div id="scorecard"></div>
 

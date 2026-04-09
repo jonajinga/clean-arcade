@@ -15,6 +15,10 @@ canvas{border:2px solid #6366f1;display:block;max-width:100%}
 button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1rem;font-size:0.9rem;cursor:pointer;border-radius:0;margin:0.2rem}
 button:hover{opacity:0.85}
 .pause-btn{background:#334155}
+.game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
+.game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
+.game-controls button:active{background:#475569}
+.game-controls .wide-btn{width:auto;padding:0 16px;font-size:0.9rem}
 .hud{display:flex;gap:1rem;font-size:0.85rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
 .hud span{color:#22c55e}
 #wrap{position:relative;display:inline-block}
@@ -40,6 +44,9 @@ button:hover{opacity:0.85}
     <p id="finalScore"></p>
     <button onclick="startGame()">Play Again</button>
   </div>
+</div>
+<div class="game-controls">
+<button class="wide-btn" ontouchstart="event.preventDefault();if(running&&!paused&&player.y>=GROUND-2){holdStart=Date.now();jumping=true}" ontouchend="event.preventDefault();if(jumping){doJump();jumping=false}" onmousedown="if(running&&!paused&&player.y>=GROUND-2){holdStart=Date.now();jumping=true}" onmouseup="if(jumping){doJump();jumping=false}">JUMP</button>
 </div>
 <div><button class="pause-btn" id="pauseBtn" onclick="togglePause()" style="display:none">⏸</button></div>
 <script>
