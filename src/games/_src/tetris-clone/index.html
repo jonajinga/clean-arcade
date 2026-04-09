@@ -100,11 +100,11 @@ canvas {
   .panel-box .value { font-size: 14px; }
   #next-canvas { display: none; }
 }
-.touch-controls { display: none; padding: 2px 4px; }
+.touch-controls { display: flex; padding: 2px 4px; }
 .touch-btn { width: 40px; height: 34px; background: #1e293b; border: 1px solid #475569; color: #e2e8f0; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .touch-btn:active { background: #475569; }
 .touch-row { display: flex; gap: 4px; justify-content: center; }
-@media (pointer: coarse) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
+.touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
 @media (hover: none) { .touch-controls { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; } }
 @media (pointer: coarse), (hover: none) { .desktop-pause-wrap { display: none !important; } }
 </style>
