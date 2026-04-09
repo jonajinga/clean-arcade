@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gear Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:500px}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;margin:0 auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;font-size:0.9rem;text-align:center;max-width:85%}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pause-btn{background:#334155;margin-top:6px}
+#hud{display:flex;justify-content:space-between;max-width:500px;width:100%;padding:2px 4px;font-size:0.85rem}
+#controls{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+#controls button{font-size:0.85rem;padding:6px 14px}
+.info{color:#94a3b8;font-size:0.8rem;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<h1>Gear Puzzle</h1>
+<div id="hud"><span id="hud-level">Level: 1/10</span><span id="hud-gears">Gears: 0</span><span id="hud-hs">Best: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="500" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Gear Puzzle</h2>
+<p>Place gears on the pegs to connect the green driver gear to the red output gear. Gears must mesh (touch) to transfer rotation. Click a peg to place/remove a gear.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="win-overlay" style="display:none">
+<h2 id="win-title">Level Complete!</h2>
+<p id="win-msg"></p>
+<button id="win-btn" onclick="nextLevel()">Next Level</button>
+</div>
+</div>
+<div id="controls">
+<button onclick="clearGears()">🗑 Clear</button>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<p class="info">Click pegs to place gears</p>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=500,H=500,SLUG='gear-puzzle';
+let currentLevel=0,highScore=0,paused=false,gameStarted=false,animAngle=0;
+
+// Each level: driver gear, output gear, available pegs, gear radius
+const levels=[
+  {driver:{x:100,y:250,r:40},output:{x:400,y:250,r:40},pegs:[{x:190,y:250},{x:280,y:250},{x:370,y:250}],gearR:35,needed:2},
+  {driver:{x:80,y:150,r:40},output:{x:420,y:350,r:40},pegs:[{x:170,y:150},{x:250,y:220},{x:330,y:290},{x:410,y:350}],gearR:38,needed:3},
+  {driver:{x:80,y:250,r:45},output:{x:420,y:250,r:45},pegs:[{x:170,y:200},{x:260,y:250},{x:350,y:200},{x:170,y:300},{x:350,y:300}],gearR:40,needed:2},
+  {driver:{x:100,y:100,r:35},output:{x:400,y:400,r:35},pegs:[{x:180,y:100},{x:250,y:170},{x:250,y:250},{x:320,y:320},{x:400,y:320}],gearR:35,needed:3},
+  {driver:{x:80,y:400,r:40},output:{x:420,y:100,r:40},pegs:[{x:150,y:330},{x:220,y:260},{x:290,y:190},{x:360,y:120},{x:150,y:200},{x:350,y:300}],gearR:36,needed:3},
+  {driver:{x:60,y:250,r:35},output:{x:440,y:250,r:35},pegs:[{x:140,y:200},{x:220,y:250},{x:300,y:200},{x:380,y:250},{x:140,y:300},{x:300,y:300}],gearR:34,needed:3},
+  {driver:{x:80,y:80,r:38},output:{x:420,y:420,r:38},pegs:[{x:160,y:80},{x:240,y:140},{x:160,y:200},{x:240,y:260},{x:320,y:340},{x:400,y:420},{x:320,y:200}],gearR:36,needed:4},
+  {driver:{x:250,y:60,r:40},output:{x:250,y:440,r:40},pegs:[{x:250,y:150},{x:170,y:220},{x:330,y:220},{x:250,y:290},{x:170,y:360},{x:330,y:360},{x:250,y:380}],gearR:38,needed:3},
+  {driver:{x:60,y:60,r:35},output:{x:440,y:440,r:35},pegs:[{x:140,y:60},{x:220,y:120},{x:300,y:60},{x:300,y:180},{x:220,y:250},{x:300,y:320},{x:380,y:380},{x:220,y:380},{x:380,y:250}],gearR:33,needed:5},
+  {driver:{x:60,y:250,r:40},output:{x:440,y:250,r:40},pegs:[{x:140,y:180},{x:220,y:120},{x:300,y:180},{x:380,y:120},{x:140,y:320},{x:220,y:380},{x:300,y:320},{x:380,y:380},{x:220,y:250},{x:300,y:250}],gearR:34,needed:4}
+];
+
+let placedGears=[],pegs=[],driver={},output={},gearR=35,connectedGears=new Set();
+
+function loadLevel(n){
+  const l=levels[n];
+  driver={...l.driver,placed:true,isDriver:true};
+  output={...l.output,placed:true,isOutput:true};
+  pegs=l.pegs.map(p=>({...p,hasGear:false}));
+  gearR=l.gearR;
+  placedGears=[];
+  connectedGears=new Set();
+  document.getElementById('hud-level').textContent=`Level: ${n+1}/10`;
+  updateGearCount();
+}
+
+function updateGearCount(){document.getElementById('hud-gears').textContent=`Gears: ${placedGears.length}`}
+
+function clearGears(){placedGears=[];pegs.forEach(p=>p.hasGear=false);connectedGears=new Set();updateGearCount();draw()}
+
+function gearsTouch(g1,g2){
+  let d=Math.hypot(g1.x-g2.x,g1.y-g2.y);
+  let r1=g1.r||gearR,r2=g2.r||gearR;
+  return d<=(r1+r2+8)&&d>=(r1+r2-20);
+}
+
+function checkConnection(){
+  // BFS from driver
+  let allGears=[driver,...placedGears,output];
+  let visited=new Set();
+  let queue=[0]; // driver index
+  visited.add(0);
+  while(queue.length>0){
+    let ci=queue.shift();
+    let cg=allGears[ci];
+    for(let i=0;i<allGears.length;i++){
+      if(visited.has(i))continue;
+      if(gearsTouch(cg,allGears[i])){visited.add(i);queue.push(i)}
+    }
+  }
+  connectedGears=visited;
+  return visited.has(allGears.length-1); // output is last
+}
+
+function drawGear(x,y,r,color,angle,connected){
+  let teeth=Math.max(8,Math.floor(r/4));
+  ctx.save();ctx.translate(x,y);ctx.rotate(angle);
+  ctx.beginPath();
+  for(let i=0;i<teeth;i++){
+    let a1=(i/teeth)*Math.PI*2;
+    let a2=((i+0.3)/teeth)*Math.PI*2;
+    let a3=((i+0.5)/teeth)*Math.PI*2;
+    let a4=((i+0.8)/teeth)*Math.PI*2;
+    let ir=r-6,or=r+4;
+    if(i===0)ctx.moveTo(Math.cos(a1)*ir,Math.sin(a1)*ir);
+    ctx.lineTo(Math.cos(a2)*or,Math.sin(a2)*or);
+    ctx.lineTo(Math.cos(a3)*or,Math.sin(a3)*or);
+    ctx.lineTo(Math.cos(a4)*ir,Math.sin(a4)*ir);
+  }
+  ctx.closePath();
+  ctx.fillStyle=connected?color:'#475569';ctx.fill();
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1.5;ctx.stroke();
+  // center hole
+  ctx.beginPath();ctx.arc(0,0,r*0.2,0,Math.PI*2);ctx.fillStyle='#0f172a';ctx.fill();
+  ctx.restore();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // pegs
+  for(let p of pegs){
+    if(!p.hasGear){
+      ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);
+      ctx.fillStyle='#334155';ctx.fill();
+      ctx.strokeStyle='#64748b';ctx.lineWidth=2;ctx.stroke();
+    }
+  }
+  let allGears=[driver,...placedGears,output];
+  checkConnection();
+  // draw gears
+  for(let i=0;i<allGears.length;i++){
+    let g=allGears[i];
+    let color=g.isDriver?'#22c55e':g.isOutput?'#ef4444':'#6366f1';
+    let connected=connectedGears.has(i);
+    let dir=i%2===0?1:-1;
+    let a=connected?animAngle*dir:0;
+    drawGear(g.x,g.y,g.r||gearR,color,a,connected);
+  }
+  // labels
+  ctx.fillStyle='#e2e8f0';ctx.font='bold 11px system-ui';ctx.textAlign='center';
+  ctx.fillText('IN',driver.x,driver.y+driver.r+18);
+  ctx.fillText('OUT',output.x,output.y+output.r+18);
+}
+
+function handleClick(e){
+  if(!gameStarted||paused)return;
+  let r=canvas.getBoundingClientRect();
+  let sx=W/r.width,sy=H/r.height;
+  let cx=((e.clientX||e.touches[0].clientX)-r.left)*sx;
+  let cy=((e.clientY||e.touches[0].clientY)-r.top)*sy;
+  // find peg
+  for(let p of pegs){
+    if(Math.hypot(cx-p.x,cy-p.y)<gearR){
+      if(p.hasGear){
+        p.hasGear=false;
+        placedGears=placedGears.filter(g=>g.x!==p.x||g.y!==p.y);
+      } else {
+        p.hasGear=true;
+        placedGears.push({x:p.x,y:p.y,r:gearR});
+      }
+      updateGearCount();
+      if(checkConnection()){
+        let score=(currentLevel+1)*100+Math.max(0,(levels[currentLevel].needed-placedGears.length+3)*50);
+        highScore=Math.max(highScore,highScore+score);
+        document.getElementById('hud-hs').textContent=`Best: ${highScore}`;
+        saveState();
+        if(currentLevel>=9){
+          document.getElementById('win-title').textContent='All Levels Complete!';
+          document.getElementById('win-msg').textContent=`Final score: ${highScore}`;
+          document.getElementById('win-btn').textContent='Play Again';
+          document.getElementById('win-btn').onclick=()=>{currentLevel=0;loadLevel(0);document.getElementById('win-overlay').style.display='none'};
+        } else {
+          document.getElementById('win-title').textContent='Level Complete!';
+          document.getElementById('win-msg').textContent=`Gears connected! Used ${placedGears.length} gears.`;
+          document.getElementById('win-btn').onclick=nextLevel;
+        }
+        document.getElementById('win-overlay').style.display='flex';
+      }
+      draw();
+      return;
+    }
+  }
+}
+
+canvas.addEventListener('click',handleClick);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleClick(e)},{passive:false});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause()});
+
+function togglePause(){paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function nextLevel(){currentLevel++;loadLevel(currentLevel);document.getElementById('win-overlay').style.display='none'}
+function startGame(){gameStarted=true;document.getElementById('start-overlay').style.display='none';loadLevel(0)}
+
+function gameLoop(){
+  if(!paused&&gameStarted){animAngle+=0.02;draw()}
+  requestAnimationFrame(gameLoop);
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('hud-hs').textContent=`Best: ${highScore}`}});
+
+function resizeCanvas(){let w=document.getElementById('game-wrap').clientWidth;canvas.style.width=w+'px';canvas.style.height=w+'px'}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+loadLevel(0);gameLoop();
+</script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Domino Puzzle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;text-align:center;margin-bottom:0.25rem;color:#94a3b8}
+.board{display:inline-grid;gap:1px;border:2px solid #6366f1;background:#1e293b;margin:0.5rem auto}
+.cell{width:40px;height:40px;background:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.7rem;transition:background 0.15s}
+.cell.filled{cursor:default}
+.cell.hover{background:#4f46e5}
+.cell.preview{background:rgba(99,102,241,0.4)}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1.2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.dir-btn{background:#3b82f6;min-width:44px;min-height:44px}
+.dir-btn.active{background:#facc15;color:#0f172a}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1rem;text-align:center;max-width:320px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Domino Puzzle</h1>
+<p class="info">Level: <span id="lvl">1</span>/10 | Dominoes: <span id="placed">0</span>/<span id="total">0</span></p>
+<div id="board" class="board"></div>
+<div class="controls">
+<button class="dir-btn active" id="hBtn" onclick="setDir('h')">― H</button>
+<button class="dir-btn" id="vBtn" onclick="setDir('v')">| V</button>
+<button onclick="undoMove()">Undo</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Domino Puzzle</h2>
+<p>Place dominoes on the grid. Each domino covers exactly 2 squares. Fill the entire grid! Toggle H/V for horizontal/vertical placement.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="winOverlay">
+<h2 id="winTitle">Level Complete!</h2>
+<p id="winMsg"></p>
+<button id="winBtn" onclick="nextLevel()">Next Level</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SLUG='domino-puzzle';
+let highScore=0,level=1,grid=[],rows=0,cols=0,dir='h',history=[],paused=false,dominoCount=0;
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#a855f7','#ec4899','#14b8a6','#f97316','#84cc16'];
+const levels=[
+  {r:4,c:4},{r:4,c:6},{r:6,c:4},{r:4,c:8},{r:6,c:6},
+  {r:6,c:8},{r:8,c:6},{r:8,c:8},{r:8,c:10},{r:10,c:10}
+];
+
+function setDir(d){dir=d;document.getElementById('hBtn').classList.toggle('active',d==='h');document.getElementById('vBtn').classList.toggle('active',d==='v');}
+
+function initLevel(){
+  const l=levels[level-1];rows=l.r;cols=l.c;
+  grid=Array.from({length:rows},()=>Array(cols).fill(0));
+  history=[];dominoCount=0;
+  document.getElementById('total').textContent=(rows*cols)/2;
+  document.getElementById('placed').textContent='0';
+  document.getElementById('lvl').textContent=level;
+  renderBoard();
+}
+
+function renderBoard(){
+  const b=document.getElementById('board');
+  b.style.gridTemplateColumns=`repeat(${cols},40px)`;
+  b.innerHTML='';
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const d=document.createElement('div');d.className='cell';
+    if(grid[r][c]){d.classList.add('filled');d.style.background=COLORS[(grid[r][c]-1)%COLORS.length];}
+    d.onmouseenter=()=>preview(r,c);
+    d.onclick=()=>place(r,c);
+    b.appendChild(d);
+  }
+}
+
+function preview(r,c){
+  if(paused)return;
+  const cells=document.getElementById('board').children;
+  for(let i=0;i<cells.length;i++)cells[i].classList.remove('preview');
+  const [r2,c2]=dir==='h'?[r,c+1]:[r+1,c];
+  if(r2>=rows||c2>=cols||grid[r][c]||grid[r2]?.[c2])return;
+  cells[r*cols+c].classList.add('preview');
+  cells[r2*cols+c2].classList.add('preview');
+}
+
+function place(r,c){
+  if(paused)return;
+  const [r2,c2]=dir==='h'?[r,c+1]:[r+1,c];
+  if(r2>=rows||c2>=cols)return;
+  if(grid[r][c]||grid[r2][c2])return;
+  dominoCount++;
+  grid[r][c]=dominoCount;grid[r2][c2]=dominoCount;
+  history.push({r,c,r2,c2,id:dominoCount});
+  document.getElementById('placed').textContent=dominoCount;
+  renderBoard();
+  if(dominoCount===(rows*cols)/2)win();
+}
+
+function undoMove(){
+  if(paused||history.length===0)return;
+  const m=history.pop();
+  grid[m.r][m.c]=0;grid[m.r2][m.c2]=0;
+  dominoCount--;
+  document.getElementById('placed').textContent=dominoCount;
+  renderBoard();
+}
+
+function win(){
+  if(level>highScore){highScore=level;save();}
+  if(level>=10){
+    document.getElementById('winTitle').textContent='All Levels Complete!';
+    document.getElementById('winMsg').textContent='You beat all 10 levels! Best level: '+highScore;
+    document.getElementById('winBtn').textContent='Play Again';
+  }else{
+    document.getElementById('winTitle').textContent='Level '+level+' Complete!';
+    document.getElementById('winMsg').textContent='';
+    document.getElementById('winBtn').textContent='Next Level';
+  }
+  document.getElementById('winOverlay').classList.remove('hidden');
+}
+
+function nextLevel(){
+  document.getElementById('winOverlay').classList.add('hidden');
+  if(level>=10)level=1;else level++;
+  initLevel();
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('winOverlay').classList.add('hidden');
+  level=1;paused=false;initLevel();
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key==='h')setDir('h');if(e.key==='v')setDir('v');
+  if(e.key==='z'||e.key==='Z')undoMove();
+});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+    if(e.data.state.highScore!=null)highScore=e.data.state.highScore;
+  }
+});
+</script>
+</body>
+</html>

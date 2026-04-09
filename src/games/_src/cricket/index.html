@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cricket</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+#wrap{position:relative;display:inline-block}
+#hud{display:flex;justify-content:space-between;width:100%;padding:0.2rem 0.5rem;font-size:0.9rem}
+#controls{display:flex;gap:0.5rem;margin:0.4rem 0;justify-content:center}
+.ctrl-btn{background:#334155;padding:0.5rem 1rem;font-size:1.1rem;border-radius:0;color:#e2e8f0;border:none;cursor:pointer;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>Cricket - Batting</h1>
+<div id="hud"><span id="sc">Runs: 0</span><span id="wk">Wickets: 0/10</span><span id="bl">Balls: 0</span></div>
+<div id="wrap">
+<canvas id="c" width="500" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Cricket</h2>
+<p>Click/tap when ball reaches the crease</p>
+<p>Timing determines runs scored</p>
+<p>10 wickets and you're out!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Innings Over!</h2>
+<p id="over-msg"></p>
+<p id="over-hs"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="swing()" aria-label="Bat">&#128287; Bat!</button>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=500,H=400;
+let runs=0,wickets=0,ballCount=0,highScore=0;
+let ball,bowling,swung,result,resultTimer,paused=false,running=false,gameOver=false;
+const CREASE_Y=300,BATTER_X=250;
+
+function init(){
+  runs=0;wickets=0;ballCount=0;gameOver=false;
+  newBall();
+}
+
+function newBall(){
+  let speed=3+Math.random()*2+Math.min(ballCount*0.05,2);
+  let xOff=(Math.random()-0.5)*80;
+  ball={x:250+xOff,y:50,speed:speed,swingX:(Math.random()-0.5)*0.5};
+  bowling=true;swung=false;result=null;resultTimer=0;
+}
+
+function swing(){
+  if(!running||paused||gameOver||!bowling||swung)return;
+  swung=true;
+  let dist=Math.abs(ball.y-CREASE_Y);
+  let xDist=Math.abs(ball.x-BATTER_X);
+  if(dist<10&&xDist<40){
+    let r=Math.random();
+    if(r<0.15){result={text:'SIX!',runs:6,color:'#facc15'};}
+    else if(r<0.35){result={text:'FOUR!',runs:4,color:'#22c55e'};}
+    else if(r<0.55){result={text:'3 Runs',runs:3,color:'#3b82f6'};}
+    else if(r<0.75){result={text:'2 Runs',runs:2,color:'#3b82f6'};}
+    else{result={text:'1 Run',runs:1,color:'#e2e8f0'};}
+  }else if(dist<25&&xDist<50){
+    let r=Math.random();
+    if(r<0.3){result={text:'1 Run',runs:1,color:'#e2e8f0'};}
+    else if(r<0.5){result={text:'2 Runs',runs:2,color:'#3b82f6'};}
+    else{result={text:'Edge! OUT!',runs:0,color:'#ef4444',out:true};}
+  }else{
+    if(xDist<45){result={text:'Miss!',runs:0,color:'#ef4444'};}
+    else{result={text:'Wide swing!',runs:0,color:'#ef4444',out:Math.random()<0.3};}
+    if(result.out)result.text='Caught! OUT!';
+  }
+  runs+=result.runs;
+  if(result.out)wickets++;
+  ballCount++;
+  resultTimer=60;
+  updateHud();
+}
+
+function updateHud(){
+  document.getElementById('sc').textContent='Runs: '+runs;
+  document.getElementById('wk').textContent='Wickets: '+wickets+'/10';
+  document.getElementById('bl').textContent='Balls: '+ballCount;
+}
+
+function update(){
+  if(paused||!running||gameOver)return;
+  if(resultTimer>0){resultTimer--;if(resultTimer===0){
+    if(wickets>=10){gameOver=true;if(runs>highScore){highScore=runs;save();}showOver();return;}
+    newBall();
+  }return;}
+  if(bowling){
+    ball.y+=ball.speed;ball.x+=ball.swingX;
+    if(ball.y>CREASE_Y+40&&!swung){
+      // ball passed - check if hit stumps
+      if(Math.abs(ball.x-BATTER_X)<15){
+        result={text:'Bowled! OUT!',runs:0,color:'#ef4444',out:true};
+        wickets++;ballCount++;resultTimer=60;updateHud();
+      }else{
+        result={text:'Dot ball',runs:0,color:'#e2e8f0'};
+        ballCount++;resultTimer=40;updateHud();
+      }
+      swung=true;
+    }
+  }
+}
+
+function draw(){
+  // pitch
+  ctx.fillStyle='#166534';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#d2a679';ctx.fillRect(W/2-40,30,80,H-40);
+  // crease
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(W/2-50,CREASE_Y);ctx.lineTo(W/2+50,CREASE_Y);ctx.stroke();
+  // stumps
+  ctx.fillStyle='#facc15';
+  for(let i=-1;i<=1;i++)ctx.fillRect(BATTER_X+i*8-2,CREASE_Y-5,4,20);
+  // batter
+  ctx.fillStyle='#3b82f6';ctx.fillRect(BATTER_X+20,CREASE_Y-30,8,40);
+  if(swung&&resultTimer>40){
+    ctx.fillStyle='#facc15';ctx.fillRect(BATTER_X-20,CREASE_Y-20,40,6);
+  }
+  // ball
+  if(bowling&&resultTimer===0){
+    ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(ball.x,ball.y,7,0,Math.PI*2);ctx.fill();
+  }
+  // timing zone
+  if(bowling&&!swung&&resultTimer===0){
+    ctx.strokeStyle='rgba(34,197,94,0.3)';ctx.lineWidth=1;
+    ctx.strokeRect(BATTER_X-40,CREASE_Y-15,80,30);
+  }
+  // result text
+  if(result&&resultTimer>0){
+    ctx.fillStyle=result.color;ctx.font='bold 28px sans-serif';ctx.textAlign='center';
+    ctx.fillText(result.text,W/2,H/2);
+  }
+}
+
+function loop(){update();draw();if(running)requestAnimationFrame(loop);}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  init();running=true;paused=false;updateHud();
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+
+function showOver(){
+  document.getElementById('over-msg').textContent='Final Score: '+runs+' runs off '+ballCount+' balls';
+  document.getElementById('over-hs').textContent='High Score: '+highScore+' runs';
+  document.getElementById('over-overlay').style.display='flex';running=false;
+}
+
+function togglePause(){
+  if(!running)return;paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'cricket',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='cricket'&&e.data.state){highScore=e.data.state.highScore||0;}});
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' ')swing();
+  else if(e.key.toLowerCase()==='p')togglePause();
+});
+canvas.addEventListener('click',swing);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();swing();},{passive:false});
+
+init();draw();
+</script>
+</body>
+</html>

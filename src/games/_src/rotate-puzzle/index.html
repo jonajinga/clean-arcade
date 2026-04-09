@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rotate Puzzle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;text-align:center;margin-bottom:0.25rem;color:#94a3b8}
+.grid{display:inline-grid;gap:2px;border:2px solid #6366f1;background:#1e293b;margin:0.5rem auto}
+.cell{cursor:pointer;position:relative;overflow:hidden}
+.cell canvas{display:block;width:100%;height:100%}
+.cell.correct{outline:2px solid #22c55e;outline-offset:-2px}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1.2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit;min-width:44px;min-height:44px}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1rem;text-align:center;max-width:320px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Rotate Puzzle</h1>
+<p class="info">Moves: <span id="moves">0</span> | Correct: <span id="correct">0</span>/<span id="total">16</span> | Best: <span id="best">-</span></p>
+<div id="grid" class="grid"></div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Rotate Puzzle</h2>
+<p>An image has been split into tiles and each rotated randomly. Click a tile to rotate it 90 degrees clockwise. Get all tiles to the correct orientation to solve!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="winOverlay">
+<h2>Solved!</h2>
+<p id="winMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SLUG='rotate-puzzle';
+let highScore=Infinity,moves=0,paused=false,N=4,tiles=[];
+const TILE_PX=70;
+
+function drawFullImage(ctx,w,h){
+  // A colorful landscape
+  const sky=ctx.createLinearGradient(0,0,0,h*0.6);
+  sky.addColorStop(0,'#3b82f6');sky.addColorStop(1,'#93c5fd');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,w,h*0.6);
+  // Sun
+  ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(w*0.75,h*0.2,w*0.08,0,Math.PI*2);ctx.fill();
+  // Mountains
+  ctx.fillStyle='#6366f1';ctx.beginPath();ctx.moveTo(0,h*0.6);ctx.lineTo(w*0.2,h*0.25);ctx.lineTo(w*0.4,h*0.6);ctx.fill();
+  ctx.fillStyle='#4f46e5';ctx.beginPath();ctx.moveTo(w*0.3,h*0.6);ctx.lineTo(w*0.55,h*0.2);ctx.lineTo(w*0.8,h*0.6);ctx.fill();
+  ctx.fillStyle='#818cf8';ctx.beginPath();ctx.moveTo(w*0.6,h*0.6);ctx.lineTo(w*0.85,h*0.35);ctx.lineTo(w,h*0.6);ctx.fill();
+  // Ground
+  ctx.fillStyle='#22c55e';ctx.fillRect(0,h*0.6,w,h*0.4);
+  // Trees
+  ctx.fillStyle='#166534';
+  for(let i=0;i<5;i++){
+    const tx=w*(0.1+i*0.2),ty=h*0.55;
+    ctx.beginPath();ctx.moveTo(tx-w*0.03,h*0.65);ctx.lineTo(tx,ty);ctx.lineTo(tx+w*0.03,h*0.65);ctx.fill();
+  }
+  // Houses
+  ctx.fillStyle='#ef4444';ctx.fillRect(w*0.15,h*0.65,w*0.1,h*0.1);
+  ctx.fillStyle='#f97316';ctx.fillRect(w*0.65,h*0.68,w*0.12,h*0.08);
+  // Path
+  ctx.fillStyle='#d4a574';ctx.fillRect(w*0.45,h*0.7,w*0.08,h*0.3);
+}
+
+function createSourceCanvas(){
+  const c=document.createElement('canvas');
+  c.width=N*TILE_PX;c.height=N*TILE_PX;
+  drawFullImage(c.getContext('2d'),c.width,c.height);
+  return c;
+}
+
+function init(){
+  const src=createSourceCanvas();
+  tiles=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const tc=document.createElement('canvas');tc.width=TILE_PX;tc.height=TILE_PX;
+    tc.getContext('2d').drawImage(src,c*TILE_PX,r*TILE_PX,TILE_PX,TILE_PX,0,0,TILE_PX,TILE_PX);
+    let rot=0;
+    // Random rotation (1-3 times 90 deg), ensure at least some are wrong
+    const rr=Math.floor(Math.random()*4);
+    rot=rr;
+    tiles.push({canvas:tc,rot,r,c});
+  }
+  // Make sure not solved already
+  if(tiles.every(t=>t.rot%4===0)){tiles[0].rot=1;}
+  moves=0;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('total').textContent=N*N;
+  render();
+}
+
+function render(){
+  const g=document.getElementById('grid');
+  g.style.gridTemplateColumns=`repeat(${N},${TILE_PX}px)`;
+  g.innerHTML='';
+  let correctCount=0;
+  tiles.forEach((t,i)=>{
+    const d=document.createElement('div');
+    d.className='cell';d.style.width=TILE_PX+'px';d.style.height=TILE_PX+'px';
+    const dc=document.createElement('canvas');dc.width=TILE_PX;dc.height=TILE_PX;
+    const dctx=dc.getContext('2d');
+    dctx.save();
+    dctx.translate(TILE_PX/2,TILE_PX/2);
+    dctx.rotate((t.rot%4)*Math.PI/2);
+    dctx.drawImage(t.canvas,-TILE_PX/2,-TILE_PX/2);
+    dctx.restore();
+    d.appendChild(dc);
+    if(t.rot%4===0){d.classList.add('correct');correctCount++;}
+    d.onclick=()=>rotateTile(i);
+    g.appendChild(d);
+  });
+  document.getElementById('correct').textContent=correctCount;
+}
+
+function rotateTile(i){
+  if(paused)return;
+  tiles[i].rot=(tiles[i].rot+1)%4;
+  moves++;
+  document.getElementById('moves').textContent=moves;
+  render();
+  if(tiles.every(t=>t.rot%4===0)){
+    if(moves<highScore){highScore=moves;save();}
+    document.getElementById('best').textContent=highScore===Infinity?'-':highScore;
+    document.getElementById('winMsg').textContent='Solved in '+moves+' moves! Best: '+(highScore===Infinity?'-':highScore);
+    document.getElementById('winOverlay').classList.remove('hidden');
+  }
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('winOverlay').classList.add('hidden');
+  document.getElementById('pauseOverlay').classList.add('hidden');
+  paused=false;document.getElementById('pauseBtn').textContent='⏸';
+  init();
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+    if(e.data.state.highScore!=null){highScore=e.data.state.highScore;document.getElementById('best').textContent=highScore===Infinity?'-':highScore;}
+  }
+});
+</script>
+</body>
+</html>

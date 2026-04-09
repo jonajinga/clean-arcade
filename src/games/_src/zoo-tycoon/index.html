@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zoo Tycoon</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.25rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+.buy-btn{background:#22c55e;font-size:0.8rem;padding:0.5rem 0.6rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Zoo Tycoon</h1>
+<canvas id="game" width="480" height="380"></canvas>
+<div id="info">Build your zoo!</div>
+<div class="controls">
+<button class="buy-btn" onclick="buyAnimal(0)">🦁 Lion $80</button>
+<button class="buy-btn" onclick="buyAnimal(1)">🐘 Elephant $100</button>
+<button class="buy-btn" onclick="buyAnimal(2)">🐧 Penguin $40</button>
+<button class="buy-btn" onclick="buyAnimal(3)">🦒 Giraffe $70</button>
+<button class="buy-btn" onclick="buyAnimal(4)">🐼 Panda $120</button>
+<button class="buy-btn" onclick="buildFacility(0)">🏪 Shop $60</button>
+<button class="buy-btn" onclick="buildFacility(1)">🎪 Show $90</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Zoo Tycoon</h2>
+<p>Buy animals, build enclosures. Track happiness and revenue. Reach $1000 to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=380;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const ANIMALS=[
+  {name:'Lion',emoji:'🦁',cost:80,income:8,food:3,appeal:10},
+  {name:'Elephant',emoji:'🐘',cost:100,income:10,food:5,appeal:15},
+  {name:'Penguin',emoji:'🐧',cost:40,income:5,food:1,appeal:8},
+  {name:'Giraffe',emoji:'🦒',cost:70,income:7,food:3,appeal:12},
+  {name:'Panda',emoji:'🐼',cost:120,income:15,food:4,appeal:20}
+];
+
+const FACILITIES=[
+  {name:'Gift Shop',emoji:'🏪',cost:60,income:5},
+  {name:'Show Arena',emoji:'🎪',cost:90,income:10}
+];
+
+let money,totalEarned,day,dayTimer,animals,facilities,visitors,happiness,lastTime;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  money=200;totalEarned=0;day=1;dayTimer=0;
+  animals=[];facilities=[];visitors=0;happiness=80;
+  gameStarted=true;gameOver=false;lastTime=performance.now();
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function buyAnimal(type){
+  if(!gameStarted||gameOver||paused)return;
+  let a=ANIMALS[type];
+  if(money<a.cost)return;
+  money-=a.cost;
+  let x=30+(animals.length%7)*65;
+  let y=160+Math.floor(animals.length/7)*60;
+  animals.push({type,x,y,happiness:100,fed:true});
+}
+
+function buildFacility(type){
+  if(!gameStarted||gameOver||paused)return;
+  let f=FACILITIES[type];
+  if(money<f.cost)return;
+  money-=f.cost;
+  facilities.push({type,x:30+(facilities.length%7)*65,y:320});
+}
+
+function processDay(){
+  day++;
+  // Calculate appeal
+  let totalAppeal=animals.reduce((s,a)=>s+ANIMALS[a.type].appeal*(a.happiness/100),0);
+  totalAppeal+=facilities.length*5;
+  visitors=Math.floor(totalAppeal*1.5+Math.random()*10);
+
+  // Income
+  let income=animals.reduce((s,a)=>s+ANIMALS[a.type].income,0);
+  income+=facilities.reduce((s,f)=>s+FACILITIES[f.type].income,0);
+  income+=visitors;
+  money+=income;totalEarned+=income;
+
+  // Food costs
+  let foodCost=animals.reduce((s,a)=>s+ANIMALS[a.type].food,0)*2;
+  money-=foodCost;
+
+  // Happiness
+  animals.forEach(a=>{
+    a.happiness=Math.max(0,Math.min(100,a.happiness+(Math.random()*10-3)));
+    if(money<0)a.happiness-=10;
+  });
+  happiness=animals.length?Math.round(animals.reduce((s,a)=>s+a.happiness,0)/animals.length):50;
+
+  if(money<-100){endGame(false);return;}
+  if(totalEarned>=1000){endGame(true);return;}
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=(now-lastTime)/1000;lastTime=now;
+    dayTimer+=dt;
+    if(dayTimer>=3){dayTimer=0;processDay();}
+  } else lastTime=now;
+  draw();requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Sky
+  ctx.fillStyle='#164e63';ctx.fillRect(0,0,CW,140);
+  // Ground
+  ctx.fillStyle='#166534';ctx.fillRect(0,140,CW,CH-140);
+
+  // Header
+  ctx.fillStyle='#facc15';ctx.font='bold 13px system-ui';ctx.textAlign='left';
+  ctx.fillText(`$${money} | Day ${day}`,10,18);
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';
+  ctx.fillText(`Visitors: ${visitors} | Happy: ${happiness}% | Earned: $${totalEarned}/1000`,10,35);
+
+  // Progress bar
+  ctx.fillStyle='#334155';ctx.fillRect(10,42,CW-20,6);
+  ctx.fillStyle='#22c55e';ctx.fillRect(10,42,Math.min(totalEarned/1000,1)*(CW-20),6);
+
+  // Day timer
+  ctx.fillStyle='#334155';ctx.fillRect(10,52,CW-20,3);
+  ctx.fillStyle='#6366f1';ctx.fillRect(10,52,(dayTimer/3)*(CW-20),3);
+
+  // Zoo entrance
+  ctx.fillStyle='#a16207';ctx.fillRect(CW/2-30,60,60,20);
+  ctx.fillStyle='#facc15';ctx.font='bold 10px system-ui';ctx.textAlign='center';
+  ctx.fillText('ZOO',CW/2,76);
+
+  // Fences
+  ctx.strokeStyle='#92400e';ctx.lineWidth=2;
+  ctx.strokeRect(15,90,CW-30,50);
+
+  // Path
+  ctx.fillStyle='#d4a017';ctx.fillRect(CW/2-5,80,10,60);
+
+  // Animals
+  animals.forEach(a=>{
+    let an=ANIMALS[a.type];
+    ctx.fillStyle='#1e293b';ctx.fillRect(a.x,a.y,55,45);
+    ctx.strokeStyle=a.happiness>50?'#22c55e':'#ef4444';ctx.strokeRect(a.x,a.y,55,45);
+    ctx.font='22px system-ui';ctx.textAlign='center';
+    ctx.fillText(an.emoji,a.x+27,a.y+30);
+    // Happiness bar
+    ctx.fillStyle='#334155';ctx.fillRect(a.x+5,a.y+38,45,4);
+    ctx.fillStyle=a.happiness>50?'#22c55e':'#ef4444';
+    ctx.fillRect(a.x+5,a.y+38,a.happiness/100*45,4);
+  });
+
+  // Facilities
+  facilities.forEach(f=>{
+    let fc=FACILITIES[f.type];
+    ctx.fillStyle='#1e293b';ctx.fillRect(f.x,f.y,55,35);
+    ctx.strokeStyle='#475569';ctx.strokeRect(f.x,f.y,55,35);
+    ctx.font='18px system-ui';ctx.textAlign='center';
+    ctx.fillText(fc.emoji,f.x+27,f.y+25);
+  });
+}
+
+function endGame(won){
+  gameOver=true;
+  let score=totalEarned;
+  if(won)highScore=Math.max(highScore,score);
+  document.getElementById('winMsg').textContent=won?'Zoo Tycoon!':'Bankrupt!';
+  document.getElementById('winDetail').textContent=`Day: ${day} | Earned: $${totalEarned} | Animals: ${animals.length} | Best: $${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'zoo-tycoon',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='zoo-tycoon'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

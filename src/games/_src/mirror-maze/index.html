@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mirror Maze</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:500px}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;margin:0 auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;font-size:0.9rem;text-align:center;max-width:85%}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pause-btn{background:#334155;margin-top:6px}
+#hud{display:flex;justify-content:space-between;max-width:500px;width:100%;padding:2px 4px;font-size:0.85rem}
+#controls{display:flex;gap:8px;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Mirror Maze</h1>
+<div id="hud"><span id="hud-level">Level: 1/10</span><span id="hud-hs">Best: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="500" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Mirror Maze</h2>
+<p>Rotate mirrors to guide the laser beam to the target. Click/tap a mirror to rotate it 45°.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="win-overlay" style="display:none">
+<h2 id="win-title">Level Complete!</h2>
+<p id="win-msg"></p>
+<button id="win-btn" onclick="nextLevel()">Next Level</button>
+</div>
+</div>
+<div id="controls">
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=500,H=500,GRID=8,CS=W/GRID,SLUG='mirror-maze';
+let currentLevel=0,highScore=0,paused=false,gameStarted=false;
+let mirrors=[],walls=[],laserStart={},laserDir={},target={},laserPath=[];
+
+const levels=[
+  {laser:{x:0,y:3,dx:1,dy:0},target:{x:7,y:3},mirrors:[{x:4,y:3,a:45}],walls:[]},
+  {laser:{x:0,y:1,dx:1,dy:0},target:{x:5,y:7},mirrors:[{x:3,y:1,a:45},{x:3,y:5,a:135}],walls:[{x:3,y:3}]},
+  {laser:{x:0,y:0,dx:1,dy:0},target:{x:7,y:7},mirrors:[{x:5,y:0,a:45},{x:5,y:4,a:135},{x:2,y:4,a:45}],walls:[]},
+  {laser:{x:0,y:2,dx:1,dy:0},target:{x:7,y:5},mirrors:[{x:3,y:2,a:45},{x:3,y:6,a:45},{x:6,y:6,a:135},{x:6,y:5,a:0}],walls:[{x:5,y:3},{x:5,y:4}]},
+  {laser:{x:3,y:0,dx:0,dy:1},target:{x:0,y:7},mirrors:[{x:3,y:3,a:135},{x:5,y:3,a:45},{x:5,y:6,a:135},{x:2,y:6,a:45}],walls:[{x:4,y:4},{x:4,y:5}]},
+  {laser:{x:0,y:4,dx:1,dy:0},target:{x:4,y:0},mirrors:[{x:2,y:4,a:45},{x:2,y:2,a:135},{x:4,y:2,a:45},{x:6,y:4,a:0},{x:6,y:1,a:135}],walls:[{x:3,y:3},{x:4,y:3}]},
+  {laser:{x:7,y:0,dx:0,dy:1},target:{x:0,y:6},mirrors:[{x:7,y:3,a:135},{x:4,y:3,a:45},{x:4,y:6,a:135},{x:2,y:6,a:0},{x:2,y:1,a:135}],walls:[{x:5,y:5},{x:6,y:5}]},
+  {laser:{x:0,y:0,dx:1,dy:0},target:{x:7,y:0},mirrors:[{x:2,y:0,a:45},{x:2,y:5,a:135},{x:5,y:5,a:45},{x:5,y:2,a:135},{x:7,y:2,a:45}],walls:[{x:3,y:2},{x:3,y:3},{x:4,y:3}]},
+  {laser:{x:0,y:7,dx:1,dy:0},target:{x:7,y:7},mirrors:[{x:1,y:7,a:135},{x:1,y:4,a:45},{x:4,y:4,a:135},{x:4,y:1,a:45},{x:6,y:1,a:45},{x:6,y:7,a:0}],walls:[{x:2,y:5},{x:3,y:5},{x:5,y:3}]},
+  {laser:{x:0,y:3,dx:1,dy:0},target:{x:7,y:4},mirrors:[{x:2,y:3,a:45},{x:2,y:1,a:135},{x:5,y:1,a:45},{x:5,y:5,a:135},{x:3,y:5,a:45},{x:3,y:7,a:135},{x:7,y:7,a:135}],walls:[{x:4,y:2},{x:4,y:3},{x:6,y:3},{x:6,y:5}]}
+];
+
+function loadLevel(n){
+  const l=levels[n];
+  laserStart={x:l.laser.x,y:l.laser.y};
+  laserDir={dx:l.laser.dx,dy:l.laser.dy};
+  target={x:l.target.x,y:l.target.y};
+  mirrors=l.mirrors.map(m=>({x:m.x,y:m.y,angle:m.a}));
+  walls=l.walls.map(w=>({x:w.x,y:w.y}));
+  document.getElementById('hud-level').textContent=`Level: ${n+1}/10`;
+  traceLaser();
+}
+
+function traceLaser(){
+  laserPath=[];
+  let px=laserStart.x*CS+CS/2,py=laserStart.y*CS+CS/2;
+  let dx=laserDir.dx,dy=laserDir.dy;
+  laserPath.push({x:px,y:py});
+  for(let i=0;i<100;i++){
+    let nx=px+dx*CS,ny=py+dy*CS;
+    let gx=Math.floor(nx/CS),gy=Math.floor(ny/CS);
+    if(gx<0||gx>=GRID||gy<0||gy>=GRID){laserPath.push({x:nx,y:ny});break}
+    if(walls.some(w=>w.x===gx&&w.y===gy)){laserPath.push({x:gx*CS+CS/2,y:gy*CS+CS/2});break}
+    let mir=mirrors.find(m=>m.x===gx&&m.y===gy);
+    if(mir){
+      laserPath.push({x:gx*CS+CS/2,y:gy*CS+CS/2});
+      px=gx*CS+CS/2;py=gy*CS+CS/2;
+      let a=mir.angle;
+      if(a===45){let t=dx;dx=-dy;dy=-t}
+      else if(a===135){let t=dx;dx=dy;dy=t}
+      else{laserPath.push({x:px,y:py});break}
+      continue;
+    }
+    laserPath.push({x:nx,y:ny});
+    px=nx;py=ny;
+  }
+}
+
+function checkWin(){
+  let last=laserPath[laserPath.length-1];
+  let tx=target.x*CS+CS/2,ty=target.y*CS+CS/2;
+  return Math.abs(last.x-tx)<CS&&Math.abs(last.y-ty)<CS;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // grid
+  ctx.strokeStyle='#1e293b';ctx.lineWidth=1;
+  for(let i=0;i<=GRID;i++){ctx.beginPath();ctx.moveTo(i*CS,0);ctx.lineTo(i*CS,H);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CS);ctx.lineTo(W,i*CS);ctx.stroke()}
+  // walls
+  ctx.fillStyle='#475569';
+  for(let w of walls)ctx.fillRect(w.x*CS+2,w.y*CS+2,CS-4,CS-4);
+  // target
+  ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(target.x*CS+CS/2,target.y*CS+CS/2,CS/3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#0f172a';ctx.beginPath();ctx.arc(target.x*CS+CS/2,target.y*CS+CS/2,CS/5,0,Math.PI*2);ctx.fill();
+  // laser source
+  ctx.fillStyle='#ef4444';ctx.fillRect(laserStart.x*CS+CS/4,laserStart.y*CS+CS/4,CS/2,CS/2);
+  // mirrors
+  for(let m of mirrors){
+    let cx=m.x*CS+CS/2,cy=m.y*CS+CS/2,s=CS/3;
+    ctx.save();ctx.translate(cx,cy);
+    let rad=m.angle===45?-Math.PI/4:m.angle===135?Math.PI/4:0;
+    ctx.rotate(rad);
+    ctx.fillStyle='#3b82f6';ctx.fillRect(-s,-3,s*2,6);
+    ctx.strokeStyle='#93c5fd';ctx.lineWidth=2;ctx.strokeRect(-s,-3,s*2,6);
+    ctx.restore();
+  }
+  // laser beam
+  if(laserPath.length>1){
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=3;ctx.shadowColor='#ef4444';ctx.shadowBlur=8;
+    ctx.beginPath();ctx.moveTo(laserPath[0].x,laserPath[0].y);
+    for(let i=1;i<laserPath.length;i++)ctx.lineTo(laserPath[i].x,laserPath[i].y);
+    ctx.stroke();ctx.shadowBlur=0;
+  }
+}
+
+function handleClick(e){
+  if(!gameStarted||paused)return;
+  let r=canvas.getBoundingClientRect();
+  let sx=W/r.width,sy=H/r.height;
+  let cx=((e.clientX||e.touches[0].clientX)-r.left)*sx;
+  let cy=((e.clientY||e.touches[0].clientY)-r.top)*sy;
+  let gx=Math.floor(cx/CS),gy=Math.floor(cy/CS);
+  let mir=mirrors.find(m=>m.x===gx&&m.y===gy);
+  if(mir){
+    mir.angle=(mir.angle+45)%180;
+    if(mir.angle!==45&&mir.angle!==135)mir.angle=45;
+    traceLaser();draw();
+    if(checkWin()){
+      let score=(currentLevel+1)*100;
+      highScore=Math.max(highScore,highScore+score);
+      document.getElementById('hud-hs').textContent=`Best: ${highScore}`;
+      saveState();
+      if(currentLevel>=9){
+        document.getElementById('win-title').textContent='You Win!';
+        document.getElementById('win-msg').textContent=`All levels complete! Score: ${highScore}`;
+        document.getElementById('win-btn').textContent='Play Again';
+        document.getElementById('win-btn').onclick=()=>{currentLevel=0;highScore=0;loadLevel(0);draw();document.getElementById('win-overlay').style.display='none'};
+      } else {
+        document.getElementById('win-title').textContent='Level Complete!';
+        document.getElementById('win-msg').textContent=`Laser hit the target!`;
+        document.getElementById('win-btn').textContent='Next Level';
+        document.getElementById('win-btn').onclick=nextLevel;
+      }
+      document.getElementById('win-overlay').style.display='flex';
+    }
+  }
+}
+
+canvas.addEventListener('click',handleClick);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleClick(e)},{passive:false});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause()});
+
+function togglePause(){paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function nextLevel(){currentLevel++;loadLevel(currentLevel);draw();document.getElementById('win-overlay').style.display='none'}
+function startGame(){gameStarted=true;document.getElementById('start-overlay').style.display='none';loadLevel(0);draw()}
+function saveState(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('hud-hs').textContent=`Best: ${highScore}`}});
+
+function resizeCanvas(){let w=document.getElementById('game-wrap').clientWidth;canvas.style.width=w+'px';canvas.style.height=w+'px'}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+loadLevel(0);draw();
+</script>
+</body>
+</html>

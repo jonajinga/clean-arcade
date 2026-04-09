@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Space Taxi</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#hud{display:flex;gap:1rem;font-size:0.85rem;margin-bottom:0.25rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#6366f1}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;margin-bottom:1rem}
+.overlay p{margin-bottom:1rem;text-align:center;max-width:280px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pauseBtn{background:#334155;margin-top:0.25rem}
+#wrap{position:relative;display:inline-block}
+#controls{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:0.5rem}
+#controls .row{display:flex;gap:4px}
+#controls button{width:48px;height:48px;font-size:1.2rem;padding:0}
+</style>
+</head>
+<body>
+<h1>Space Taxi</h1>
+<div id="hud"><span>Score: <b id="score">0</b></span><span>Fuel: <b id="fuel">100</b>%</span><span>Passengers: <b id="pax">0</b></span><span>High: <b id="hi">0</b></span></div>
+<div id="wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="startOv">
+<h2>Space Taxi</h2>
+<p>Pick up passengers (green), deliver to destinations (yellow). Land gently! Manage your fuel.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="overOv" style="display:none">
+<h2>Game Over</h2>
+<p>Score: <b id="finalScore">0</b></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<button id="pauseBtn" onclick="togglePause()">⏸</button>
+<div id="controls">
+<div class="row"><button onclick="thrust('up')">▲</button></div>
+<div class="row"><button onclick="thrust('left')">◄</button><button onclick="thrust('down')">▼</button><button onclick="thrust('right')">►</button></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,G=0.04;
+let ship,fuel,score,highScore=0,paused=false,running=false,raf;
+let platforms,passenger,destination,hasPassenger,keys={};
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'space-taxi',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='space-taxi'){if(e.data.state&&e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('hi').textContent=highScore}}});
+
+function startGame(){
+document.getElementById('startOv').style.display='none';
+document.getElementById('overOv').style.display='none';
+platforms=[{x:20,y:350,w:80},{x:160,y:300,w:80},{x:300,y:250,w:80},{x:100,y:200,w:80},{x:260,y:150,w:80}];
+ship={x:60,y:320,vx:0,vy:0,w:20,h:14};
+fuel=100;score=0;hasPassenger=false;paused=false;running=true;
+document.getElementById('pauseBtn').textContent='⏸';
+spawnPassenger();
+updateHUD();
+if(raf)cancelAnimationFrame(raf);
+tick();
+}
+
+function spawnPassenger(){
+const avail=platforms.filter((_,i)=>true);
+const pi=Math.floor(Math.random()*avail.length);
+passenger={platform:pi};
+let di;
+do{di=Math.floor(Math.random()*avail.length)}while(di===pi);
+destination={platform:di};
+hasPassenger=false;
+}
+
+function thrust(d){
+if(!running||paused)return;
+if(d==='up'){keys.up=true;setTimeout(()=>keys.up=false,150)}
+if(d==='down'){keys.down=true;setTimeout(()=>keys.down=false,150)}
+if(d==='left'){keys.left=true;setTimeout(()=>keys.left=false,150)}
+if(d==='right'){keys.right=true;setTimeout(()=>keys.right=false,150)}
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸'}
+
+function updateHUD(){
+document.getElementById('score').textContent=score;
+document.getElementById('fuel').textContent=Math.floor(fuel);
+document.getElementById('pax').textContent=hasPassenger?'1':'0';
+}
+
+function tick(){
+if(!running){return}
+if(!paused){
+// thrust
+if(keys.up&&fuel>0){ship.vy-=0.12;fuel-=0.08}
+if(keys.down&&fuel>0){ship.vy+=0.06;fuel-=0.04}
+if(keys.left&&fuel>0){ship.vx-=0.08;fuel-=0.04}
+if(keys.right&&fuel>0){ship.vx+=0.08;fuel-=0.04}
+ship.vy+=G;
+ship.x+=ship.vx;ship.y+=ship.vy;
+// walls
+if(ship.x<0){ship.x=0;ship.vx=0}
+if(ship.x+ship.w>W){ship.x=W-ship.w;ship.vx=0}
+if(ship.y<0){ship.y=0;ship.vy=0}
+// floor
+if(ship.y+ship.h>H){
+if(Math.abs(ship.vy)>1.5){gameOver();return}
+ship.y=H-ship.h;ship.vy=0;ship.vx*=0.9;
+}
+// platform collision
+for(let i=0;i<platforms.length;i++){
+const p=platforms[i];
+if(ship.x+ship.w>p.x&&ship.x<p.x+p.w&&ship.y+ship.h>=p.y&&ship.y+ship.h<=p.y+8&&ship.vy>=0){
+if(Math.abs(ship.vy)>1.5){gameOver();return}
+ship.y=p.y-ship.h;ship.vy=0;ship.vx*=0.9;
+// pickup
+if(!hasPassenger&&i===passenger.platform){hasPassenger=true;score+=10}
+// deliver
+if(hasPassenger&&i===destination.platform){score+=50;fuel=Math.min(100,fuel+30);hasPassenger=false;spawnPassenger()}
+}
+}
+if(fuel<=0&&ship.y+ship.h>=H-2){if(Math.abs(ship.vy)<0.5&&Math.abs(ship.vx)<0.5){}}
+updateHUD();
+}
+draw();
+raf=requestAnimationFrame(tick);
+}
+
+function gameOver(){
+running=false;
+if(score>highScore){highScore=score;document.getElementById('hi').textContent=highScore;save()}
+document.getElementById('finalScore').textContent=score;
+document.getElementById('overOv').style.display='flex';
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+// stars
+ctx.fillStyle='#475569';
+for(let i=0;i<30;i++){const sx=(i*137)%W,sy=(i*97)%H;ctx.fillRect(sx,sy,2,2)}
+// platforms
+for(let i=0;i<platforms.length;i++){
+const p=platforms[i];
+ctx.fillStyle='#475569';ctx.fillRect(p.x,p.y,p.w,6);
+ctx.fillStyle='#64748b';ctx.fillRect(p.x,p.y,p.w,2);
+// passenger indicator
+if(!hasPassenger&&i===passenger.platform){
+ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-10,5,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#22c55e';ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText('PICKUP',p.x+p.w/2,p.y-20);
+}
+// destination
+if(i===destination.platform&&(hasPassenger||(!hasPassenger))){
+if(hasPassenger){
+ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(p.x+p.w/2,p.y-10,5,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#facc15';ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText('DROP',p.x+p.w/2,p.y-20);
+}
+}
+}
+// ship
+ctx.fillStyle=hasPassenger?'#facc15':'#3b82f6';
+ctx.fillRect(ship.x,ship.y,ship.w,ship.h);
+ctx.fillStyle='#e2e8f0';ctx.fillRect(ship.x+6,ship.y+2,8,5);
+// thrust flame
+if(keys.up&&fuel>0){
+ctx.fillStyle='#ef4444';
+ctx.beginPath();ctx.moveTo(ship.x+4,ship.y+ship.h);ctx.lineTo(ship.x+ship.w/2,ship.y+ship.h+8+Math.random()*6);ctx.lineTo(ship.x+ship.w-4,ship.y+ship.h);ctx.fill();
+}
+// fuel bar
+ctx.fillStyle='#334155';ctx.fillRect(10,10,80,6);
+ctx.fillStyle=fuel>25?'#22c55e':'#ef4444';ctx.fillRect(10,10,fuel*0.8,6);
+}
+
+document.addEventListener('keydown',e=>{
+if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key))e.preventDefault();
+if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+if(e.key==='ArrowDown'||e.key==='s')keys.down=true;
+if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+if(e.key==='ArrowUp'||e.key==='w')keys.up=false;
+if(e.key==='ArrowDown'||e.key==='s')keys.down=false;
+if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+});
+
+let touchId=null;
+canvas.addEventListener('touchstart',e=>{e.preventDefault();keys.up=true},{passive:false});
+canvas.addEventListener('touchend',e=>{keys.up=false});
+
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mahjong Solitaire</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Mahjong Solitaire</h1>
+<canvas id="game" width="480" height="400"></canvas>
+<div id="info">Match free pairs</div>
+<div class="controls">
+<button onclick="shuffleTiles()">Shuffle</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Mahjong Solitaire</h2>
+<p>Click matching free tiles to remove pairs. A tile is free if nothing is on top and at least one side (left or right) is open.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const SYMBOLS=['🀇','🀈','🀉','🀊','🀋','🀌','🀍','🀎','🀏',
+'🀙','🀚','🀛','🀜','🀝','🀞','🀟','🀠','🀡',
+'🀀','🀁','🀂','🀃','🀄','🀅','🀆','🀐','🀑','🀒','🀓','🀔','🀕','🀖','🀗','🀘','🀠','🀡'];
+const TILE_W=36,TILE_H=44,LAYER_OFF=3;
+let tiles=[],selected=null,tilesLeft=0;
+
+// Layout: 4 layers pyramid style
+const LAYOUTS=[
+  // Layer 0: 8x6
+  {w:8,h:6,ox:0,oy:0},
+  // Layer 1: 6x4
+  {w:6,h:4,ox:1,oy:1},
+  // Layer 2: 4x2
+  {w:4,h:2,ox:2,oy:2},
+  // Layer 3: 2x1
+  {w:2,h:1,ox:3,oy:2.5}
+];
+
+function genTiles(){
+  tiles=[];
+  // Count total tiles needed
+  let total=0;
+  LAYOUTS.forEach(l=>total+=l.w*l.h);
+  // Need pairs - total must be even
+  let numPairs=Math.floor(total/2);
+  let types=[];
+  for(let i=0;i<numPairs;i++)types.push(i%SYMBOLS.length,i%SYMBOLS.length);
+  // Shuffle
+  for(let i=types.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[types[i],types[j]]=[types[j],types[i]];}
+
+  let idx=0;
+  LAYOUTS.forEach((l,layer)=>{
+    for(let r=0;r<l.h;r++)for(let c=0;c<l.w;c++){
+      if(idx<types.length){
+        tiles.push({type:types[idx],layer,row:r+l.oy,col:c+l.ox,removed:false,
+          lrow:r,lcol:c,lw:l.w,lh:l.h});
+        idx++;
+      }
+    }
+  });
+  tilesLeft=tiles.length;
+}
+
+function isFree(tile){
+  if(tile.removed)return false;
+  // Check nothing on top
+  let hasTop=tiles.some(t=>!t.removed&&t.layer===tile.layer+1&&
+    Math.abs(t.row-tile.row)<1&&Math.abs(t.col-tile.col)<1);
+  if(hasTop)return false;
+  // Check left or right open
+  let layout=LAYOUTS[tile.layer];
+  let hasLeft=tiles.some(t=>!t.removed&&t.layer===tile.layer&&t.row===tile.row&&t.col===tile.col-1);
+  let hasRight=tiles.some(t=>!t.removed&&t.layer===tile.layer&&t.row===tile.row&&t.col===tile.col+1);
+  return !hasLeft||!hasRight;
+}
+
+function tileXY(t){
+  let x=60+t.col*TILE_W-t.layer*LAYER_OFF;
+  let y=40+t.row*TILE_H-t.layer*LAYER_OFF;
+  return[x,y];
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+  // Draw tiles layer by layer
+  for(let layer=0;layer<=3;layer++){
+    let layerTiles=tiles.filter(t=>t.layer===layer&&!t.removed);
+    layerTiles.forEach(t=>{
+      let[x,y]=tileXY(t);
+      let free=isFree(t);
+      // Shadow
+      ctx.fillStyle='#000';ctx.globalAlpha=0.3;
+      ctx.fillRect(x+2,y+2,TILE_W-2,TILE_H-2);
+      ctx.globalAlpha=1;
+      // Tile
+      ctx.fillStyle=selected===t?'#6366f1':free?'#f8fafc':'#94a3b8';
+      ctx.fillRect(x,y,TILE_W-2,TILE_H-2);
+      ctx.strokeStyle=selected===t?'#facc15':'#64748b';
+      ctx.strokeRect(x,y,TILE_W-2,TILE_H-2);
+      // Symbol
+      ctx.fillStyle='#0f172a';ctx.font='18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(SYMBOLS[t.type],x+TILE_W/2-1,y+TILE_H/2-1);
+    });
+  }
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Tiles: ${tilesLeft}`,5,CH-8);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  gameStarted=true;gameOver=false;selected=null;
+  genTiles();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function shuffleTiles(){
+  if(!gameStarted||gameOver)return;
+  let active=tiles.filter(t=>!t.removed);
+  let types=active.map(t=>t.type);
+  for(let i=types.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[types[i],types[j]]=[types[j],types[i]];}
+  active.forEach((t,i)=>t.type=types[i]);
+  selected=null;draw();
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Find clicked tile (top layer first)
+  let clicked=null;
+  for(let layer=3;layer>=0;layer--){
+    for(let t of tiles){
+      if(t.removed||t.layer!==layer)continue;
+      let[x,y]=tileXY(t);
+      if(mx>=x&&mx<=x+TILE_W&&my>=y&&my<=y+TILE_H){clicked=t;break;}
+    }
+    if(clicked)break;
+  }
+  if(!clicked||!isFree(clicked))return;
+
+  if(!selected){selected=clicked;draw();return;}
+  if(selected===clicked){selected=null;draw();return;}
+  if(selected.type===clicked.type){
+    selected.removed=true;clicked.removed=true;
+    tilesLeft-=2;selected=null;draw();
+    if(tilesLeft===0){endGame(true);return;}
+    // Check if any moves left
+    if(!hasValidMoves()){endGame(false);}
+    updateInfo();
+  } else {
+    selected=clicked;draw();
+  }
+});
+
+function hasValidMoves(){
+  let free=tiles.filter(t=>!t.removed&&isFree(t));
+  for(let i=0;i<free.length;i++)for(let j=i+1;j<free.length;j++){
+    if(free[i].type===free[j].type)return true;
+  }
+  return false;
+}
+
+function endGame(won){
+  gameOver=true;
+  if(won)highScore++;
+  document.getElementById('winMsg').textContent=won?'You Win!':'No Moves Left';
+  document.getElementById('winDetail').textContent=`Tiles left: ${tilesLeft} | Wins: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'mahjong-solitaire',state:{highScore}},'*');
+}
+
+function updateInfo(){document.getElementById('info').textContent=`Match free pairs | Tiles: ${tilesLeft}`;}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='mahjong-solitaire'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

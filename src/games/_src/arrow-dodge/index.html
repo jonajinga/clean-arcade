@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arrow Dodge</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+.move-btn{background:#334155;font-size:1.2rem;padding:0.8rem 1.5rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Arrow Dodge</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Survive 60 seconds!</div>
+<div class="controls">
+<button class="move-btn" onclick="movePlayer(-1)">Left</button>
+<button class="move-btn" onclick="movePlayer(1)">Right</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Arrow Dodge</h2>
+<p>Arrows rain down! Move left and right to dodge. Survive 60 seconds to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+let player,arrows,timeLeft,score,lastTime,spawnTimer,moveDir;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  player={x:W/2,y:W-40,w:20,h:24};
+  arrows=[];timeLeft=60;score=0;spawnTimer=0;moveDir=0;
+  gameStarted=true;gameOver=false;lastTime=performance.now();
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function movePlayer(dir){moveDir=dir;}
+
+function spawnArrow(){
+  let x=Math.random()*(W-20)+10;
+  let speed=3+Math.random()*3+(60-timeLeft)*0.05;
+  let angle=Math.random()*0.4-0.2; // Slight angle variation
+  arrows.push({x,y:-20,speed,angle,w:6,h:30});
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=Math.min((now-lastTime)/16,3);lastTime=now;
+    timeLeft-=dt/60;
+
+    if(timeLeft<=0){timeLeft=0;endGame(true);return;}
+
+    // Move player
+    let keys=pressedKeys;
+    let dx=0;
+    if(keys.ArrowLeft||keys.a||moveDir<0)dx=-5;
+    if(keys.ArrowRight||keys.d||moveDir>0)dx=5;
+    player.x=Math.max(10,Math.min(W-10,player.x+dx*dt));
+
+    // Spawn arrows
+    spawnTimer+=dt;
+    let rate=Math.max(3,15-(60-timeLeft)*0.2);
+    if(spawnTimer>=rate){spawnTimer=0;spawnArrow();}
+
+    // Move arrows
+    arrows.forEach(a=>{
+      a.y+=a.speed*dt;
+      a.x+=Math.sin(a.angle)*a.speed*0.3*dt;
+    });
+    arrows=arrows.filter(a=>a.y<W+30);
+
+    // Collision
+    for(let a of arrows){
+      if(Math.abs(a.x-player.x)<12&&a.y+a.h>player.y-player.h/2&&a.y<player.y+player.h/2){
+        endGame(false);return;
+      }
+    }
+
+    score+=dt*0.5;
+
+  } else lastTime=now;
+  draw();requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+
+  // Ground
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,W-15,W,15);
+
+  // Timer bar
+  ctx.fillStyle='#334155';ctx.fillRect(10,10,W-20,8);
+  ctx.fillStyle=timeLeft>10?'#22c55e':'#ef4444';
+  ctx.fillRect(10,10,(timeLeft/60)*(W-20),8);
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';ctx.textAlign='center';
+  ctx.fillText(`${Math.ceil(timeLeft)}s`,W/2,8);
+
+  // Arrows
+  arrows.forEach(a=>{
+    ctx.save();ctx.translate(a.x,a.y);ctx.rotate(a.angle);
+    // Shaft
+    ctx.fillStyle='#94a3b8';ctx.fillRect(-2,0,4,a.h-8);
+    // Head
+    ctx.fillStyle='#ef4444';
+    ctx.beginPath();ctx.moveTo(0,a.h);ctx.lineTo(-6,a.h-10);ctx.lineTo(6,a.h-10);ctx.closePath();ctx.fill();
+    // Fletching
+    ctx.fillStyle='#facc15';
+    ctx.beginPath();ctx.moveTo(-4,0);ctx.lineTo(0,6);ctx.lineTo(0,0);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(4,0);ctx.lineTo(0,6);ctx.lineTo(0,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+  });
+
+  // Player (shield knight)
+  ctx.fillStyle='#3b82f6';
+  ctx.fillRect(player.x-10,player.y-12,20,24);
+  // Shield
+  ctx.fillStyle='#6366f1';
+  ctx.fillRect(player.x-12,player.y-8,4,16);
+  // Head
+  ctx.fillStyle='#e2e8f0';
+  ctx.fillRect(player.x-6,player.y-18,12,8);
+  // Helmet
+  ctx.fillStyle='#64748b';
+  ctx.fillRect(player.x-7,player.y-20,14,5);
+
+  // Score
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';ctx.textAlign='right';
+  ctx.fillText(`Score: ${Math.floor(score)}`,W-10,35);
+}
+
+let pressedKeys={};
+document.addEventListener('keydown',e=>{
+  pressedKeys[e.key]=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{pressedKeys[e.key]=false;moveDir=0;});
+
+// Touch controls
+let touchX=null;
+C.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  touchX=e.touches[0].clientX;
+},{passive:false});
+C.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(touchX===null)return;
+  let dx=e.touches[0].clientX-touchX;
+  if(Math.abs(dx)>5)moveDir=dx>0?1:-1;
+},{passive:false});
+C.addEventListener('touchend',()=>{touchX=null;moveDir=0;});
+
+function endGame(survived){
+  gameOver=true;
+  let s=Math.floor(score);
+  highScore=Math.max(highScore,s);
+  document.getElementById('winMsg').textContent=survived?'You Survived!':'Hit by Arrow!';
+  document.getElementById('winDetail').textContent=`Time: ${Math.ceil(60-timeLeft)}s | Score: ${s} | Best: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'arrow-dodge',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='arrow-dodge'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+</script>
+</body>
+</html>

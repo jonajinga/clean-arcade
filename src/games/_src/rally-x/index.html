@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rally-X</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#hud{display:flex;gap:1rem;font-size:0.85rem;margin-bottom:0.25rem;flex-wrap:wrap;justify-content:center}
+#hud span{color:#6366f1}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;margin-bottom:1rem}
+.overlay p{margin-bottom:1rem;text-align:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pauseBtn{background:#334155;margin-top:0.25rem}
+#wrap{position:relative;display:inline-block}
+#controls{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:0.5rem}
+#controls .row{display:flex;gap:4px}
+#controls button{width:48px;height:48px;font-size:1.2rem;padding:0}
+#smokeBtn{width:auto!important;padding:0 12px!important;font-size:0.9rem!important;background:#334155}
+</style>
+</head>
+<body>
+<h1>Rally-X</h1>
+<div id="hud"><span>Flags: <b id="flags">0</b>/10</span><span>Fuel: <b id="fuel">100</b>%</span><span>Smoke: <b id="smoke">5</b></span><span>High: <b id="hi">0</b></span></div>
+<div id="wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="startOv">
+<h2>Rally-X</h2>
+<p>Collect all flags while avoiding red enemies. Use smokescreen to stun them!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="overOv" style="display:none">
+<h2>Game Over</h2>
+<p>Flags: <b id="finalFlags">0</b>/10 | Score: <b id="finalScore">0</b></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<button id="pauseBtn" onclick="togglePause()">⏸</button>
+<div id="controls">
+<div class="row"><button onclick="setDir(0,-1)">▲</button></div>
+<div class="row"><button onclick="setDir(-1,0)">◄</button><button id="smokeBtn" onclick="useSmoke()">SMOKE</button><button onclick="setDir(1,0)">►</button></div>
+<div class="row"><button onclick="setDir(0,1)">▼</button></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,TILE=20,COLS=W/TILE,ROWS=H/TILE;
+let maze,player,enemies,flagsList,collected,fuel,smokeCount,smokes,score,highScore=0,paused=false,running=false,raf,dir,lastTime;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'rally-x',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='rally-x'){if(e.data.state&&e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('hi').textContent=highScore}}});
+
+function genMaze(){
+maze=[];
+for(let r=0;r<ROWS;r++){
+maze[r]=[];
+for(let c=0;c<COLS;c++){
+maze[r][c]=(r===0||r===ROWS-1||c===0||c===COLS-1)?1:0;
+}
+}
+// internal walls - random blocks
+for(let i=0;i<40;i++){
+const r=2+Math.floor(Math.random()*(ROWS-4)),c=2+Math.floor(Math.random()*(COLS-4));
+if(r>1&&c>1)maze[r][c]=1;
+}
+// horizontal wall segments
+for(let i=0;i<8;i++){
+const r=2+Math.floor(Math.random()*(ROWS-4));
+const c=2+Math.floor(Math.random()*(COLS-6));
+const len=2+Math.floor(Math.random()*3);
+for(let j=0;j<len;j++)if(c+j<COLS-1)maze[r][c+j]=1;
+}
+// clear player start area
+for(let r=1;r<4;r++)for(let c=1;c<4;c++)maze[r][c]=0;
+}
+
+function placeFlags(){
+flagsList=[];
+while(flagsList.length<10){
+const r=1+Math.floor(Math.random()*(ROWS-2)),c=1+Math.floor(Math.random()*(COLS-2));
+if(maze[r][c]===0&&!(r<4&&c<4)&&!flagsList.some(f=>f.r===r&&f.c===c)){
+flagsList.push({r,c,got:false});
+}
+}
+}
+
+function startGame(){
+document.getElementById('startOv').style.display='none';
+document.getElementById('overOv').style.display='none';
+genMaze();
+player={x:1.5,y:1.5,dx:1,dy:0,speed:0.06};
+dir={x:1,y:0};
+enemies=[];
+for(let i=0;i<3;i++){
+let er,ec;
+do{er=5+Math.floor(Math.random()*(ROWS-6));ec=5+Math.floor(Math.random()*(COLS-6))}while(maze[er][ec]===1);
+enemies.push({x:ec+0.5,y:er+0.5,dx:(Math.random()>0.5?1:-1),dy:0,speed:0.03+i*0.005,stunned:0});
+}
+placeFlags();collected=0;fuel=100;smokeCount=5;smokes=[];score=0;
+paused=false;running=true;lastTime=performance.now();
+document.getElementById('pauseBtn').textContent='⏸';
+updateHUD();
+if(raf)cancelAnimationFrame(raf);
+tick();
+}
+
+function setDir(x,y){dir={x,y}}
+function useSmoke(){
+if(!running||paused||smokeCount<=0)return;
+smokeCount--;
+smokes.push({x:player.x,y:player.y,life:120});
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸'}
+
+function canMove(x,y){
+const r=Math.floor(y),c=Math.floor(x);
+return r>=0&&r<ROWS&&c>=0&&c<COLS&&maze[r][c]===0;
+}
+
+function updateHUD(){
+document.getElementById('flags').textContent=collected;
+document.getElementById('fuel').textContent=Math.floor(fuel);
+document.getElementById('smoke').textContent=smokeCount;
+}
+
+function tick(){
+if(!running)return;
+if(!paused){
+const now=performance.now(),dt=Math.min(now-lastTime,32);lastTime=now;
+const steps=dt/16;
+// player movement
+let nx=player.x+dir.x*player.speed*steps;
+let ny=player.y+dir.y*player.speed*steps;
+if(canMove(nx,ny)){player.x=nx;player.y=ny;player.dx=dir.x;player.dy=dir.y}
+else{
+nx=player.x+player.dx*player.speed*steps;
+ny=player.y+player.dy*player.speed*steps;
+if(canMove(nx,ny)){player.x=nx;player.y=ny}
+}
+fuel-=0.02*steps;
+if(fuel<=0){gameOver();return}
+// check flags
+for(const f of flagsList){
+if(!f.got&&Math.abs(player.x-(f.c+0.5))<0.6&&Math.abs(player.y-(f.r+0.5))<0.6){
+f.got=true;collected++;score+=100;
+if(collected>=10){score+=500;gameOver();return}
+}
+}
+// enemies
+for(const e of enemies){
+if(e.stunned>0){e.stunned-=steps;continue}
+// simple chase AI
+if(Math.random()<0.05){
+const tdx=player.x>e.x?1:-1,tdy=player.y>e.y?1:-1;
+if(Math.random()<0.5){e.dx=tdx;e.dy=0}else{e.dx=0;e.dy=tdy}
+}
+let ex=e.x+e.dx*e.speed*steps,ey=e.y+e.dy*e.speed*steps;
+if(canMove(ex,ey)){e.x=ex;e.y=ey}else{e.dx=-e.dx;e.dy=-e.dy}
+// smoke stun
+for(const s of smokes){
+if(s.life>0&&Math.abs(e.x-s.x)<1.5&&Math.abs(e.y-s.y)<1.5){e.stunned=90}
+}
+// collision
+if(Math.abs(player.x-e.x)<0.6&&Math.abs(player.y-e.y)<0.6){gameOver();return}
+}
+// update smokes
+for(const s of smokes)s.life--;
+smokes=smokes.filter(s=>s.life>0);
+updateHUD();
+}
+draw();
+raf=requestAnimationFrame(tick);
+}
+
+function gameOver(){
+running=false;
+if(score>highScore){highScore=score;document.getElementById('hi').textContent=highScore;save()}
+document.getElementById('finalFlags').textContent=collected;
+document.getElementById('finalScore').textContent=score;
+document.getElementById('overOv').style.display='flex';
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+// maze
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+if(maze[r][c]===1){ctx.fillStyle='#334155';ctx.fillRect(c*TILE,r*TILE,TILE,TILE)}
+}
+// flags
+for(const f of flagsList){
+if(!f.got){ctx.fillStyle='#facc15';ctx.fillRect(f.c*TILE+6,f.r*TILE+4,8,12);ctx.fillStyle='#ef4444';ctx.fillRect(f.c*TILE+6,f.r*TILE+4,6,6)}
+}
+// smokes
+for(const s of smokes){
+ctx.fillStyle=`rgba(100,116,139,${s.life/120*0.6})`;
+ctx.beginPath();ctx.arc(s.x*TILE,s.y*TILE,TILE*1.5,0,Math.PI*2);ctx.fill();
+}
+// player
+ctx.fillStyle='#3b82f6';
+ctx.fillRect((player.x-0.4)*TILE,(player.y-0.4)*TILE,TILE*0.8,TILE*0.8);
+// enemies
+for(const e of enemies){
+ctx.fillStyle=e.stunned>0?'#64748b':'#ef4444';
+ctx.fillRect((e.x-0.4)*TILE,(e.y-0.4)*TILE,TILE*0.8,TILE*0.8);
+}
+// minimap
+const ms=2;
+ctx.fillStyle='rgba(15,23,42,0.8)';ctx.fillRect(W-COLS*ms-4,4,COLS*ms+2,ROWS*ms+2);
+for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+if(maze[r][c]===1){ctx.fillStyle='#475569';ctx.fillRect(W-COLS*ms-3+c*ms,5+r*ms,ms,ms)}
+}
+ctx.fillStyle='#3b82f6';ctx.fillRect(W-COLS*ms-3+Math.floor(player.x)*ms,5+Math.floor(player.y)*ms,ms,ms);
+for(const f of flagsList)if(!f.got){ctx.fillStyle='#facc15';ctx.fillRect(W-COLS*ms-3+f.c*ms,5+f.r*ms,ms,ms)}
+}
+
+document.addEventListener('keydown',e=>{
+switch(e.key){
+case'ArrowUp':case'w':setDir(0,-1);e.preventDefault();break;
+case'ArrowDown':case's':setDir(0,1);e.preventDefault();break;
+case'ArrowLeft':case'a':setDir(-1,0);e.preventDefault();break;
+case'ArrowRight':case'd':setDir(1,0);e.preventDefault();break;
+case' ':useSmoke();e.preventDefault();break;
+case'p':case'P':togglePause();break;
+}
+});
+
+draw();
+</script>
+</body>
+</html>

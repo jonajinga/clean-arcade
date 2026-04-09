@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ninja Run</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+.jump-btn{background:#22c55e;font-size:1.2rem;padding:0.8rem 2rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Ninja Run</h1>
+<canvas id="game" width="480" height="360"></canvas>
+<div id="info">Jump between walls!</div>
+<div class="controls">
+<button class="jump-btn" onclick="jump()">Jump / Wall Jump</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Ninja Run</h2>
+<p>Auto-running ninja! Tap/click to wall-jump between walls. Avoid obstacles. Score = distance. Endless!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=360;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+let ninja,obstacles,score,speed,lastTime,particles;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  ninja={x:80,y:CH/2,vy:0,dir:1,onWall:false,wallSide:0}; // dir: 1=right, -1=left
+  obstacles=[];score=0;speed=3;particles=[];
+  gameStarted=true;gameOver=false;lastTime=performance.now();
+  spawnObstacles();
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function jump(){
+  if(!gameStarted||gameOver||paused)return;
+  if(ninja.onWall){
+    ninja.vy=-8;ninja.dir*=-1;ninja.onWall=false;
+    // Particles
+    for(let i=0;i<5;i++)particles.push({x:ninja.x,y:ninja.y,vx:ninja.dir*-3+Math.random()*2,vy:-Math.random()*3,life:20});
+  }
+}
+
+function spawnObstacles(){
+  // Walls on both sides with gaps and spikes
+  let lastY=0;
+  for(let i=0;i<20;i++){
+    let y=200+i*150;
+    // Random spike on left or right wall
+    let side=Math.random()<0.5?'left':'right';
+    let spikeW=20+Math.random()*30;
+    obstacles.push({x:side==='left'?30:CW-30-spikeW,y:y,w:spikeW,h:15,type:'spike'});
+    // Sometimes add a floating obstacle
+    if(Math.random()<0.3){
+      obstacles.push({x:100+Math.random()*(CW-260),y:y+70,w:40,h:10,type:'spike'});
+    }
+  }
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=Math.min((now-lastTime)/16,3);lastTime=now;
+
+    // Gravity
+    ninja.vy+=0.5*dt;
+    ninja.y+=ninja.vy*dt;
+    ninja.x+=ninja.dir*speed*dt;
+
+    // Wall collision
+    ninja.onWall=false;
+    if(ninja.x<=35){ninja.x=35;ninja.dir=1;ninja.onWall=true;ninja.wallSide=-1;ninja.vy=Math.min(ninja.vy,1);}
+    if(ninja.x>=CW-35){ninja.x=CW-35;ninja.dir=-1;ninja.onWall=true;ninja.wallSide=1;ninja.vy=Math.min(ninja.vy,1);}
+
+    // Wall sliding (slow fall)
+    if(ninja.onWall&&ninja.vy>0)ninja.vy*=0.9;
+
+    // Scroll obstacles
+    for(let o of obstacles)o.y-=speed*0.5*dt;
+    obstacles=obstacles.filter(o=>o.y>-50);
+
+    // Spawn more
+    if(obstacles.length<10){
+      let maxY=Math.max(...obstacles.map(o=>o.y),0);
+      for(let i=0;i<10;i++){
+        let y=maxY+150+i*150;
+        let side=Math.random()<0.5?'left':'right';
+        let spikeW=20+Math.random()*40;
+        obstacles.push({x:side==='left'?30:CW-30-spikeW,y:y,w:spikeW,h:15,type:'spike'});
+        if(Math.random()<0.3)obstacles.push({x:100+Math.random()*(CW-260),y:y+70,w:40,h:10,type:'spike'});
+      }
+    }
+
+    // Collision check
+    for(let o of obstacles){
+      if(ninja.x+10>o.x&&ninja.x-10<o.x+o.w&&ninja.y+12>o.y&&ninja.y-12<o.y+o.h){
+        endGame();return;
+      }
+    }
+
+    // Floor/ceiling death
+    if(ninja.y<0||ninja.y>CH){endGame();return;}
+
+    score+=dt*0.5;
+    speed=3+score/200;
+
+    // Update particles
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;});
+    particles=particles.filter(p=>p.life>0);
+
+  } else lastTime=now;
+  draw();requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Walls
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,30,CH);ctx.fillRect(CW-30,0,30,CH);
+  ctx.strokeStyle='#475569';
+  ctx.beginPath();ctx.moveTo(30,0);ctx.lineTo(30,CH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(CW-30,0);ctx.lineTo(CW-30,CH);ctx.stroke();
+
+  // Obstacles
+  obstacles.forEach(o=>{
+    ctx.fillStyle='#ef4444';ctx.fillRect(o.x,o.y,o.w,o.h);
+    // Spike triangles
+    for(let i=0;i<o.w;i+=10){
+      ctx.beginPath();ctx.moveTo(o.x+i,o.y);ctx.lineTo(o.x+i+5,o.y-8);ctx.lineTo(o.x+i+10,o.y);ctx.fill();
+    }
+  });
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.fillStyle=`rgba(250,204,21,${p.life/20})`;
+    ctx.fillRect(p.x,p.y,3,3);
+  });
+
+  // Ninja
+  ctx.fillStyle='#22c55e';
+  ctx.save();ctx.translate(ninja.x,ninja.y);
+  // Body
+  ctx.fillRect(-6,-12,12,20);
+  // Head
+  ctx.fillStyle='#e2e8f0';ctx.fillRect(-5,-16,10,6);
+  // Headband
+  ctx.fillStyle='#ef4444';ctx.fillRect(-6,-14,12,3);
+  // Eyes
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(ninja.dir>0?1:-4,-13,2,2);
+  // Trail
+  if(!ninja.onWall){
+    ctx.fillStyle='rgba(34,197,94,0.3)';
+    ctx.fillRect(-3,8,6,6);
+  }
+  ctx.restore();
+
+  // Score
+  ctx.fillStyle='#facc15';ctx.font='bold 16px system-ui';ctx.textAlign='center';
+  ctx.fillText(Math.floor(score),CW/2,25);
+}
+
+function endGame(){
+  gameOver=true;
+  let s=Math.floor(score);
+  highScore=Math.max(highScore,s);
+  document.getElementById('winMsg').textContent='Game Over!';
+  document.getElementById('winDetail').textContent=`Distance: ${s} | Best: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'ninja-run',state:{highScore}},'*');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' '||e.key==='ArrowUp')jump();
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+C.addEventListener('click',jump);
+C.addEventListener('touchstart',e=>{e.preventDefault();jump();},{passive:false});
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='ninja-run'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+</script>
+</body>
+</html>

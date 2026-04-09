@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gas Station</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+.price-btn{font-size:0.85rem;padding:0.5rem 0.8rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Gas Station</h1>
+<canvas id="game" width="480" height="380"></canvas>
+<div id="info">Pump gas, earn money!</div>
+<div class="controls">
+<button class="price-btn" onclick="adjustPrice(-0.1)">Price -$0.10</button>
+<button class="price-btn" onclick="adjustPrice(0.1)">Price +$0.10</button>
+<button class="price-btn" onclick="buyFuel()">Buy Fuel $50</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Gas Station</h2>
+<p>Run a gas station! Set prices, pump gas, manage fuel supply. Survive 5-minute shifts and maximize profit!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Shift Over!</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=380;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+let money,fuelTank,gasPrice,timeLeft,customers,served,pumping,lastTime,carQueue;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  money=100;fuelTank=200;gasPrice=3.50;timeLeft=300;
+  customers=[];served=0;pumping=null;lastTime=performance.now();
+  carQueue=[];
+  gameStarted=true;gameOver=false;
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function adjustPrice(d){
+  if(!gameStarted||gameOver)return;
+  gasPrice=Math.max(1,Math.round((gasPrice+d)*100)/100);
+}
+
+function buyFuel(){
+  if(!gameStarted||gameOver||money<50)return;
+  money-=50;fuelTank=Math.min(fuelTank+100,500);
+}
+
+const CAR_COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#a78bfa','#f97316'];
+
+function spawnCar(){
+  if(carQueue.length>=4)return;
+  let demand=5+Math.random()*15; // gallons wanted
+  let patience=10+Math.random()*10;
+  let maxPrice=3+Math.random()*2;
+  carQueue.push({
+    demand,patience,maxPrice,
+    color:CAR_COLORS[Math.floor(Math.random()*CAR_COLORS.length)],
+    x:CW+40,targetX:350-carQueue.length*80,
+    pumped:0,pumping:false
+  });
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=(now-lastTime)/1000;lastTime=now;
+    timeLeft-=dt;
+    if(timeLeft<=0){endGame();return;}
+
+    // Spawn cars
+    if(Math.random()<0.02&&carQueue.length<4)spawnCar();
+
+    // Move cars
+    carQueue.forEach(car=>{
+      if(car.x>car.targetX)car.x=Math.max(car.targetX,car.x-200*dt);
+      car.patience-=dt;
+    });
+
+    // Remove impatient or price-rejecting cars
+    carQueue=carQueue.filter(c=>{
+      if(c.patience<=0&&!c.pumping)return false;
+      if(gasPrice>c.maxPrice&&!c.pumping&&c.x<=c.targetX+5)return false;
+      return true;
+    });
+
+    // Pump gas for pumping cars
+    carQueue.forEach(car=>{
+      if(car.pumping&&fuelTank>0){
+        let pump=Math.min(3*dt,car.demand-car.pumped,fuelTank);
+        car.pumped+=pump;fuelTank-=pump;
+        if(car.pumped>=car.demand){
+          car.pumping=false;car.done=true;
+          money+=car.pumped*gasPrice;served++;
+        }
+      }
+    });
+
+    // Remove done cars
+    carQueue=carQueue.filter(c=>!c.done);
+
+    // Recalculate target positions
+    carQueue.forEach((c,i)=>c.targetX=350-i*80);
+
+  } else lastTime=now;
+  draw();requestAnimationFrame(update);
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Click on car to start pumping
+  carQueue.forEach(car=>{
+    if(mx>=car.x-25&&mx<=car.x+25&&my>=180&&my<=230&&!car.pumping&&!car.done&&gasPrice<=car.maxPrice&&car.x<=car.targetX+10){
+      car.pumping=true;
+    }
+  });
+});
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Sky & ground
+  ctx.fillStyle='#1e3a5f';ctx.fillRect(0,0,CW,180);
+  ctx.fillStyle='#334155';ctx.fillRect(0,180,CW,CH-180);
+  ctx.fillStyle='#475569';ctx.fillRect(0,235,CW,3);
+
+  // Station building
+  ctx.fillStyle='#1e293b';ctx.fillRect(10,100,120,80);
+  ctx.strokeStyle='#475569';ctx.strokeRect(10,100,120,80);
+  ctx.fillStyle='#facc15';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+  ctx.fillText('GAS',70,140);
+  ctx.fillText('STATION',70,158);
+
+  // Pumps
+  for(let i=0;i<3;i++){
+    ctx.fillStyle='#64748b';ctx.fillRect(170+i*80,190,20,40);
+    ctx.fillStyle='#ef4444';ctx.fillRect(175+i*80,195,10,5);
+  }
+
+  // Price sign
+  ctx.fillStyle='#1e293b';ctx.fillRect(10,10,120,40);
+  ctx.strokeStyle='#facc15';ctx.strokeRect(10,10,120,40);
+  ctx.fillStyle='#22c55e';ctx.font='bold 18px system-ui';ctx.textAlign='center';
+  ctx.fillText(`$${gasPrice.toFixed(2)}`,70,37);
+
+  // Stats
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='right';
+  ctx.fillText(`$${money.toFixed(0)} | Tank: ${Math.floor(fuelTank)}gal | Served: ${served}`,CW-10,20);
+  ctx.fillText(`Time: ${Math.ceil(timeLeft)}s`,CW-10,38);
+
+  // Fuel gauge
+  ctx.fillStyle='#334155';ctx.fillRect(CW-110,45,100,10);
+  ctx.fillStyle=fuelTank<50?'#ef4444':'#22c55e';
+  ctx.fillRect(CW-110,45,Math.min(fuelTank/500,1)*100,10);
+
+  // Cars
+  carQueue.forEach(car=>{
+    // Car body
+    ctx.fillStyle=car.color;
+    ctx.fillRect(car.x-25,195,50,25);
+    ctx.fillRect(car.x-18,185,36,15);
+    // Wheels
+    ctx.fillStyle='#111';
+    ctx.beginPath();ctx.arc(car.x-15,222,6,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(car.x+15,222,6,0,Math.PI*2);ctx.fill();
+    // Pump indicator
+    if(car.pumping){
+      ctx.fillStyle='#22c55e';ctx.font='10px system-ui';ctx.textAlign='center';
+      ctx.fillText(`⛽ ${car.pumped.toFixed(1)}/${car.demand.toFixed(0)}`,car.x,182);
+      // Pump line
+      ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(car.x,195);ctx.lineTo(car.x,175);ctx.stroke();ctx.lineWidth=1;
+    } else if(!car.done&&gasPrice<=car.maxPrice){
+      ctx.fillStyle='#facc15';ctx.font='9px system-ui';ctx.textAlign='center';
+      ctx.fillText(`Want ${car.demand.toFixed(0)}gal`,car.x,182);
+      // Patience bar
+      ctx.fillStyle='#334155';ctx.fillRect(car.x-20,175,40,3);
+      ctx.fillStyle=car.patience<5?'#ef4444':'#22c55e';
+      ctx.fillRect(car.x-20,175,Math.max(0,car.patience/20)*40,3);
+    } else if(gasPrice>car.maxPrice){
+      ctx.fillStyle='#ef4444';ctx.font='9px system-ui';ctx.textAlign='center';
+      ctx.fillText('Too expensive!',car.x,182);
+    }
+  });
+
+  // Road markings
+  ctx.fillStyle='#facc15';
+  for(let i=0;i<10;i++)ctx.fillRect(i*55+10,250,30,3);
+}
+
+function endGame(){
+  gameOver=true;
+  highScore=Math.max(highScore,Math.floor(money));
+  document.getElementById('winMsg').textContent='Shift Over!';
+  document.getElementById('winDetail').textContent=`Earned: $${Math.floor(money)} | Served: ${served} | Best: $${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'gas-station',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='gas-station'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

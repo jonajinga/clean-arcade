@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cave Flyer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#hud{display:flex;gap:1rem;font-size:0.85rem;margin-bottom:0.25rem}
+#hud span{color:#6366f1}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;margin-bottom:1rem}
+.overlay p{margin-bottom:1rem;text-align:center;max-width:280px}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pauseBtn{background:#334155;margin-top:0.25rem}
+#wrap{position:relative;display:inline-block}
+#controls{display:flex;gap:8px;margin-top:0.5rem}
+#controls button{width:64px;height:48px;font-size:1rem;padding:0}
+</style>
+</head>
+<body>
+<h1>Cave Flyer</h1>
+<div id="hud"><span>Dist: <b id="dist">0</b></span> <span>Fuel: <b id="fuel">100</b>%</span> <span>High: <b id="hi">0</b></span></div>
+<div id="wrap">
+<canvas id="c" width="400" height="400"></canvas>
+<div class="overlay" id="startOv">
+<h2>Cave Flyer</h2>
+<p>Tap/click/Space to thrust up. Avoid cave walls. Watch your fuel!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="overOv" style="display:none">
+<h2>Crashed!</h2>
+<p>Distance: <b id="finalDist">0</b></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<button id="pauseBtn" onclick="togglePause()">⏸</button>
+<div id="controls">
+<button onclick="thrustOn()" ontouchstart="thrustOn()" ontouchend="thrustOff()">THRUST ▲</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+let shipY,velY,fuel,dist,highScore=0,paused=false,running=false,thrusting=false,raf;
+let caveTop=[],caveBot=[],gap,speed;
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'cave-flyer',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='cave-flyer'){if(e.data.state&&e.data.state.highScore){highScore=e.data.state.highScore;document.getElementById('hi').textContent=highScore}}});
+
+function startGame(){
+document.getElementById('startOv').style.display='none';
+document.getElementById('overOv').style.display='none';
+shipY=H/2;velY=0;fuel=100;dist=0;gap=180;speed=2;
+thrusting=false;paused=false;running=true;
+document.getElementById('pauseBtn').textContent='⏸';
+caveTop=[];caveBot=[];
+let t=50,b=H-50;
+for(let i=0;i<W;i+=2){
+t+=((Math.random()-0.5)*4);b+=((Math.random()-0.5)*4);
+t=Math.max(10,Math.min(H/2-gap/2-10,t));
+b=Math.min(H-10,Math.max(H/2+gap/2+10,b));
+if(b-t<gap){b=t+gap}
+caveTop.push(t);caveBot.push(b);
+}
+if(raf)cancelAnimationFrame(raf);
+tick();
+}
+
+function thrustOn(){thrusting=true}
+function thrustOff(){thrusting=false}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';if(!paused)tick()}
+
+function tick(){
+if(!running)return;
+if(paused){raf=requestAnimationFrame(tick);return}
+// physics
+if(thrusting&&fuel>0){velY-=0.35;fuel=Math.max(0,fuel-0.15)}
+velY+=0.18; // gravity
+shipY+=velY;
+// scroll cave
+for(let i=0;i<speed;i++){
+caveTop.shift();caveBot.shift();
+let lt=caveTop[caveTop.length-1]||100,lb=caveBot[caveBot.length-1]||H-100;
+lt+=(Math.random()-0.5)*6;lb+=(Math.random()-0.5)*6;
+gap=Math.max(80,gap-0.01);
+lt=Math.max(5,Math.min(H-gap-20,lt));
+lb=lt+gap+Math.random()*20;
+if(lb>H-5)lb=H-5;
+if(lb-lt<gap)lb=lt+gap;
+caveTop.push(lt);caveBot.push(lb);
+}
+dist+=speed;speed=Math.min(5,2+dist*0.0003);
+// collision
+const sx=60,idx=Math.floor(sx/2);
+if(idx<caveTop.length){
+if(shipY-8<caveTop[idx]||shipY+8>caveBot[idx]){gameOver();return}
+}
+if(shipY<0||shipY>H){gameOver();return}
+document.getElementById('dist').textContent=Math.floor(dist);
+document.getElementById('fuel').textContent=Math.floor(fuel);
+draw();
+raf=requestAnimationFrame(tick);
+}
+
+function gameOver(){
+running=false;
+const s=Math.floor(dist);
+if(s>highScore){highScore=s;document.getElementById('hi').textContent=highScore;save()}
+document.getElementById('finalDist').textContent=s;
+document.getElementById('overOv').style.display='flex';
+}
+
+function draw(){
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+// cave walls
+ctx.fillStyle='#334155';
+ctx.beginPath();ctx.moveTo(0,0);
+for(let i=0;i<caveTop.length&&i*2<W;i++){ctx.lineTo(i*2,caveTop[i])}
+ctx.lineTo(W,0);ctx.fill();
+ctx.beginPath();ctx.moveTo(0,H);
+for(let i=0;i<caveBot.length&&i*2<W;i++){ctx.lineTo(i*2,caveBot[i])}
+ctx.lineTo(W,H);ctx.fill();
+// cave edges
+ctx.strokeStyle='#6366f1';ctx.lineWidth=2;
+ctx.beginPath();for(let i=0;i<caveTop.length&&i*2<W;i++){i===0?ctx.moveTo(0,caveTop[0]):ctx.lineTo(i*2,caveTop[i])}ctx.stroke();
+ctx.beginPath();for(let i=0;i<caveBot.length&&i*2<W;i++){i===0?ctx.moveTo(0,caveBot[0]):ctx.lineTo(i*2,caveBot[i])}ctx.stroke();
+// ship
+ctx.fillStyle=thrusting&&fuel>0?'#facc15':'#22c55e';
+ctx.beginPath();ctx.moveTo(70,shipY);ctx.lineTo(50,shipY-10);ctx.lineTo(50,shipY+10);ctx.closePath();ctx.fill();
+if(thrusting&&fuel>0){
+ctx.fillStyle='#ef4444';
+ctx.beginPath();ctx.moveTo(50,shipY-4);ctx.lineTo(40-Math.random()*8,shipY);ctx.lineTo(50,shipY+4);ctx.fill();
+}
+// fuel bar
+ctx.fillStyle='#334155';ctx.fillRect(10,10,80,8);
+ctx.fillStyle=fuel>25?'#22c55e':'#ef4444';ctx.fillRect(10,10,fuel*0.8,8);
+}
+
+document.addEventListener('keydown',e=>{
+if(e.code==='Space'||e.key==='ArrowUp'){thrustOn();e.preventDefault()}
+if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{if(e.code==='Space'||e.key==='ArrowUp')thrustOff()});
+canvas.addEventListener('mousedown',thrustOn);canvas.addEventListener('mouseup',thrustOff);
+canvas.addEventListener('touchstart',e=>{thrustOn();e.preventDefault()},{passive:false});
+canvas.addEventListener('touchend',thrustOff);
+
+draw();
+</script>
+</body>
+</html>

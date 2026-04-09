@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Space Colony</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.25rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+.build-btn{background:#22c55e;font-size:0.85rem;padding:0.5rem 0.8rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Space Colony</h1>
+<canvas id="game" width="480" height="360"></canvas>
+<div id="info">Survive 30 days!</div>
+<div class="controls">
+<button class="build-btn" onclick="buildModule(0)">🏠 Hab $50</button>
+<button class="build-btn" onclick="buildModule(1)">🌾 Farm $40</button>
+<button class="build-btn" onclick="buildModule(2)">⚡ Power $60</button>
+<button class="build-btn" onclick="buildModule(3)">💧 Water $45</button>
+<button class="build-btn" onclick="buildModule(4)">⛏ Mine $55</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Space Colony</h2>
+<p>Build modules, manage resources, and survive 30 days on a distant planet. Keep colonists alive!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=360;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const MODULES=[
+  {name:'Habitat',emoji:'🏠',cost:50,provides:'colonists',amt:2},
+  {name:'Farm',emoji:'🌾',cost:40,provides:'food',amt:3},
+  {name:'Solar',emoji:'⚡',cost:60,provides:'power',amt:5},
+  {name:'Water',emoji:'💧',cost:45,provides:'water',amt:4},
+  {name:'Mine',emoji:'⛏',cost:55,provides:'minerals',amt:3}
+];
+
+let day,dayTimer,money,colonists,food,water,power,minerals,modules,lastTime,events;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  day=1;dayTimer=0;money=150;colonists=5;food=20;water=20;power=10;minerals=10;
+  modules=[];events=[];
+  gameStarted=true;gameOver=false;
+  lastTime=performance.now();
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function buildModule(type){
+  if(!gameStarted||gameOver||paused)return;
+  let m=MODULES[type];
+  if(money<m.cost){addEvent('Not enough money!');return;}
+  money-=m.cost;
+  modules.push({type,x:30+modules.length%8*55,y:180+Math.floor(modules.length/8)*50});
+  addEvent(`Built ${m.name}`);
+}
+
+function addEvent(msg){events.unshift(msg);if(events.length>4)events.pop();}
+
+function procesDay(){
+  day++;
+  // Consumption
+  let foodNeed=colonists;let waterNeed=colonists;let powerNeed=colonists+modules.length;
+  // Production
+  let foodProd=modules.filter(m=>m.type===1).length*MODULES[1].amt;
+  let waterProd=modules.filter(m=>m.type===3).length*MODULES[3].amt;
+  let powerProd=modules.filter(m=>m.type===2).length*MODULES[2].amt;
+  let mineralProd=modules.filter(m=>m.type===4).length*MODULES[4].amt;
+  let newColonists=modules.filter(m=>m.type===0).length;
+
+  food+=foodProd-foodNeed;
+  water+=waterProd-waterNeed;
+  power+=powerProd-powerNeed;
+  minerals+=mineralProd;
+  money+=minerals*3;
+
+  // Random event
+  if(Math.random()<0.2){
+    let r=Math.floor(Math.random()*3);
+    if(r===0){addEvent('Meteor! Lost a module.');if(modules.length)modules.pop();}
+    else if(r===1){addEvent('Supply ship! +$50');money+=50;}
+    else{addEvent('Solar flare! Power -5');power-=5;}
+  }
+
+  // New colonists arrive
+  if(newColonists>0&&food>5&&water>5){
+    colonists+=Math.min(newColonists,2);
+    addEvent(`${Math.min(newColonists,2)} colonists arrived`);
+  }
+
+  // Deaths
+  if(food<0){colonists-=Math.ceil(Math.abs(food)/2);food=0;addEvent('Starvation!');}
+  if(water<0){colonists-=Math.ceil(Math.abs(water)/2);water=0;addEvent('Dehydration!');}
+  if(power<0){power=0;addEvent('Power shortage!');}
+
+  colonists=Math.max(colonists,0);
+  if(colonists<=0){endGame(false);return;}
+  if(day>30){endGame(true);return;}
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=(now-lastTime)/1000;
+    lastTime=now;
+    dayTimer+=dt;
+    if(dayTimer>=3){dayTimer=0;procesDay();}
+  } else lastTime=now;
+  draw();
+  requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Stars
+  for(let i=0;i<30;i++){
+    ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.fillRect((i*73)%CW,(i*47+day*2)%150,1,1);
+  }
+
+  // Header
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Day ${day}/30`,10,20);
+  ctx.fillStyle='#22c55e';ctx.fillText(`$${money}`,100,20);
+
+  // Resources bar
+  let res=[
+    {name:'👥',val:colonists,color:'#3b82f6'},
+    {name:'🌾',val:food,color:'#22c55e'},
+    {name:'💧',val:water,color:'#38bdf8'},
+    {name:'⚡',val:power,color:'#facc15'},
+    {name:'⛏',val:minerals,color:'#a78bfa'}
+  ];
+  res.forEach((r,i)=>{
+    let x=10+i*95;
+    ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+    ctx.fillText(`${r.name} ${Math.floor(r.val)}`,x,42);
+    ctx.fillStyle='#334155';ctx.fillRect(x,46,80,6);
+    ctx.fillStyle=r.color;ctx.fillRect(x,46,Math.min(Math.max(r.val,0)/30,1)*80,6);
+  });
+
+  // Day progress
+  ctx.fillStyle='#334155';ctx.fillRect(10,58,CW-20,4);
+  ctx.fillStyle='#6366f1';ctx.fillRect(10,58,(dayTimer/3)*(CW-20),4);
+
+  // Ground
+  ctx.fillStyle='#4a2810';ctx.fillRect(0,170,CW,CH-170);
+  ctx.fillStyle='#5c3317';ctx.fillRect(0,170,CW,3);
+
+  // Modules
+  modules.forEach(m=>{
+    let mod=MODULES[m.type];
+    ctx.fillStyle='#1e293b';ctx.fillRect(m.x,m.y,45,40);
+    ctx.strokeStyle='#475569';ctx.strokeRect(m.x,m.y,45,40);
+    ctx.font='20px system-ui';ctx.textAlign='center';
+    ctx.fillText(mod.emoji,m.x+22,m.y+28);
+  });
+
+  // Events log
+  ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';ctx.textAlign='left';
+  events.forEach((ev,i)=>{
+    ctx.globalAlpha=1-i*0.2;
+    ctx.fillText(ev,10,CH-10-i*14);
+  });
+  ctx.globalAlpha=1;
+}
+
+function endGame(won){
+  gameOver=true;
+  let score=day*10+colonists*5+money;
+  if(won)highScore=Math.max(highScore,score);
+  document.getElementById('winMsg').textContent=won?'Colony Survived!':'Colony Lost!';
+  document.getElementById('winDetail').textContent=`Day: ${day} | Colonists: ${colonists} | Score: ${score} | Best: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'space-colony',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='space-colony'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

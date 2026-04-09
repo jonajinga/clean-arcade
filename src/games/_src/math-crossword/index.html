@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Math Crossword</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:400px}
+#grid-container{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;border:2px solid #6366f1;padding:2px;background:#1e293b;max-width:100%}
+.cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:bold;background:#0f172a;color:#e2e8f0;border:none;cursor:default;font-family:inherit}
+.cell.input{background:#1e293b;cursor:pointer;border:1px solid #334155}
+.cell.input:focus,.cell.input.selected{background:#334155;outline:2px solid #6366f1}
+.cell.op{color:#facc15;font-size:1rem}
+.cell.correct{color:#22c55e}
+.cell.wrong{color:#ef4444}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;padding:0 1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#numpad{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:0.5rem 0;max-width:400px;width:100%}
+#numpad button{padding:0.5rem;font-size:1.1rem;background:#334155}
+#info{text-align:center;margin:0.5rem 0;font-size:0.9rem;color:#e2e8f0}
+#puzzle-nav{display:flex;gap:0.5rem;margin:0.5rem 0}
+#puzzle-nav button{padding:0.3rem 0.8rem;font-size:0.85rem;background:#334155}
+</style>
+</head>
+<body>
+<h1>Math Crossword</h1>
+<div id="info">Puzzle <span id="pnum">1</span>/5 | Score: <span id="score">0</span></div>
+<div id="game-wrap">
+<div id="grid-container"></div>
+<div class="overlay" id="start-overlay">
+<h2>Math Crossword</h2>
+<p>Fill in the missing numbers so each row and column forms a valid math equation!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2 id="end-title">Complete!</h2>
+<p id="end-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="numpad"></div>
+<div id="puzzle-nav">
+<button onclick="checkPuzzle()">Check</button>
+<button onclick="nextPuzzle()">Next Puzzle</button>
+</div>
+<script>
+const SLUG='math-crossword';
+// Puzzles: 5x5 grids. Rows: num op num = num. Cols same.
+// Layout: [n][op][n][=][n] per row, same per col
+// We store as flat 25 cells, some are numbers, some operators, some '='
+// Blanks array says which number cells are hidden
+const puzzles=[
+{grid:[3,'+',2,'=',5, '+','','+','','', 1,'+',4,'=',5, '=','','=','','=', 4,'+',6,'=',10],blanks:[0,2,10,14,20]},
+{grid:[5,'-',2,'=',3, '-','','-','','', 1,'-',1,'=',0, '=','','=','','=', 4,'-',1,'=',3],blanks:[0,4,10,12,22]},
+{grid:[2,'+',3,'=',5, '+','','+','','', 4,'+',1,'=',5, '=','','=','','=', 6,'+',4,'=',10],blanks:[2,4,10,12,20]},
+{grid:[8,'-',3,'=',5, '-','','-','','', 2,'-',1,'=',1, '=','','=','','=', 6,'-',2,'=',4],blanks:[0,4,10,12,24]},
+{grid:[1,'+',5,'=',6, '+','','+','','', 3,'+',2,'=',5, '=','','=','','=', 4,'+',7,'=',11],blanks:[2,4,10,14,20]}
+];
+let currentPuzzle=0,selected=null,userAnswers={},score=0,highScore=0;
+function startGame(){
+ document.getElementById('start-overlay').classList.add('hidden');
+ document.getElementById('end-overlay').classList.add('hidden');
+ currentPuzzle=0;score=0;userAnswers={};
+ renderPuzzle();
+}
+function renderPuzzle(){
+ document.getElementById('pnum').textContent=currentPuzzle+1;
+ document.getElementById('score').textContent=score;
+ const p=puzzles[currentPuzzle];
+ const gc=document.getElementById('grid-container');gc.innerHTML='';
+ selected=null;
+ if(!userAnswers[currentPuzzle])userAnswers[currentPuzzle]={};
+ p.grid.forEach((v,i)=>{
+  const d=document.createElement('div');d.className='cell';
+  if(p.blanks.includes(i)){
+   d.className='cell input';
+   d.textContent=userAnswers[currentPuzzle][i]!==undefined?userAnswers[currentPuzzle][i]:'?';
+   d.dataset.idx=i;
+   d.onclick=()=>{document.querySelectorAll('.cell.input').forEach(c=>c.classList.remove('selected'));d.classList.add('selected');selected=i;};
+  }else if(typeof v==='string'&&(v==='+'||v==='-'||v==='=')){
+   d.className='cell op';d.textContent=v;
+  }else{
+   d.textContent=v;
+  }
+  gc.appendChild(d);
+ });
+ buildNumpad();
+}
+function buildNumpad(){
+ const np=document.getElementById('numpad');np.innerHTML='';
+ for(let i=0;i<=9;i++){
+  const b=document.createElement('button');b.textContent=i;
+  b.onclick=()=>enterNum(i);np.appendChild(b);
+ }
+}
+function enterNum(n){
+ if(selected===null)return;
+ const p=puzzles[currentPuzzle];
+ userAnswers[currentPuzzle][selected]=n;
+ const cells=document.querySelectorAll('.cell.input');
+ cells.forEach(c=>{if(parseInt(c.dataset.idx)===selected)c.textContent=n;});
+}
+function checkPuzzle(){
+ const p=puzzles[currentPuzzle];
+ let allCorrect=true;
+ const cells=document.querySelectorAll('.cell.input');
+ cells.forEach(c=>{
+  const idx=parseInt(c.dataset.idx);
+  const correct=p.grid[idx];
+  const user=userAnswers[currentPuzzle]?.[idx];
+  c.classList.remove('correct','wrong');
+  if(user===correct){c.classList.add('correct');}
+  else{c.classList.add('wrong');allCorrect=false;}
+ });
+ if(allCorrect){
+  score+=10;
+  document.getElementById('score').textContent=score;
+  if(currentPuzzle>=puzzles.length-1){
+   if(score>highScore){highScore=score;try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+   document.getElementById('end-title').textContent='All Puzzles Complete!';
+   document.getElementById('end-msg').textContent='Score: '+score+' | High Score: '+highScore;
+   document.getElementById('end-overlay').classList.remove('hidden');
+  }
+ }
+}
+function nextPuzzle(){
+ if(currentPuzzle<puzzles.length-1){currentPuzzle++;renderPuzzle();}
+}
+window.addEventListener('keydown',e=>{
+ if(e.key>='0'&&e.key<='9')enterNum(parseInt(e.key));
+});
+window.addEventListener('message',e=>{
+ if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+  highScore=e.data.state.highScore||0;
+ }
+});
+</script>
+</body>
+</html>

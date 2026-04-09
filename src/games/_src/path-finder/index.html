@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Path Finder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;text-align:center;margin-bottom:0.25rem;color:#94a3b8}
+canvas{border:2px solid #6366f1;max-width:100%;display:block;margin:0.5rem auto}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1.2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit;min-width:44px;min-height:44px}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1rem;text-align:center;max-width:320px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Path Finder</h1>
+<p class="info">Grid: <span id="gridSize">5x5</span> | Visited: <span id="visited">0</span>/<span id="totalCells">25</span> | Level: <span id="lvl">1</span></p>
+<canvas id="c" width="350" height="350"></canvas>
+<div class="controls">
+<button onclick="undo()">Undo</button>
+<button onclick="resetPath()">Reset</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Path Finder</h2>
+<p>Draw a path that visits every cell exactly once. Click a cell to start, then click adjacent unvisited cells to extend your path. Grids grow from 5x5 to 7x7!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="winOverlay">
+<h2 id="winTitle">Solved!</h2>
+<p id="winMsg"></p>
+<button id="winBtn" onclick="nextLevel()">Next Level</button>
+</div>
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SLUG='path-finder';
+let highScore=0,level=1,N=5,path=[],paused=false;
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const SIZES=[5,5,5,6,6,6,7,7,7,7];
+
+function cellSize(){return Math.floor(340/N);}
+
+function drawBoard(){
+  const cs=cellSize();
+  canvas.width=cs*N+10;canvas.height=cs*N+10;
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,canvas.width,canvas.height);
+  const visited=new Set(path.map(p=>p[0]+','+p[1]));
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const x=5+c*cs,y=5+r*cs;
+    const key=r+','+c;
+    const idx=path.findIndex(p=>p[0]===r&&p[1]===c);
+    if(idx>=0){
+      const t=idx/(N*N-1);
+      ctx.fillStyle=idx===path.length-1?'#facc15':`hsl(${240+t*120},70%,55%)`;
+    }else{
+      ctx.fillStyle='#334155';
+    }
+    ctx.fillRect(x+1,y+1,cs-2,cs-2);
+    if(idx>=0){
+      ctx.fillStyle='#e2e8f0';ctx.font='bold '+(cs*0.35)+'px sans-serif';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(idx+1,x+cs/2,y+cs/2);
+    }
+  }
+  // Draw path lines
+  if(path.length>1){
+    ctx.strokeStyle='rgba(99,102,241,0.6)';ctx.lineWidth=3;ctx.beginPath();
+    path.forEach((p,i)=>{
+      const x=5+p[1]*cs+cs/2,y=5+p[0]*cs+cs/2;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  document.getElementById('visited').textContent=path.length;
+}
+
+function getCell(ex,ey){
+  const rect=canvas.getBoundingClientRect();
+  const sx=ex-rect.left,sy=ey-rect.top;
+  const cs=cellSize();
+  const c=Math.floor((sx-5)/cs),r=Math.floor((sy-5)/cs);
+  if(r<0||r>=N||c<0||c>=N)return null;
+  return[r,c];
+}
+
+function isAdj(a,b){return Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])===1;}
+
+function handleClick(ex,ey){
+  if(paused)return;
+  const cell=getCell(ex,ey);if(!cell)return;
+  if(path.length===0){path.push(cell);drawBoard();return;}
+  const last=path[path.length-1];
+  if(cell[0]===last[0]&&cell[1]===last[1])return;
+  if(!isAdj(last,cell))return;
+  if(path.some(p=>p[0]===cell[0]&&p[1]===cell[1]))return;
+  path.push(cell);
+  drawBoard();
+  if(path.length===N*N)win();
+}
+
+canvas.addEventListener('click',e=>handleClick(e.clientX,e.clientY));
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];handleClick(t.clientX,t.clientY);},{passive:false});
+
+function undo(){if(paused||path.length===0)return;path.pop();drawBoard();}
+function resetPath(){if(paused)return;path=[];drawBoard();}
+
+function win(){
+  if(level>highScore){highScore=level;save();}
+  if(level>=SIZES.length){
+    document.getElementById('winTitle').textContent='All Levels Complete!';
+    document.getElementById('winMsg').textContent='You solved all puzzles! Best: level '+highScore;
+    document.getElementById('winBtn').textContent='Play Again';
+  }else{
+    document.getElementById('winTitle').textContent='Level '+level+' Solved!';
+    document.getElementById('winMsg').textContent='';
+    document.getElementById('winBtn').textContent='Next Level';
+  }
+  document.getElementById('winOverlay').classList.remove('hidden');
+}
+
+function nextLevel(){
+  document.getElementById('winOverlay').classList.add('hidden');
+  if(level>=SIZES.length)level=1;else level++;
+  initLevel();
+}
+
+function initLevel(){
+  N=SIZES[level-1]||5;
+  document.getElementById('gridSize').textContent=N+'x'+N;
+  document.getElementById('totalCells').textContent=N*N;
+  document.getElementById('lvl').textContent=level;
+  path=[];drawBoard();
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('winOverlay').classList.add('hidden');
+  level=1;paused=false;initLevel();
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+    if(e.data.state.highScore!=null)highScore=e.data.state.highScore;
+  }
+});
+</script>
+</body>
+</html>

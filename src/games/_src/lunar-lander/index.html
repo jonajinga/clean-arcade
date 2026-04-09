@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lunar Lander</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0;font-size:0.9rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+#game-wrapper{position:relative;display:inline-block;margin:0.25rem 0}
+.hud{display:flex;gap:1rem;font-size:0.8rem;color:#e2e8f0;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+.game-controls{display:flex;gap:0.3rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.game-controls button{font-size:0.9rem;padding:0.5rem 0.8rem;background:#334155}
+.score-display{color:#facc15;font-size:0.85rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Lunar Lander</h1>
+<div class="hud">
+  Fuel: <span id="fuel">100</span> | Alt: <span id="alt">0</span> | Vel: <span id="vel">0</span> | Score: <span id="score">0</span>
+</div>
+<div id="game-wrapper">
+  <canvas id="c" width="480" height="600"></canvas>
+  <div class="overlay" id="start-overlay">
+    <h2>Lunar Lander</h2>
+    <p>Land gently on the pad!</p>
+    <p>Arrow keys / on-screen controls</p>
+    <p>Thrust up, rotate left/right</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="over-overlay" style="display:none">
+    <h2 id="over-title">Game Over</h2>
+    <p id="over-msg"></p>
+    <p>Score: <span id="final-score">0</span></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+<div class="game-controls">
+  <button id="btn-left" ontouchstart="keys.left=true" ontouchend="keys.left=false" onmousedown="keys.left=true" onmouseup="keys.left=false">◀ Rotate</button>
+  <button id="btn-thrust" ontouchstart="keys.up=true" ontouchend="keys.up=false" onmousedown="keys.up=true" onmouseup="keys.up=false">▲ Thrust</button>
+  <button id="btn-right" ontouchstart="keys.right=true" ontouchend="keys.right=false" onmousedown="keys.right=true" onmouseup="keys.right=false">Rotate ▶</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=480,H=600,ship,terrain,pad,fuel,score,highScore=0,gameState='start',paused=false,keys={up:false,left:false,right:false},level=1;
+const G=0.03;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='lunar-lander'){highScore=e.data.state?.highScore||0}});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'lunar-lander',state:{highScore}},'*')}catch(e){}}
+
+function genTerrain(){
+  terrain=[];pad={};
+  let py=H-60+Math.random()*30;
+  for(let x=0;x<=W;x+=4){
+    terrain.push({x,y:H-40-Math.random()*80});
+  }
+  let pi=Math.floor(terrain.length*0.3+Math.random()*terrain.length*0.4);
+  let pw=50;
+  let padY=H-50-Math.random()*40;
+  for(let i=pi;i<pi+Math.ceil(pw/4)&&i<terrain.length;i++){terrain[i].y=padY}
+  pad={x:terrain[pi].x,y:padY,w:pw};
+}
+
+function initShip(){
+  ship={x:W/2,y:60,vx:0,vy:0,angle:0,thrust:false};
+  fuel=100+level*10;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  score=0;level=1;
+  genTerrain();initShip();
+  gameState='play';paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+
+function togglePause(){
+  if(gameState!=='play')return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=false;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+});
+
+function update(){
+  if(keys.left)ship.angle-=0.04;
+  if(keys.right)ship.angle+=0.04;
+  if(keys.up&&fuel>0){
+    ship.vx+=Math.sin(ship.angle)*0.08;
+    ship.vy-=Math.cos(ship.angle)*0.08;
+    fuel-=0.3;
+    if(fuel<0)fuel=0;
+  }
+  ship.vy+=G;
+  ship.x+=ship.vx;ship.y+=ship.vy;
+  if(ship.x<0)ship.x=W;if(ship.x>W)ship.x=0;
+  if(ship.y<0){ship.y=0;ship.vy=0}
+
+  let speed=Math.sqrt(ship.vx*ship.vx+ship.vy*ship.vy);
+  // Check pad landing
+  if(ship.y>=pad.y-12&&ship.x>=pad.x&&ship.x<=pad.x+pad.w){
+    if(speed<1.2&&Math.abs(ship.angle)<0.3){
+      let bonus=Math.floor((1.2-speed)*100+fuel*2);
+      score+=bonus;level++;
+      if(score>highScore){highScore=score;save()}
+      genTerrain();initShip();
+      return;
+    } else {
+      endGame(false);return;
+    }
+  }
+  // Check terrain collision
+  for(let i=0;i<terrain.length-1;i++){
+    let t1=terrain[i],t2=terrain[i+1];
+    if(ship.x>=t1.x&&ship.x<t2.x){
+      let ty=t1.y+(t2.y-t1.y)*((ship.x-t1.x)/(t2.x-t1.x));
+      if(ship.y>=ty-10){endGame(false);return}
+    }
+  }
+  document.getElementById('fuel').textContent=Math.floor(fuel);
+  document.getElementById('alt').textContent=Math.floor(H-ship.y);
+  document.getElementById('vel').textContent=speed.toFixed(1);
+  document.getElementById('score').textContent=score;
+}
+
+function endGame(win){
+  gameState='over';
+  document.getElementById('over-title').textContent=win?'You Win!':'Crashed!';
+  document.getElementById('over-msg').textContent=win?'Great landing!':'Too fast or wrong angle!';
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('over-overlay').style.display='flex';
+  if(score>highScore){highScore=score;save()}
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Stars
+  ctx.fillStyle='#e2e8f0';
+  for(let i=0;i<40;i++){ctx.fillRect((i*97)%W,(i*53)%H,1,1)}
+  // Terrain
+  ctx.beginPath();ctx.moveTo(0,H);
+  for(let t of terrain)ctx.lineTo(t.x,t.y);
+  ctx.lineTo(W,H);ctx.closePath();ctx.fillStyle='#334155';ctx.fill();
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=1;ctx.stroke();
+  // Pad
+  ctx.fillStyle='#22c55e';ctx.fillRect(pad.x,pad.y-2,pad.w,4);
+  // Ship
+  ctx.save();ctx.translate(ship.x,ship.y);ctx.rotate(ship.angle);
+  ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(-8,8);ctx.lineTo(8,8);ctx.closePath();
+  ctx.fillStyle='#e2e8f0';ctx.fill();ctx.strokeStyle='#facc15';ctx.lineWidth=1;ctx.stroke();
+  // Thrust flame
+  if(keys.up&&fuel>0){
+    ctx.beginPath();ctx.moveTo(-4,8);ctx.lineTo(0,18+Math.random()*6);ctx.lineTo(4,8);
+    ctx.fillStyle='#ef4444';ctx.fill();
+  }
+  ctx.restore();
+  // Level
+  ctx.fillStyle='#facc15';ctx.font='14px system-ui';ctx.fillText('Level '+level,10,20);
+  ctx.fillText('High: '+highScore,W-100,20);
+}
+
+function loop(){
+  if(gameState!=='play'||paused)return;
+  update();draw();
+  requestAnimationFrame(loop);
+}
+draw();
+</script>
+</body>
+</html>

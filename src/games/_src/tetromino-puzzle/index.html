@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tetromino Puzzle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Tetromino Puzzle</h1>
+<canvas id="game" width="440" height="400"></canvas>
+<div id="info">Place pieces, clear rows and columns!</div>
+<div class="controls">
+<button onclick="rotatePiece()">Rotate</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Tetromino Puzzle</h2>
+<p>Place tetromino pieces on the 10x10 grid. Clear full rows or columns to score. Game over when no piece fits!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=440,CH=400,N=10,CS=36,OFF=10;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const PIECES=[
+  {shape:[[1,1,1,1]],color:'#3b82f6'},
+  {shape:[[1,1],[1,1]],color:'#facc15'},
+  {shape:[[1,1,1],[0,1,0]],color:'#a78bfa'},
+  {shape:[[1,1,1],[1,0,0]],color:'#ef4444'},
+  {shape:[[1,1,1],[0,0,1]],color:'#22c55e'},
+  {shape:[[1,1,0],[0,1,1]],color:'#f97316'},
+  {shape:[[0,1,1],[1,1,0]],color:'#ec4899'},
+  {shape:[[1,1],[1,0]],color:'#14b8a6'},
+  {shape:[[1,1],[0,1]],color:'#8b5cf6'},
+  {shape:[[1]],color:'#64748b'},
+  {shape:[[1,1]],color:'#06b6d4'},
+  {shape:[[1,1,1]],color:'#d946ef'}
+];
+
+let grid,score,currentPieces,selectedPiece,hoverR,hoverC;
+
+function randPiece(){
+  let p=PIECES[Math.floor(Math.random()*PIECES.length)];
+  return{shape:p.shape.map(r=>[...r]),color:p.color};
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  grid=Array.from({length:N},()=>new Array(N).fill(null));
+  score=0;selectedPiece=0;hoverR=-1;hoverC=-1;
+  currentPieces=[randPiece(),randPiece(),randPiece()];
+  gameStarted=true;gameOver=false;draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function rotatePiece(){
+  if(!gameStarted||gameOver||!currentPieces[selectedPiece])return;
+  let p=currentPieces[selectedPiece];
+  let rows=p.shape.length,cols=p.shape[0].length;
+  let newShape=Array.from({length:cols},(_,c)=>Array.from({length:rows},(_,r)=>p.shape[rows-1-r][c]));
+  p.shape=newShape;draw();
+}
+
+function canPlace(piece,r,c){
+  if(!piece)return false;
+  for(let pr=0;pr<piece.shape.length;pr++)for(let pc=0;pc<piece.shape[0].length;pc++){
+    if(!piece.shape[pr][pc])continue;
+    let gr=r+pr,gc=c+pc;
+    if(gr<0||gr>=N||gc<0||gc>=N||grid[gr][gc])return false;
+  }
+  return true;
+}
+
+function placePiece(piece,r,c){
+  for(let pr=0;pr<piece.shape.length;pr++)for(let pc=0;pc<piece.shape[0].length;pc++){
+    if(piece.shape[pr][pc])grid[r+pr][c+pc]=piece.color;
+  }
+}
+
+function clearLines(){
+  let cleared=0;
+  // Check rows
+  for(let r=0;r<N;r++){
+    if(grid[r].every(c=>c)){grid[r].fill(null);cleared++;}
+  }
+  // Check columns
+  for(let c=0;c<N;c++){
+    if(grid.every(row=>row[c])){
+      for(let r=0;r<N;r++)grid[r][c]=null;cleared++;
+    }
+  }
+  return cleared;
+}
+
+function canAnyFit(){
+  for(let p of currentPieces){
+    if(!p)continue;
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+      if(canPlace(p,r,c))return true;
+    }
+  }
+  return false;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Grid
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    let x=OFF+c*CS,y=OFF+r*CS;
+    ctx.fillStyle=grid[r][c]||'#1e293b';
+    ctx.fillRect(x,y,CS-1,CS-1);
+    if(!grid[r][c]){ctx.strokeStyle='#334155';ctx.strokeRect(x,y,CS-1,CS-1);}
+  }
+
+  // Hover preview
+  let hp=currentPieces[selectedPiece];
+  if(hp&&hoverR>=0&&hoverC>=0){
+    let valid=canPlace(hp,hoverR,hoverC);
+    for(let pr=0;pr<hp.shape.length;pr++)for(let pc=0;pc<hp.shape[0].length;pc++){
+      if(!hp.shape[pr][pc])continue;
+      let x=OFF+(hoverC+pc)*CS,y=OFF+(hoverR+pr)*CS;
+      ctx.fillStyle=valid?hp.color:'#ef4444';ctx.globalAlpha=0.4;
+      ctx.fillRect(x,y,CS-1,CS-1);ctx.globalAlpha=1;
+    }
+  }
+
+  // Piece tray
+  let trayX=OFF+N*CS+10;
+  ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';ctx.textAlign='left';
+  ctx.fillText('Pieces:',trayX,20);
+
+  currentPieces.forEach((p,i)=>{
+    if(!p)return;
+    let ty=30+i*90;
+    let sel=i===selectedPiece;
+    if(sel){ctx.strokeStyle='#facc15';ctx.strokeRect(trayX-2,ty-2,70,74);}
+    for(let pr=0;pr<p.shape.length;pr++)for(let pc=0;pc<p.shape[0].length;pc++){
+      if(p.shape[pr][pc]){
+        ctx.fillStyle=p.color;ctx.fillRect(trayX+pc*16,ty+pr*16,15,15);
+      }
+    }
+  });
+
+  // Score
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Score: ${score}`,trayX,CH-10);
+}
+
+C.addEventListener('mousemove',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Check piece tray click
+  let trayX=OFF+N*CS+10;
+  if(mx>=trayX){return;}
+
+  hoverC=Math.floor((mx-OFF)/CS);hoverR=Math.floor((my-OFF)/CS);
+  // Center on piece
+  let p=currentPieces[selectedPiece];
+  if(p){hoverR-=Math.floor(p.shape.length/2);hoverC-=Math.floor(p.shape[0].length/2);}
+  draw();
+});
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Check piece tray
+  let trayX=OFF+N*CS+10;
+  if(mx>=trayX){
+    for(let i=0;i<3;i++){
+      let ty=30+i*90;
+      if(my>=ty&&my<=ty+70&&currentPieces[i]){selectedPiece=i;draw();return;}
+    }
+    return;
+  }
+
+  let p=currentPieces[selectedPiece];
+  if(!p)return;
+  if(hoverR>=0&&canPlace(p,hoverR,hoverC)){
+    placePiece(p,hoverR,hoverC);
+    let cleared=clearLines();
+    score+=10+cleared*100;
+    currentPieces[selectedPiece]=null;
+
+    // If all pieces used, get new set
+    if(currentPieces.every(p=>!p)){
+      currentPieces=[randPiece(),randPiece(),randPiece()];
+      selectedPiece=0;
+    } else {
+      // Select next available
+      for(let i=0;i<3;i++)if(currentPieces[i]){selectedPiece=i;break;}
+    }
+
+    draw();updateInfo();
+    if(!canAnyFit()){endGame();}
+  }
+});
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Score: ${score} | High: ${highScore}`;
+}
+
+function endGame(){
+  gameOver=true;highScore=Math.max(highScore,score);
+  document.getElementById('winMsg').textContent='Game Over!';
+  document.getElementById('winDetail').textContent=`Score: ${score} | Best: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'tetromino-puzzle',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tetromino-puzzle'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'||e.key==='P')togglePause();
+  if(e.key==='r'||e.key==='R')rotatePiece();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nine Men's Morris</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Nine Men's Morris</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Place a piece</div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Nine Men's Morris</h2>
+<p>Place 9 pieces, then slide them. Form lines of 3 (mills) to remove opponent pieces. Reduce opponent to 2 pieces to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400,M=50,S=(W-2*M)/6;
+let highScore=0,paused=false;
+
+// 24 positions on the board
+const POS=[
+  [0,0],[3,0],[6,0],
+  [1,1],[3,1],[5,1],
+  [2,2],[3,2],[4,2],
+  [0,3],[1,3],[2,3],[4,3],[5,3],[6,3],
+  [2,4],[3,4],[4,4],
+  [1,5],[3,5],[5,5],
+  [0,6],[3,6],[6,6]
+];
+
+const MILLS=[
+  [0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],
+  [0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23],
+  [0,3,6],[2,5,8],[21,18,15],[23,20,17] // diagonals? No, just lines
+];
+// Adjacency
+const ADJ={
+  0:[1,9],1:[0,2,4],2:[1,14],3:[4,10],4:[1,3,5,7],5:[4,13],
+  6:[7,11],7:[4,6,8],8:[7,12],9:[0,10,21],10:[3,9,11,18],11:[6,10,15],
+  12:[8,13,17],13:[5,12,14,20],14:[2,13,23],15:[11,16],16:[15,17,19],17:[12,16],
+  18:[10,19],19:[16,18,20,22],20:[13,19],21:[9,22],22:[19,21,23],23:[14,22]
+};
+
+// Correct mills
+const MILL_LIST=[
+  [0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],
+  [0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]
+];
+
+let board,phase,playerPieces,aiPieces,playerPlaced,aiPlaced,selected,mustRemove,turn,gameOver,gameStarted;
+
+function posToXY(i){return[M+POS[i][0]*S,M+POS[i][1]*S];}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  board=new Array(24).fill(0); // 0=empty,1=player,2=ai
+  playerPlaced=0;aiPlaced=0;playerPieces=9;aiPieces=9;
+  phase='place';turn='player';selected=-1;mustRemove=false;
+  gameOver=false;gameStarted=true;
+  draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  // Draw board lines
+  ctx.strokeStyle='#475569';ctx.lineWidth=2;
+  // Three squares
+  for(let r=0;r<3;r++){
+    let off=r*S;
+    ctx.strokeRect(M+off,M+off,6*S-2*off,6*S-2*off);
+  }
+  // Cross lines
+  let lines=[[1,4],[4,7],[9,10],[10,11],[12,13],[13,14],[16,19],[19,22],[3,4],[4,5],[15,16],[16,17],[18,19],[19,20]];
+  // Actually draw connecting lines
+  ctx.beginPath();
+  [[0,9],[9,21],[3,10],[10,18],[6,11],[11,15],[1,4],[4,7],[16,19],[19,22],[8,12],[12,17],[5,13],[13,20],[2,14],[14,23]].forEach(([a,b])=>{
+    let[x1,y1]=posToXY(a);let[x2,y2]=posToXY(b);
+    ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+  });
+  ctx.stroke();
+
+  // Draw positions
+  for(let i=0;i<24;i++){
+    let[x,y]=posToXY(i);
+    if(board[i]===0){
+      ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fill();
+    } else {
+      ctx.fillStyle=board[i]===1?'#3b82f6':'#ef4444';
+      ctx.beginPath();ctx.arc(x,y,12,0,Math.PI*2);ctx.fill();
+      if(i===selected){ctx.strokeStyle='#facc15';ctx.lineWidth=3;ctx.stroke();ctx.lineWidth=2;}
+    }
+    if(mustRemove&&board[i]===2){
+      ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,14,0,Math.PI*2);ctx.stroke();
+    }
+  }
+  // Piece counts
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+  let pCount=board.filter(v=>v===1).length;
+  let aCount=board.filter(v=>v===2).length;
+  ctx.fillText(`You: ${pCount} pieces`,10,W-10);
+  ctx.textAlign='right';
+  ctx.fillText(`AI: ${aCount} pieces`,W-10,W-10);
+}
+
+function checkMill(pos,player){
+  return MILL_LIST.some(m=>m.includes(pos)&&m.every(p=>board[p]===player));
+}
+
+function allInMill(player){
+  let ps=[];for(let i=0;i<24;i++)if(board[i]===player)ps.push(i);
+  return ps.every(p=>checkMill(p,player));
+}
+
+function getPhase(){
+  if(playerPlaced<9||aiPlaced<9)return'place';
+  return'move';
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused||turn!=='player')return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let clicked=-1,best=25;
+  for(let i=0;i<24;i++){
+    let[x,y]=posToXY(i);
+    let d=Math.hypot(mx-x,my-y);
+    if(d<best){best=d;clicked=i;}
+  }
+  if(clicked<0)return;
+
+  if(mustRemove){
+    if(board[clicked]===2&&(!checkMill(clicked,2)||allInMill(2))){
+      board[clicked]=0;aiPieces--;mustRemove=false;
+      if(checkGameOver()){return;}
+      turn='ai';draw();updateInfo();setTimeout(aiMove,500);
+    }
+    return;
+  }
+
+  phase=getPhase();
+  if(phase==='place'){
+    if(board[clicked]!==0)return;
+    board[clicked]=1;playerPlaced++;
+    if(checkMill(clicked,1)){mustRemove=true;draw();updateInfo();return;}
+    turn='ai';draw();updateInfo();setTimeout(aiMove,500);
+  } else {
+    let pCount=board.filter(v=>v===1).length;
+    let canFly=pCount===3;
+    if(selected===-1){
+      if(board[clicked]!==1)return;
+      selected=clicked;draw();
+    } else {
+      if(clicked===selected){selected=-1;draw();return;}
+      if(board[clicked]!==0){
+        if(board[clicked]===1){selected=clicked;draw();}
+        return;
+      }
+      if(!canFly&&!ADJ[selected].includes(clicked)){return;}
+      board[selected]=0;board[clicked]=1;selected=-1;
+      if(checkMill(clicked,1)){mustRemove=true;draw();updateInfo();return;}
+      turn='ai';draw();updateInfo();setTimeout(aiMove,500);
+    }
+  }
+});
+
+function aiMove(){
+  if(gameOver||paused)return;
+  phase=getPhase();
+  if(phase==='place'){
+    // Place on empty
+    let empties=[];for(let i=0;i<24;i++)if(board[i]===0)empties.push(i);
+    // Try to form mill
+    let best=null;
+    for(let e of empties){board[e]=2;if(checkMill(e,2))best=e;board[e]=0;if(best!==null)break;}
+    // Block player mill
+    if(best===null){for(let e of empties){board[e]=1;if(checkMill(e,1))best=e;board[e]=0;if(best!==null)break;}}
+    if(best===null)best=empties[Math.floor(Math.random()*empties.length)];
+    board[best]=2;aiPlaced++;
+    if(checkMill(best,2))aiRemove();
+  } else {
+    let aiPositions=[];for(let i=0;i<24;i++)if(board[i]===2)aiPositions.push(i);
+    let canFly=aiPositions.length===3;
+    let moves=[];
+    for(let p of aiPositions){
+      let targets=canFly?[...Array(24).keys()].filter(i=>board[i]===0):ADJ[p].filter(i=>board[i]===0);
+      for(let t of targets)moves.push([p,t]);
+    }
+    if(moves.length===0){endGame(true);return;}
+    // Try mill
+    let best=null;
+    for(let[f,t]of moves){board[f]=0;board[t]=2;if(checkMill(t,2))best=[f,t];board[t]=0;board[f]=2;if(best)break;}
+    if(!best)best=moves[Math.floor(Math.random()*moves.length)];
+    board[best[0]]=0;board[best[1]]=2;
+    if(checkMill(best[1],2))aiRemove();
+  }
+  if(checkGameOver())return;
+  turn='player';draw();updateInfo();
+}
+
+function aiRemove(){
+  let targets=[];
+  for(let i=0;i<24;i++){
+    if(board[i]===1&&(!checkMill(i,1)||allInMill(1)))targets.push(i);
+  }
+  if(targets.length>0){
+    let r=targets[Math.floor(Math.random()*targets.length)];
+    board[r]=0;playerPieces--;
+  }
+}
+
+function checkGameOver(){
+  let pCount=board.filter(v=>v===1).length;
+  let aCount=board.filter(v=>v===2).length;
+  if(pCount<3&&playerPlaced>=9){endGame(false);return true;}
+  if(aCount<3&&aiPlaced>=9){endGame(true);return true;}
+  // Check if current player can move
+  if(phase==='move'&&turn==='player'){
+    let ps=[];for(let i=0;i<24;i++)if(board[i]===1)ps.push(i);
+    if(ps.length>3){
+      let canM=ps.some(p=>ADJ[p].some(a=>board[a]===0));
+      if(!canM){endGame(false);return true;}
+    }
+  }
+  return false;
+}
+
+function endGame(playerWon){
+  gameOver=true;
+  if(playerWon)highScore++;
+  document.getElementById('winMsg').textContent=playerWon?'You Win!':'AI Wins!';
+  document.getElementById('winDetail').textContent='Wins: '+highScore;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'nine-mens-morris',state:{highScore}},'*');
+}
+
+function updateInfo(){
+  let msg='';
+  if(mustRemove)msg='Remove an AI piece!';
+  else if(turn==='player')msg=getPhase()==='place'?'Place a piece':'Select & move a piece';
+  else msg='AI thinking...';
+  document.getElementById('info').textContent=msg;
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='nine-mens-morris'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

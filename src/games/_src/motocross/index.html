@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motocross</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+#wrap{position:relative;display:inline-block}
+#hud{font-size:0.9rem;padding:0.2rem;text-align:center}
+#controls{display:flex;gap:0.5rem;margin:0.4rem 0;justify-content:center}
+.ctrl-btn{background:#334155;padding:0.5rem 1rem;font-size:1.1rem;border-radius:0;color:#e2e8f0;border:none;cursor:pointer;font-family:inherit}
+</style>
+</head>
+<body>
+<h1>Motocross</h1>
+<div id="hud">Distance: 0m</div>
+<div id="wrap">
+<canvas id="c" width="600" height="350"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Motocross</h2>
+<p>Race over hills and jumps!</p>
+<p>Lean forward/back to stay balanced</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="over-overlay" style="display:none">
+<h2>Crash!</h2>
+<p id="over-msg"></p>
+<p id="over-hs"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="leanBack()" aria-label="Lean Back">&#8592; Lean</button>
+<button class="ctrl-btn" onclick="accel()" aria-label="Gas">&#9650; Gas</button>
+<button class="ctrl-btn" onclick="leanFwd()" aria-label="Lean Forward">Lean &#8594;</button>
+<button class="ctrl-btn" onclick="brake()" aria-label="Brake">&#9660; Brake</button>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=600,H=350;
+let terrain=[],bike,speed,distance,angle,crashed,highScore=0,paused=false,running=false;
+let keys={};let gasBtn=false,brakeBtn=false,leanL=false,leanR=false;
+
+function genTerrain(){
+  terrain=[];let y=250;
+  for(let x=0;x<10000;x+=2){
+    y+=Math.sin(x*0.005)*1.5+Math.sin(x*0.02)*0.5+(Math.random()-0.5)*0.8;
+    y=Math.max(100,Math.min(320,y));
+    terrain.push(y);
+  }
+}
+
+function getTerrainY(xPos){
+  let idx=Math.floor(xPos);
+  if(idx<0)idx=0;if(idx>=terrain.length-1)return terrain[terrain.length-1];
+  let frac=xPos-idx;
+  return terrain[idx]*(1-frac)+terrain[idx+1]*frac;
+}
+
+function getSlope(xPos){
+  let y1=getTerrainY(xPos-1),y2=getTerrainY(xPos+1);
+  return Math.atan2(y2-y1,4);
+}
+
+function init(){
+  genTerrain();
+  bike={x:50,y:0,vy:0,angle:0,airborne:false};
+  speed=0;distance=0;crashed=false;angle=0;
+}
+
+function accel(){gasBtn=true;setTimeout(()=>gasBtn=false,100);}
+function brake(){brakeBtn=true;setTimeout(()=>brakeBtn=false,100);}
+function leanBack(){leanL=true;setTimeout(()=>leanL=false,100);}
+function leanFwd(){leanR=true;setTimeout(()=>leanR=false,100);}
+
+function update(){
+  if(paused||!running||crashed)return;
+  let gas=keys['ArrowUp']||keys['w']||gasBtn;
+  let br=keys['ArrowDown']||keys['s']||brakeBtn;
+  let ll=keys['ArrowLeft']||keys['a']||leanL;
+  let lr=keys['ArrowRight']||keys['d']||leanR;
+
+  if(gas)speed=Math.min(speed+0.15,8);
+  else speed*=0.995;
+  if(br)speed=Math.max(speed-0.3,0);
+
+  bike.x+=speed*0.5;distance=bike.x*2;
+  let groundY=getTerrainY(bike.x);
+  let slope=getSlope(bike.x);
+
+  if(bike.airborne){
+    bike.vy+=0.4;
+    bike.y+=bike.vy;
+    if(ll)bike.angle-=0.03;
+    if(lr)bike.angle+=0.03;
+    if(bike.y>=groundY){
+      bike.y=groundY;bike.vy=0;bike.airborne=false;
+      let landAngle=Math.abs(bike.angle-slope);
+      if(landAngle>0.8){crashed=true;endGame();return;}
+      bike.angle=slope;
+    }
+  }else{
+    bike.y=groundY;
+    bike.angle=slope;
+    if(ll)bike.angle-=0.02;
+    if(lr)bike.angle+=0.02;
+    // launch off hills
+    let nextY=getTerrainY(bike.x+speed);
+    if(nextY>groundY+2&&speed>3){
+      bike.airborne=true;bike.vy=-speed*0.3;
+    }
+  }
+
+  if(bike.x>=terrain.length-10){crashed=true;endGame();}
+  document.getElementById('hud').textContent='Distance: '+Math.floor(distance)+'m | Speed: '+Math.floor(speed*10);
+}
+
+function endGame(){
+  let sc=Math.floor(distance);
+  if(sc>highScore){highScore=sc;save();}
+  showOver();
+}
+
+function draw(){
+  ctx.fillStyle='#87CEEB';ctx.fillRect(0,0,W,H);
+  // mountains bg
+  ctx.fillStyle='#4a5568';ctx.beginPath();ctx.moveTo(0,200);
+  for(let x=0;x<W;x+=50)ctx.lineTo(x,150+Math.sin(x*0.01+bike.x*0.001)*40);
+  ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill();
+
+  let camX=bike.x-100;
+  ctx.save();ctx.translate(-camX*2,0);
+  // terrain
+  ctx.fillStyle='#65a30d';ctx.beginPath();ctx.moveTo(camX*2,H);
+  let start=Math.max(0,Math.floor(camX));
+  let end=Math.min(terrain.length-1,Math.floor(camX+W/2+50));
+  for(let i=start;i<=end;i++){
+    ctx.lineTo(i*2,terrain[i]);
+  }
+  ctx.lineTo(end*2,H);ctx.fill();
+  // darker ground
+  ctx.fillStyle='#4d7c0f';ctx.beginPath();ctx.moveTo(camX*2,H);
+  for(let i=start;i<=end;i++){ctx.lineTo(i*2,terrain[i]+5);}
+  ctx.lineTo(end*2,H);ctx.fill();
+
+  // bike
+  ctx.save();
+  ctx.translate(bike.x*2,bike.y);ctx.rotate(bike.angle);
+  // wheels
+  ctx.fillStyle='#1e293b';
+  ctx.beginPath();ctx.arc(-12,-2,8,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(12,-2,8,0,Math.PI*2);ctx.fill();
+  // frame
+  ctx.fillStyle='#ef4444';ctx.fillRect(-10,-12,20,8);
+  // rider
+  ctx.fillStyle='#3b82f6';ctx.fillRect(-4,-24,8,12);
+  ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(0,-28,5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+function loop(){update();draw();if(running)requestAnimationFrame(loop);}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  init();running=true;paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+
+function showOver(){
+  document.getElementById('over-msg').textContent='Distance: '+Math.floor(distance)+'m';
+  document.getElementById('over-hs').textContent='Best: '+highScore+'m';
+  document.getElementById('over-overlay').style.display='flex';running=false;
+}
+
+function togglePause(){
+  if(!running)return;paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+}
+
+function save(){try{parent.postMessage({type:'ca-save',slug:'motocross',state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='motocross'&&e.data.state){highScore=e.data.state.highScore||0;}});
+
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key.toLowerCase()==='p')togglePause();});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+init();draw();
+</script>
+</body>
+</html>

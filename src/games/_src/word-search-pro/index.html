@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Search Pro</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+#words{color:#e2e8f0;font-size:0.75rem;margin:0.25rem;text-align:center;max-width:450px;line-height:1.6}
+</style>
+</head>
+<body>
+<h1>Word Search Pro</h1>
+<canvas id="game" width="450" height="450"></canvas>
+<div id="info">Find all 10 words!</div>
+<div id="words"></div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Word Search Pro</h2>
+<p>Find 10 hidden words in the 15x15 grid. Click and drag to select. Words can go horizontal, vertical, or diagonal.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">You Win!</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=450,CH=450,N=15,CS=CW/N;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const WORD_POOL=['PLANET','GALAXY','ROCKET','ORBIT','LUNAR','SOLAR','COMET','ASTEROID','NEBULA','GRAVITY','QUASAR','PULSAR','METEOR','COSMOS','SATURN','VENUS','MARS','EARTH','STAR','NOVA','TITAN','PLUTO','VORTEX','PHOTON','PLASMA','PROTON','COSMIC','SPACE','LIGHT','ENERGY'];
+
+let grid,words,foundWords,startCell,endCell,timer,timerInterval,foundCells;
+
+function placeWord(word){
+  let dirs=[[0,1],[1,0],[1,1],[0,-1],[-1,0],[-1,-1],[1,-1],[-1,1]];
+  for(let attempt=0;attempt<100;attempt++){
+    let dir=dirs[Math.floor(Math.random()*dirs.length)];
+    let r=Math.floor(Math.random()*N),c=Math.floor(Math.random()*N);
+    let er=r+dir[0]*(word.length-1),ec=c+dir[1]*(word.length-1);
+    if(er<0||er>=N||ec<0||ec>=N)continue;
+    let ok=true;
+    for(let i=0;i<word.length;i++){
+      let cr=r+dir[0]*i,cc=c+dir[1]*i;
+      if(grid[cr][cc]!==''&&grid[cr][cc]!==word[i]){ok=false;break;}
+    }
+    if(ok){
+      let cells=[];
+      for(let i=0;i<word.length;i++){
+        let cr=r+dir[0]*i,cc=c+dir[1]*i;
+        grid[cr][cc]=word[i];cells.push([cr,cc]);
+      }
+      return cells;
+    }
+  }
+  return null;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  grid=Array.from({length:N},()=>new Array(N).fill(''));
+  foundCells=new Set();
+
+  // Select 10 random words
+  let pool=[...WORD_POOL];
+  for(let i=pool.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  words=[];
+  let wordCells={};
+  for(let w of pool){
+    if(words.length>=10)break;
+    let cells=placeWord(w);
+    if(cells){words.push(w);wordCells[w]=cells;}
+  }
+
+  // Fill empty cells
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    if(grid[r][c]==='')grid[r][c]=String.fromCharCode(65+Math.floor(Math.random()*26));
+  }
+
+  foundWords=new Set();startCell=null;endCell=null;
+  timer=0;gameStarted=true;gameOver=false;
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{if(!paused&&gameStarted&&!gameOver)timer++;updateInfo();},1000);
+  updateWordList();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    let x=c*CS,y=r*CS;
+    let key=r+','+c;
+    let isFound=foundCells.has(key);
+    let isSelected=false;
+    if(startCell&&endCell){
+      let cells=getCellsBetween(startCell,endCell);
+      isSelected=cells.some(([sr,sc])=>sr===r&&sc===c);
+    }
+    ctx.fillStyle=isFound?'rgba(34,197,94,0.3)':isSelected?'rgba(99,102,241,0.3)':'transparent';
+    ctx.fillRect(x,y,CS,CS);
+    ctx.strokeStyle='#1e293b';ctx.strokeRect(x,y,CS,CS);
+    ctx.fillStyle=isFound?'#22c55e':'#e2e8f0';
+    ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(grid[r][c],x+CS/2,y+CS/2);
+  }
+}
+
+function getCellsBetween(s,e){
+  let dr=Math.sign(e[0]-s[0]),dc=Math.sign(e[1]-s[1]);
+  let len=Math.max(Math.abs(e[0]-s[0]),Math.abs(e[1]-s[1]))+1;
+  let cells=[];
+  for(let i=0;i<len;i++)cells.push([s[0]+dr*i,s[1]+dc*i]);
+  return cells;
+}
+
+function getCell(e){
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let c=Math.floor(mx/CS),r=Math.floor(my/CS);
+  if(r<0||r>=N||c<0||c>=N)return null;
+  return[r,c];
+}
+
+C.addEventListener('mousedown',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  startCell=getCell(e);endCell=startCell;draw();
+});
+C.addEventListener('mousemove',e=>{
+  if(!startCell)return;
+  endCell=getCell(e);if(endCell)draw();
+});
+C.addEventListener('mouseup',e=>{
+  if(!startCell||!endCell)return;
+  checkSelection();startCell=null;endCell=null;draw();
+});
+
+C.addEventListener('touchstart',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  e.preventDefault();
+  let t=e.touches[0];startCell=getCell(t);endCell=startCell;draw();
+},{passive:false});
+C.addEventListener('touchmove',e=>{
+  if(!startCell)return;e.preventDefault();
+  let t=e.touches[0];endCell=getCell(t);if(endCell)draw();
+},{passive:false});
+C.addEventListener('touchend',e=>{
+  if(!startCell||!endCell)return;
+  checkSelection();startCell=null;endCell=null;draw();
+});
+
+function checkSelection(){
+  if(!startCell||!endCell)return;
+  let cells=getCellsBetween(startCell,endCell);
+  let word=cells.map(([r,c])=>grid[r][c]).join('');
+  let wordRev=[...word].reverse().join('');
+  for(let w of words){
+    if(!foundWords.has(w)&&(word===w||wordRev===w)){
+      foundWords.add(w);
+      cells.forEach(([r,c])=>foundCells.add(r+','+c));
+      updateWordList();
+      if(foundWords.size===words.length)endGame();
+      break;
+    }
+  }
+}
+
+function updateWordList(){
+  document.getElementById('words').innerHTML=words.map(w=>
+    `<span style="margin:0 6px;${foundWords.has(w)?'color:#22c55e;text-decoration:line-through':''}">${w}</span>`
+  ).join('');
+}
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Found: ${foundWords.size}/${words.length} | Time: ${timer}s`;
+}
+
+function endGame(){
+  gameOver=true;clearInterval(timerInterval);
+  highScore=highScore?Math.min(highScore,timer):timer;
+  document.getElementById('winMsg').textContent='All Words Found!';
+  document.getElementById('winDetail').textContent=`Time: ${timer}s | Best: ${highScore}s`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'word-search-pro',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='word-search-pro'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spider Solitaire</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Spider Solitaire</h1>
+<canvas id="game" width="500" height="500"></canvas>
+<div id="info">Build sequences K to A by suit</div>
+<div class="controls">
+<button onclick="dealMore()">Deal Row</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Spider Solitaire</h2>
+<p>2-suit variant. Build descending sequences by suit from King to Ace. Complete sequences are removed. Clear all cards to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">You Win!</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=500,CH=500;
+const SUITS=['♠','♥'],SCOLORS=['#e2e8f0','#ef4444'];
+const RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const CRD_W=44,CRD_H=62,GAP=3;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let columns,stock,completed,selected,moves;
+
+function makeDeck(){
+  let d=[];
+  for(let n=0;n<4;n++)for(let s=0;s<2;s++)for(let r=0;r<13;r++)d.push({suit:s,rank:r,faceUp:false});
+  for(let i=d.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  let deck=makeDeck();
+  columns=[[],[],[],[],[],[],[],[],[],[]];
+  // Deal: 6 cards to first 4 cols, 5 to rest
+  let idx=0;
+  for(let r=0;r<5;r++)for(let c=0;c<10;c++){columns[c].push(deck[idx++]);}
+  for(let c=0;c<4;c++)columns[c].push(deck[idx++]);
+  // Flip last card in each column
+  columns.forEach(col=>{if(col.length)col[col.length-1].faceUp=true;});
+  stock=deck.slice(idx);
+  completed=0;selected=null;moves=0;gameOver=false;gameStarted=true;
+  draw();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function drawCard(x,y,card,sel){
+  if(!card.faceUp){
+    ctx.fillStyle='#334155';ctx.fillRect(x,y,CRD_W,CRD_H);ctx.strokeStyle='#475569';ctx.strokeRect(x,y,CRD_W,CRD_H);
+    return;
+  }
+  ctx.fillStyle=sel?'#6366f1':'#1e293b';ctx.fillRect(x,y,CRD_W,CRD_H);
+  ctx.strokeStyle=sel?'#facc15':'#475569';ctx.strokeRect(x,y,CRD_W,CRD_H);
+  ctx.fillStyle=SCOLORS[card.suit];ctx.font='bold 11px system-ui';ctx.textAlign='center';
+  ctx.fillText(RANKS[card.rank]+SUITS[card.suit],x+CRD_W/2,y+CRD_H/2+4);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+  // Stock indicator
+  ctx.fillStyle='#64748b';ctx.font='11px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Stock: ${stock.length} | Done: ${completed}/8 | Moves: ${moves}`,5,15);
+  // Columns
+  for(let c=0;c<10;c++){
+    let x=GAP+c*(CRD_W+GAP);
+    if(columns[c].length===0){ctx.strokeStyle='#334155';ctx.setLineDash([3,3]);ctx.strokeRect(x,25,CRD_W,CRD_H);ctx.setLineDash([]);}
+    columns[c].forEach((card,r)=>{
+      let y=25+r*18;
+      let sel=selected&&selected.col===c&&r>=selected.row;
+      drawCard(x,y,card,sel);
+    });
+  }
+}
+
+function dealMore(){
+  if(!gameStarted||gameOver||paused||stock.length<10)return;
+  // Must have no empty columns
+  if(columns.some(c=>c.length===0)){document.getElementById('info').textContent='Fill empty columns first!';return;}
+  for(let c=0;c<10;c++){
+    let card=stock.pop();card.faceUp=true;columns[c].push(card);
+  }
+  checkCompleteSequences();draw();
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Find clicked column and card
+  let clickedCol=-1,clickedRow=-1;
+  for(let c=0;c<10;c++){
+    let x=GAP+c*(CRD_W+GAP);
+    if(mx>=x&&mx<=x+CRD_W){
+      clickedCol=c;
+      for(let r=columns[c].length-1;r>=0;r--){
+        let y=25+r*18;
+        if(my>=y&&my<=y+CRD_H){clickedRow=r;break;}
+      }
+      break;
+    }
+  }
+
+  if(clickedCol<0)return;
+
+  if(!selected){
+    if(clickedRow<0||!columns[clickedCol][clickedRow].faceUp)return;
+    // Check valid sequence from clickedRow
+    let col=columns[clickedCol];
+    for(let i=clickedRow;i<col.length-1;i++){
+      if(!col[i+1].faceUp||col[i+1].suit!==col[i].suit||col[i+1].rank!==col[i].rank-1)return;
+    }
+    selected={col:clickedCol,row:clickedRow};draw();return;
+  }
+
+  // Try to place
+  if(clickedCol===selected.col){selected=null;draw();return;}
+  let destCol=columns[clickedCol];
+  let srcCard=columns[selected.col][selected.row];
+  if(destCol.length===0||destCol[destCol.length-1].rank===srcCard.rank+1){
+    let cards=columns[selected.col].splice(selected.row);
+    destCol.push(...cards);
+    // Flip new top
+    let srcC=columns[selected.col];
+    if(srcC.length>0&&!srcC[srcC.length-1].faceUp)srcC[srcC.length-1].faceUp=true;
+    moves++;
+    checkCompleteSequences();
+    selected=null;draw();
+    if(completed===8)endGame();
+  } else {selected=null;draw();}
+});
+
+function checkCompleteSequences(){
+  for(let c=0;c<10;c++){
+    let col=columns[c];
+    if(col.length<13)continue;
+    let last=col.length-1;
+    let valid=true;
+    for(let i=0;i<13;i++){
+      let card=col[last-i];
+      if(!card.faceUp||card.rank!==i||card.suit!==col[last].suit){valid=false;break;}
+    }
+    if(valid){
+      col.splice(last-12,13);completed++;
+      if(col.length>0&&!col[col.length-1].faceUp)col[col.length-1].faceUp=true;
+    }
+  }
+}
+
+function endGame(){
+  gameOver=true;highScore++;
+  document.getElementById('winMsg').textContent='You Win!';
+  document.getElementById('winDetail').textContent=`Moves: ${moves} | Wins: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'patience',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='patience'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

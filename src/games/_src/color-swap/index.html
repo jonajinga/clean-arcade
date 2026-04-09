@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Swap</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Color Swap</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Swap tiles to make each row one color</div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Color Swap</h2>
+<p>Click two tiles to swap them. Make each row the same color within the move limit!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#a78bfa','#f97316'];
+let grid,size,selected,moves,maxMoves,level;
+
+function genLevel(){
+  size=4+Math.min(level,4);
+  let numColors=size;
+  maxMoves=size*size;
+  // Create solved grid
+  grid=[];
+  for(let r=0;r<size;r++){
+    grid[r]=[];
+    for(let c=0;c<size;c++)grid[r][c]=r%numColors;
+  }
+  // Shuffle
+  for(let i=0;i<maxMoves*2;i++){
+    let r1=Math.floor(Math.random()*size),c1=Math.floor(Math.random()*size);
+    let r2=Math.floor(Math.random()*size),c2=Math.floor(Math.random()*size);
+    [grid[r1][c1],grid[r2][c2]]=[grid[r2][c2],grid[r1][c1]];
+  }
+  selected=null;moves=0;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  level=1;gameStarted=true;gameOver=false;
+  genLevel();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  let cs=Math.floor((W-20)/size);
+  let off=(W-cs*size)/2;
+  for(let r=0;r<size;r++)for(let c=0;c<size;c++){
+    let x=off+c*cs,y=off+r*cs;
+    ctx.fillStyle=COLORS[grid[r][c]%COLORS.length];
+    ctx.fillRect(x+1,y+1,cs-2,cs-2);
+    if(selected&&selected.r===r&&selected.c===c){
+      ctx.strokeStyle='#facc15';ctx.lineWidth=3;ctx.strokeRect(x,y,cs,cs);ctx.lineWidth=1;
+    }
+  }
+  // Row completion indicators
+  for(let r=0;r<size;r++){
+    let complete=grid[r].every(v=>v===grid[r][0]);
+    let cs2=Math.floor((W-20)/size);
+    ctx.fillStyle=complete?'#22c55e':'#334155';
+    ctx.beginPath();ctx.arc(off+size*cs2+12,off+r*cs2+cs2/2,5,0,Math.PI*2);ctx.fill();
+  }
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let cs=Math.floor((W-20)/size);
+  let off=(W-cs*size)/2;
+  let c=Math.floor((mx-off)/cs),r=Math.floor((my-off)/cs);
+  if(r<0||r>=size||c<0||c>=size)return;
+
+  if(!selected){selected={r,c};draw();return;}
+  if(selected.r===r&&selected.c===c){selected=null;draw();return;}
+
+  // Swap
+  [grid[selected.r][selected.c],grid[r][c]]=[grid[r][c],grid[selected.r][selected.c]];
+  moves++;selected=null;draw();updateInfo();
+
+  // Check win
+  let won=true;
+  for(let row=0;row<size;row++){
+    if(!grid[row].every(v=>v===grid[row][0])){won=false;break;}
+  }
+  if(won){
+    level++;
+    highScore=Math.max(highScore,level-1);
+    if(level>10){
+      gameOver=true;
+      document.getElementById('winMsg').textContent='All Levels Complete!';
+      document.getElementById('winDetail').textContent=`Levels: ${level-1} | Best: ${highScore}`;
+      document.getElementById('overOverlay').classList.remove('hidden');
+      parent.postMessage({type:'ca-save',slug:'color-swap',state:{highScore}},'*');
+    } else {
+      setTimeout(()=>{genLevel();draw();updateInfo();},500);
+    }
+  } else if(moves>=maxMoves){
+    gameOver=true;
+    document.getElementById('winMsg').textContent='Out of Moves!';
+    document.getElementById('winDetail').textContent=`Level: ${level} | Best: ${highScore}`;
+    document.getElementById('overOverlay').classList.remove('hidden');
+    parent.postMessage({type:'ca-save',slug:'color-swap',state:{highScore}},'*');
+  }
+});
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Level ${level} | Moves: ${moves}/${maxMoves}`;
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='color-swap'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

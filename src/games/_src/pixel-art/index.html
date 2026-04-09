@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Art</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;margin-bottom:1rem;font-size:1.4rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;padding:0 1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#controls{display:flex;flex-wrap:wrap;gap:0.3rem;margin:0.5rem 0;justify-content:center;max-width:480px}
+.color-btn{width:28px;height:28px;border:2px solid transparent;cursor:pointer;padding:0;min-width:28px}
+.color-btn.active{border-color:#facc15}
+#tool-bar{display:flex;gap:0.4rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center;max-width:480px}
+#tool-bar button{padding:0.3rem 0.7rem;font-size:0.85rem;background:#334155}
+#tool-bar button.active{background:#6366f1}
+#templates{display:flex;gap:0.4rem;margin:0.3rem 0;flex-wrap:wrap;justify-content:center;max-width:480px}
+#templates button{padding:0.3rem 0.7rem;font-size:0.75rem;background:#334155}
+</style>
+</head>
+<body>
+<h1>Pixel Art</h1>
+<div id="game-wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Pixel Art</h2>
+<p>Paint on a 16x16 grid. Pick colors, use tools, or load a template to color!</p>
+<button onclick="startGame()">Play</button>
+</div>
+</div>
+<div id="controls"></div>
+<div id="tool-bar">
+<button id="btn-draw" class="active" onclick="setTool('draw')">Draw</button>
+<button id="btn-erase" onclick="setTool('erase')">Erase</button>
+<button id="btn-fill" onclick="setTool('fill')">Fill</button>
+<button id="btn-clear" onclick="clearCanvas()">Clear</button>
+<button onclick="saveArt()">Save Art</button>
+</div>
+<div id="templates">
+<button onclick="loadTemplate(0)">Heart</button>
+<button onclick="loadTemplate(1)">Star</button>
+<button onclick="loadTemplate(2)">Smiley</button>
+<button onclick="loadTemplate(3)">House</button>
+<button onclick="loadTemplate(4)">Tree</button>
+</div>
+<script>
+const SLUG='pixel-art',G=16,canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let cellSize,grid=[],currentColor='#ef4444',tool='draw',painting=false,highScore=0;
+const PALETTE=['#0f172a','#1e293b','#334155','#64748b','#e2e8f0','#ffffff','#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#6366f1','#8b5cf6','#ec4899','#14b8a6','#78716c','#92400e','#365314','#1e3a5f','#7c2d12'];
+const templates=[
+// Heart
+[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,6,0,0,6,6,0,0,0,0,0,0,0,0,6,6,6,6,6,6,6,6,0,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,0,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,0,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,0,0,6,6,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Star
+[0,0,0,0,0,0,0,8,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8,8,0,0,0,0,0,0,0,0,0,0,0,0,0,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,0,8,8,8,8,0,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,0,8,8,8,8,8,8,8,8,8,8,8,8,8,8,0,0,0,8,8,8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,8,8,8,8,0,0,0,0,8,8,8,8,0,0,0,8,8,8,8,0,0,0,0,0,0,8,8,8,8,0,0,8,8,0,0,0,0,0,0,0,0,0,0,8,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Smiley
+[0,0,0,0,0,8,8,8,8,8,8,0,0,0,0,0,0,0,0,0,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,8,8,0,0,0,8,8,8,0,0,8,8,8,8,0,0,8,8,8,0,0,8,8,8,0,0,8,8,8,8,0,0,8,8,8,0,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,0,8,8,8,8,8,8,0,8,8,8,8,8,0,8,8,8,0,8,8,8,8,0,8,8,8,0,8,8,0,0,8,8,8,8,0,0,0,0,8,8,8,8,0,0,0,0,0,8,8,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,8,8,8,8,8,8,8,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// House
+[0,0,0,0,0,0,0,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,6,6,6,6,6,6,0,0,0,0,0,0,0,0,0,6,6,6,6,6,6,6,6,0,0,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,0,0,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0,6,6,10,10,10,6,6,6,10,10,10,6,6,6,0,0,6,6,10,10,10,6,6,6,10,10,10,6,6,6,0,0,6,6,10,10,10,6,6,6,10,10,10,6,6,6,0,0,6,6,6,6,6,11,11,11,6,6,6,6,6,6,0,0,6,6,6,6,6,11,11,11,6,6,6,6,6,6,0,0,6,6,6,6,6,11,11,11,6,6,6,6,6,6,0,0,6,6,6,6,6,11,11,11,6,6,6,6,6,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Tree
+[0,0,0,0,0,0,0,10,10,0,0,0,0,0,0,0,0,0,0,0,0,0,10,10,10,10,0,0,0,0,0,0,0,0,0,0,0,10,10,10,10,10,10,0,0,0,0,0,0,0,0,0,10,10,10,10,10,10,10,10,0,0,0,0,0,0,0,10,10,10,10,10,10,10,10,10,10,0,0,0,0,0,10,10,10,10,10,10,10,10,10,10,10,10,0,0,0,10,10,10,10,10,10,10,10,10,10,10,10,10,10,0,0,0,0,10,10,10,10,10,10,10,10,10,10,0,0,0,0,0,10,10,10,10,10,10,10,10,10,10,10,10,0,0,0,10,10,10,10,10,10,10,10,10,10,10,10,10,10,0,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,0,0,0,0,0,0,15,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,15,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,15,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,15,15,15,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+];
+
+function init(){
+ cellSize=canvas.width/G;
+ grid=Array(G*G).fill(0);
+ buildPalette();
+ draw();
+}
+function buildPalette(){
+ const c=document.getElementById('controls');c.innerHTML='';
+ PALETTE.forEach((col,i)=>{
+  const b=document.createElement('button');b.className='color-btn'+(i===6?' active':'');
+  b.style.background=col;b.onclick=()=>{currentColor=col;document.querySelectorAll('.color-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');};
+  c.appendChild(b);
+ });
+}
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ for(let i=0;i<G*G;i++){
+  const x=(i%G)*cellSize,y=Math.floor(i/G)*cellSize;
+  ctx.fillStyle=PALETTE[grid[i]]||'#0f172a';
+  ctx.fillRect(x,y,cellSize,cellSize);
+  ctx.strokeStyle='#1e293b';ctx.strokeRect(x,y,cellSize,cellSize);
+ }
+}
+function getCell(e){
+ const r=canvas.getBoundingClientRect();
+ const x=((e.touches?e.touches[0].clientX:e.clientX)-r.left)*(canvas.width/r.width);
+ const y=((e.touches?e.touches[0].clientY:e.clientY)-r.top)*(canvas.height/r.height);
+ return{col:Math.floor(x/cellSize),row:Math.floor(y/cellSize)};
+}
+function paint(e){
+ const{col,row}=getCell(e);
+ if(col<0||col>=G||row<0||row>=G)return;
+ const idx=row*G+col;
+ const ci=PALETTE.indexOf(currentColor);
+ if(tool==='draw'){grid[idx]=ci>=0?ci:0;}
+ else if(tool==='erase'){grid[idx]=0;}
+ else if(tool==='fill'){floodFill(col,row,grid[idx],ci>=0?ci:0);}
+ draw();
+}
+function floodFill(x,y,target,replacement){
+ if(target===replacement)return;
+ const stack=[[x,y]];
+ while(stack.length){
+  const[cx,cy]=stack.pop();
+  if(cx<0||cx>=G||cy<0||cy>=G)continue;
+  const i=cy*G+cx;
+  if(grid[i]!==target)continue;
+  grid[i]=replacement;
+  stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+ }
+}
+function setTool(t){
+ tool=t;
+ document.querySelectorAll('#tool-bar button').forEach(b=>b.classList.remove('active'));
+ const btn=document.getElementById('btn-'+t);if(btn)btn.classList.add('active');
+}
+function clearCanvas(){grid.fill(0);draw();}
+function loadTemplate(idx){
+ grid=[...templates[idx]];draw();
+}
+function saveArt(){
+ try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore:0,art:grid}},'*');}catch(e){}
+}
+function startGame(){
+ document.getElementById('start-overlay').classList.add('hidden');
+}
+canvas.addEventListener('mousedown',e=>{painting=true;paint(e);});
+canvas.addEventListener('mousemove',e=>{if(painting)paint(e);});
+canvas.addEventListener('mouseup',()=>painting=false);
+canvas.addEventListener('mouseleave',()=>painting=false);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();painting=true;paint(e);},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();if(painting)paint(e);},{passive:false});
+canvas.addEventListener('touchend',()=>painting=false);
+window.addEventListener('message',e=>{
+ if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+  if(e.data.state.art)grid=[...e.data.state.art];draw();
+ }
+});
+init();
+</script>
+</body>
+</html>

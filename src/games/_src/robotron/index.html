@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Robotron</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0;font-size:0.9rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+#game-wrapper{position:relative;display:inline-block;margin:0.25rem 0}
+.hud{display:flex;gap:1rem;font-size:0.8rem;color:#e2e8f0;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+.game-controls{display:flex;gap:0.3rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.game-controls button{font-size:1.1rem;padding:0.5rem 0.7rem;background:#334155;min-width:44px;min-height:44px}
+.ctrl-row{display:flex;gap:0.3rem;justify-content:center}
+.ctrl-grid{display:flex;flex-direction:column;gap:0.3rem;align-items:center}
+</style>
+</head>
+<body>
+<h1>Robotron</h1>
+<div class="hud">
+  Score: <span id="score">0</span> | Wave: <span id="wave">1</span> | Lives: <span id="lives">3</span> | High: <span id="hi">0</span>
+</div>
+<div id="game-wrapper">
+  <canvas id="c" width="480" height="480"></canvas>
+  <div class="overlay" id="start-overlay">
+    <h2>Robotron</h2>
+    <p>WASD/Arrows to move</p>
+    <p>Auto-fires at nearest enemy</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="over-overlay" style="display:none">
+    <h2>Game Over</h2>
+    <p>Score: <span id="final-score">0</span></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+<div class="game-controls">
+  <div class="ctrl-grid">
+    <div class="ctrl-row"><button ontouchstart="keys.up=true" ontouchend="keys.up=false" onmousedown="keys.up=true" onmouseup="keys.up=false">▲</button></div>
+    <div class="ctrl-row">
+      <button ontouchstart="keys.left=true" ontouchend="keys.left=false" onmousedown="keys.left=true" onmouseup="keys.left=false">◀</button>
+      <button ontouchstart="keys.down=true" ontouchend="keys.down=false" onmousedown="keys.down=true" onmouseup="keys.down=false">▼</button>
+      <button ontouchstart="keys.right=true" ontouchend="keys.right=false" onmousedown="keys.right=true" onmouseup="keys.right=false">▶</button>
+    </div>
+  </div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=480,H=480;
+let player,enemies,bullets,particles,score,lives,wave,highScore=0,gameState='start',paused=false,fireTimer=0;
+let keys={up:false,down:false,left:false,right:false};
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='robotron'){highScore=e.data.state?.highScore||0;document.getElementById('hi').textContent=highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'robotron',state:{highScore}},'*')}catch(e){}}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=true;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=false;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=false;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+});
+
+function spawnWave(){
+  enemies=[];
+  let count=5+wave*3;
+  for(let i=0;i<count;i++){
+    let side=Math.floor(Math.random()*4);
+    let x,y;
+    if(side===0){x=Math.random()*W;y=-10}
+    else if(side===1){x=W+10;y=Math.random()*H}
+    else if(side===2){x=Math.random()*W;y=H+10}
+    else{x=-10;y=Math.random()*H}
+    let type=Math.random()<0.3?'fast':'normal';
+    enemies.push({x,y,type,speed:type==='fast'?1.8+wave*0.1:0.8+wave*0.1,hp:type==='fast'?1:2,size:type==='fast'?6:8});
+  }
+}
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  player={x:W/2,y:H/2,size:8,speed:3};
+  score=0;lives=3;wave=1;
+  bullets=[];particles=[];enemies=[];
+  spawnWave();
+  gameState='play';paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+
+function togglePause(){
+  if(gameState!=='play')return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused)loop();
+}
+
+function findNearest(){
+  let best=null,bd=Infinity;
+  for(let e of enemies){
+    let d=Math.hypot(e.x-player.x,e.y-player.y);
+    if(d<bd){bd=d;best=e}
+  }
+  return best;
+}
+
+function update(){
+  let dx=0,dy=0;
+  if(keys.up)dy=-1;if(keys.down)dy=1;if(keys.left)dx=-1;if(keys.right)dx=1;
+  if(dx||dy){let m=Math.hypot(dx,dy);player.x+=dx/m*player.speed;player.y+=dy/m*player.speed}
+  player.x=Math.max(player.size,Math.min(W-player.size,player.x));
+  player.y=Math.max(player.size,Math.min(H-player.size,player.y));
+
+  // Auto-fire
+  fireTimer++;
+  if(fireTimer>=10){
+    fireTimer=0;
+    let t=findNearest();
+    if(t){
+      let a=Math.atan2(t.y-player.y,t.x-player.x);
+      bullets.push({x:player.x,y:player.y,vx:Math.cos(a)*6,vy:Math.sin(a)*6,life:80});
+    }
+  }
+
+  // Bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    let b=bullets[i];b.x+=b.vx;b.y+=b.vy;b.life--;
+    if(b.x<0||b.x>W||b.y<0||b.y>H||b.life<=0){bullets.splice(i,1);continue}
+    for(let j=enemies.length-1;j>=0;j--){
+      let e=enemies[j];
+      if(Math.hypot(b.x-e.x,b.y-e.y)<e.size+3){
+        e.hp--;
+        if(e.hp<=0){
+          score+=e.type==='fast'?15:10;
+          for(let k=0;k<5;k++)particles.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,life:20,color:e.type==='fast'?'#ef4444':'#6366f1'});
+          enemies.splice(j,1);
+        }
+        bullets.splice(i,1);break;
+      }
+    }
+  }
+
+  // Enemies move toward player
+  for(let e of enemies){
+    let a=Math.atan2(player.y-e.y,player.x-e.x);
+    e.x+=Math.cos(a)*e.speed;e.y+=Math.sin(a)*e.speed;
+    if(Math.hypot(e.x-player.x,e.y-player.y)<e.size+player.size){
+      lives--;
+      player.x=W/2;player.y=H/2;
+      if(lives<=0){endGame();return}
+    }
+  }
+
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    let p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life--;
+    if(p.life<=0)particles.splice(i,1);
+  }
+
+  if(enemies.length===0){wave++;spawnWave()}
+
+  document.getElementById('score').textContent=score;
+  document.getElementById('wave').textContent=wave;
+  document.getElementById('lives').textContent=lives;
+}
+
+function endGame(){
+  gameState='over';
+  if(score>highScore){highScore=score;save()}
+  document.getElementById('hi').textContent=highScore;
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('over-overlay').style.display='flex';
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Player
+  ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(player.x,player.y,player.size,0,Math.PI*2);ctx.fill();
+  // Enemies
+  for(let e of enemies){
+    ctx.fillStyle=e.type==='fast'?'#ef4444':'#6366f1';
+    ctx.fillRect(e.x-e.size,e.y-e.size,e.size*2,e.size*2);
+  }
+  // Bullets
+  ctx.fillStyle='#facc15';
+  for(let b of bullets){ctx.fillRect(b.x-2,b.y-2,4,4)}
+  // Particles
+  for(let p of particles){ctx.globalAlpha=p.life/20;ctx.fillStyle=p.color;ctx.fillRect(p.x-1,p.y-1,3,3)}
+  ctx.globalAlpha=1;
+}
+
+function loop(){
+  if(gameState!=='play'||paused)return;
+  update();draw();requestAnimationFrame(loop);
+}
+// Initial draw
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+</script>
+</body>
+</html>

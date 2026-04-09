@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swap Puzzle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.info{font-size:0.85rem;text-align:center;margin-bottom:0.25rem;color:#94a3b8}
+.game-wrap{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;margin:0.5rem}
+.grid-label{text-align:center;font-size:0.8rem;color:#6366f1;margin-bottom:0.25rem;font-weight:bold}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;border:2px solid #6366f1;width:240px;height:240px;background:#1e293b}
+.grid .cell{width:100%;height:100%;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:bold;transition:outline 0.15s}
+.grid .cell.selected{outline:3px solid #facc15;outline-offset:-3px;z-index:2}
+.grid .cell canvas{width:100%;height:100%;display:block}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.5rem 1.2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1rem;text-align:center;max-width:320px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Swap Puzzle</h1>
+<p class="info">Moves: <span id="moves">0</span> | Best: <span id="best">-</span></p>
+<div class="game-wrap">
+<div>
+<div class="grid-label">Image A</div>
+<div class="grid" id="gridA"></div>
+</div>
+<div>
+<div class="grid-label">Image B</div>
+<div class="grid" id="gridB"></div>
+</div>
+</div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+
+<div class="overlay" id="startOverlay">
+<h2>Swap Puzzle</h2>
+<p>Two images are split into tiles and mixed between grids. Select one tile from each grid to swap them. Reconstruct both images!</p>
+<button onclick="startGame()">Play</button>
+</div>
+
+<div class="overlay hidden" id="winOverlay">
+<h2>Solved!</h2>
+<p id="winMsg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+
+<div class="overlay hidden" id="pauseOverlay">
+<h2>Paused</h2>
+<button onclick="togglePause()">Resume</button>
+</div>
+
+<script>
+const SLUG='swap-puzzle';
+let highScore=Infinity,moves=0,paused=false,selectedA=null,selectedB=null;
+let tilesA=[],tilesB=[],solA=[],solB=[];
+const SIZE=3,TILE=80;
+
+// Two distinct images drawn on canvas
+function drawImageA(ctx,tx,ty,tw,th){
+  // Sunset scene
+  const g=ctx.createLinearGradient(tx,ty,tx,ty+th);
+  g.addColorStop(0,'#ef4444');g.addColorStop(0.5,'#facc15');g.addColorStop(1,'#3b82f6');
+  ctx.fillStyle=g;ctx.fillRect(tx,ty,tw,th);
+  ctx.fillStyle='#0f172a';ctx.beginPath();
+  ctx.arc(tx+tw/2,ty+th*0.45,tw*0.2,0,Math.PI*2);ctx.fill();
+}
+
+function drawImageB(ctx,tx,ty,tw,th){
+  // Mountain scene
+  ctx.fillStyle='#22c55e';ctx.fillRect(tx,ty,tw,th);
+  ctx.fillStyle='#6366f1';ctx.beginPath();
+  ctx.moveTo(tx,ty+th);ctx.lineTo(tx+tw/2,ty+th*0.1);ctx.lineTo(tx+tw,ty+th);ctx.fill();
+  ctx.fillStyle='#e2e8f0';ctx.beginPath();
+  ctx.moveTo(tx+tw*0.4,ty+th*0.3);ctx.lineTo(tx+tw/2,ty+th*0.1);ctx.lineTo(tx+tw*0.6,ty+th*0.3);ctx.fill();
+}
+
+function createTileCanvas(drawFn,col,row){
+  const c=document.createElement('canvas');
+  c.width=TILE;c.height=TILE;
+  const ctx=c.getContext('2d');
+  drawFn(ctx,-col*TILE,-row*TILE,TILE*SIZE,TILE*SIZE);
+  return c;
+}
+
+function init(){
+  solA=[];solB=[];
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    solA.push({id:'A'+r+'_'+c,canvas:createTileCanvas(drawImageA,c,r),origin:'A',idx:r*SIZE+c});
+    solB.push({id:'B'+r+'_'+c,canvas:createTileCanvas(drawImageB,c,r),origin:'B',idx:r*SIZE+c});
+  }
+  // Mix: swap some tiles between grids
+  tilesA=[...solA];tilesB=[...solB];
+  for(let i=0;i<5;i++){
+    const a=Math.floor(Math.random()*9),b=Math.floor(Math.random()*9);
+    [tilesA[a],tilesB[b]]=[tilesB[b],tilesA[a]];
+  }
+  // Extra shuffle within each grid
+  for(let i=tilesA.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[tilesA[i],tilesA[j]]=[tilesA[j],tilesA[i]];}
+  for(let i=tilesB.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[tilesB[i],tilesB[j]]=[tilesB[j],tilesB[i]];}
+}
+
+function render(){
+  const gA=document.getElementById('gridA');
+  const gB=document.getElementById('gridB');
+  gA.innerHTML='';gB.innerHTML='';
+  tilesA.forEach((t,i)=>{
+    const d=document.createElement('div');d.className='cell';
+    if(selectedA===i)d.classList.add('selected');
+    d.appendChild(t.canvas.cloneNode(true));
+    // Draw on cloned canvas
+    const cc=d.querySelector('canvas');const ctx2=cc.getContext('2d');
+    ctx2.drawImage(t.canvas,0,0);
+    d.onclick=()=>selectA(i);
+    gA.appendChild(d);
+  });
+  tilesB.forEach((t,i)=>{
+    const d=document.createElement('div');d.className='cell';
+    if(selectedB===i)d.classList.add('selected');
+    d.appendChild(t.canvas.cloneNode(true));
+    const cc=d.querySelector('canvas');const ctx2=cc.getContext('2d');
+    ctx2.drawImage(t.canvas,0,0);
+    d.onclick=()=>selectB(i);
+    gB.appendChild(d);
+  });
+}
+
+function selectA(i){
+  if(paused)return;
+  selectedA=selectedA===i?null:i;
+  if(selectedA!==null&&selectedB!==null)doSwap();
+  else render();
+}
+function selectB(i){
+  if(paused)return;
+  selectedB=selectedB===i?null:i;
+  if(selectedA!==null&&selectedB!==null)doSwap();
+  else render();
+}
+
+function doSwap(){
+  [tilesA[selectedA],tilesB[selectedB]]=[tilesB[selectedB],tilesA[selectedA]];
+  selectedA=null;selectedB=null;
+  moves++;
+  document.getElementById('moves').textContent=moves;
+  render();
+  checkWin();
+}
+
+function checkWin(){
+  const aOk=tilesA.every((t,i)=>t.origin==='A'&&t.idx===i);
+  const bOk=tilesB.every((t,i)=>t.origin==='B'&&t.idx===i);
+  if(aOk&&bOk){
+    if(moves<highScore){highScore=moves;save();}
+    document.getElementById('best').textContent=highScore===Infinity?'-':highScore;
+    document.getElementById('winMsg').textContent='Solved in '+moves+' moves! Best: '+(highScore===Infinity?'-':highScore);
+    document.getElementById('winOverlay').classList.remove('hidden');
+  }
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('winOverlay').classList.add('hidden');
+  document.getElementById('pauseOverlay').classList.add('hidden');
+  moves=0;paused=false;selectedA=null;selectedB=null;
+  document.getElementById('moves').textContent='0';
+  document.getElementById('pauseBtn').textContent='⏸';
+  init();render();
+}
+
+function togglePause(){
+  if(document.getElementById('startOverlay').classList.contains('hidden')===false)return;
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+  document.getElementById('pauseOverlay').classList.toggle('hidden',!paused);
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+
+function save(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){
+    if(e.data.state.highScore!=null){highScore=e.data.state.highScore;document.getElementById('best').textContent=highScore===Infinity?'-':highScore;}
+  }
+});
+</script>
+</body>
+</html>

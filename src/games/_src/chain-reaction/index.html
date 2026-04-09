@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chain Reaction</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Chain Reaction</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Click a cell to add an orb</div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Chain Reaction</h2>
+<p>Place orbs in cells. Cells explode at critical mass (corners:2, edges:3, center:4), spreading to neighbors and converting them. Eliminate all AI orbs to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400,ROWS=8,COLS=8,CS=W/COLS;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let grid,turn,animating,turnCount;
+const PCOLORS=['#3b82f6','#ef4444'];
+
+function critMass(r,c){
+  let m=4;
+  if(r===0||r===ROWS-1)m--;
+  if(c===0||c===COLS-1)m--;
+  return m;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  grid=Array.from({length:ROWS},()=>Array.from({length:COLS},()=>({count:0,owner:-1})));
+  turn=0;animating=false;gameOver=false;gameStarted=true;turnCount=0;
+  draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    let x=c*CS,y=r*CS;
+    ctx.strokeStyle='#1e293b';ctx.strokeRect(x,y,CS,CS);
+    let cell=grid[r][c];
+    if(cell.count>0){
+      ctx.fillStyle=PCOLORS[cell.owner];
+      let cx=x+CS/2,cy=y+CS/2;
+      // Draw orbs
+      let positions=[];
+      if(cell.count===1)positions=[[0,0]];
+      else if(cell.count===2)positions=[[-6,0],[6,0]];
+      else if(cell.count===3)positions=[[-6,-4],[6,-4],[0,6]];
+      else positions=[[-6,-6],[6,-6],[-6,6],[6,6]];
+      positions.forEach(([ox,oy])=>{
+        ctx.beginPath();ctx.arc(cx+ox,cy+oy,6,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.stroke();
+      });
+    }
+  }
+  // Turn indicator
+  ctx.fillStyle=PCOLORS[turn];ctx.fillRect(0,W-4,W,4);
+}
+
+async function explode(){
+  animating=true;
+  let changed=true;
+  while(changed){
+    changed=false;
+    let toExplode=[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(grid[r][c].count>=critMass(r,c))toExplode.push([r,c]);
+    }
+    if(toExplode.length===0)break;
+    changed=true;
+    for(let[r,c]of toExplode){
+      let owner=grid[r][c].owner;
+      grid[r][c].count-=critMass(r,c);
+      if(grid[r][c].count<=0){grid[r][c].count=0;grid[r][c].owner=-1;}
+      [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].forEach(([nr,nc])=>{
+        if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS){
+          grid[nr][nc].count++;grid[nr][nc].owner=owner;
+        }
+      });
+    }
+    draw();
+    await new Promise(r=>setTimeout(r,150));
+    // Check win
+    if(turnCount>1){
+      let counts=[0,0];
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        if(grid[r][c].count>0)counts[grid[r][c].owner]++;
+      }
+      if(counts[0]===0&&counts[1]>0){endGame(false);animating=false;return;}
+      if(counts[1]===0&&counts[0]>0){endGame(true);animating=false;return;}
+    }
+  }
+  animating=false;
+}
+
+C.addEventListener('click',async e=>{
+  if(!gameStarted||gameOver||paused||animating||turn!==0)return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let c=Math.floor(mx/CS),r=Math.floor(my/CS);
+  if(r<0||r>=ROWS||c<0||c>=COLS)return;
+  if(grid[r][c].owner!==-1&&grid[r][c].owner!==0)return;
+
+  grid[r][c].count++;grid[r][c].owner=0;
+  turnCount++;draw();
+  await explode();
+  if(gameOver)return;
+  turn=1;updateInfo();
+  setTimeout(aiMove,400);
+});
+
+async function aiMove(){
+  if(gameOver||paused)return;
+  // Find best move: prefer cells near critical mass, or cells that would capture
+  let best=null,bestScore=-999;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(grid[r][c].owner!==-1&&grid[r][c].owner!==1)continue;
+    let score=0;
+    let newCount=grid[r][c].count+1;
+    if(newCount>=critMass(r,c))score+=10; // Will explode
+    // Prefer capturing neighbors
+    [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].forEach(([nr,nc])=>{
+      if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&grid[nr][nc].owner===0)score+=3;
+    });
+    score+=Math.random()*2;
+    if(grid[r][c].owner===-1)score-=1; // Slight penalty for empty
+    if(score>bestScore){bestScore=score;best=[r,c];}
+  }
+  // Also consider empty cells
+  if(!best){
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(grid[r][c].owner===-1){best=[r,c];break;}
+    }
+  }
+  if(!best){endGame(true);return;}
+
+  grid[best[0]][best[1]].count++;grid[best[0]][best[1]].owner=1;
+  turnCount++;draw();
+  await explode();
+  if(!gameOver){turn=0;updateInfo();}
+}
+
+function updateInfo(){
+  document.getElementById('info').textContent=turn===0?'Your turn (Blue) - Click a cell':'AI thinking (Red)...';
+}
+
+function endGame(won){
+  gameOver=true;
+  if(won)highScore++;
+  document.getElementById('winMsg').textContent=won?'You Win!':'AI Wins!';
+  document.getElementById('winDetail').textContent=`Wins: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'chain-reaction',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='chain-reaction'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

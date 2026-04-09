@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spy Hunter</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:0.5rem}
+.overlay p{color:#e2e8f0;margin:0.25rem 0;font-size:0.9rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.3rem}
+button:hover{opacity:0.85}
+.pause-btn{background:#334155}
+#game-wrapper{position:relative;display:inline-block;margin:0.25rem 0}
+.hud{display:flex;gap:1rem;font-size:0.8rem;color:#e2e8f0;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.hud span{color:#22c55e}
+.game-controls{display:flex;gap:0.3rem;margin:0.25rem 0;flex-wrap:wrap;justify-content:center}
+.game-controls button{font-size:1rem;padding:0.5rem 0.7rem;background:#334155;min-width:44px;min-height:44px}
+.ctrl-grid{display:flex;flex-direction:column;gap:0.3rem;align-items:center}
+.ctrl-row{display:flex;gap:0.3rem}
+</style>
+</head>
+<body>
+<h1>Spy Hunter</h1>
+<div class="hud">
+  Score: <span id="score">0</span> | Lives: <span id="lives">3</span> | High: <span id="hi">0</span>
+</div>
+<div id="game-wrapper">
+  <canvas id="c" width="360" height="600"></canvas>
+  <div class="overlay" id="start-overlay">
+    <h2>Spy Hunter</h2>
+    <p>Shoot enemy cars (red), avoid civilians (blue)</p>
+    <p>Arrows/WASD to steer, Space to shoot</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div class="overlay" id="over-overlay" style="display:none">
+    <h2>Game Over</h2>
+    <p>Score: <span id="final-score">0</span></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+<div class="game-controls">
+  <div class="ctrl-grid">
+    <div class="ctrl-row"><button ontouchstart="keys.up=true" ontouchend="keys.up=false" onmousedown="keys.up=true" onmouseup="keys.up=false">▲</button></div>
+    <div class="ctrl-row">
+      <button ontouchstart="keys.left=true" ontouchend="keys.left=false" onmousedown="keys.left=true" onmouseup="keys.left=false">◀</button>
+      <button ontouchstart="keys.down=true" ontouchend="keys.down=false" onmousedown="keys.down=true" onmouseup="keys.down=false">▼</button>
+      <button ontouchstart="keys.right=true" ontouchend="keys.right=false" onmousedown="keys.right=true" onmouseup="keys.right=false">▶</button>
+    </div>
+  </div>
+  <button ontouchstart="keys.fire=true" ontouchend="keys.fire=false" onmousedown="keys.fire=true" onmouseup="keys.fire=false" style="background:#ef4444;align-self:center">🔫 Fire</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W=360,H=600;
+let player,cars,bullets,roadY,score,lives,highScore=0,gameState='start',paused=false,spawnTimer=0,speed=3;
+let keys={up:false,down:false,left:false,right:false,fire:false};
+let lanes=[80,140,200,260];
+let fireCD=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='spy-hunter'){highScore=e.data.state?.highScore||0;document.getElementById('hi').textContent=highScore}});
+function save(){try{parent.postMessage({type:'ca-save',slug:'spy-hunter',state:{highScore}},'*')}catch(e){}}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=true;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+  if(e.key===' ')keys.fire=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+  e.key===' '&&e.preventDefault();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=false;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=false;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+  if(e.key===' ')keys.fire=false;
+});
+
+function startGame(){
+  document.getElementById('start-overlay').style.display='none';
+  document.getElementById('over-overlay').style.display='none';
+  player={x:W/2,y:H-80,w:24,h:36};
+  cars=[];bullets=[];roadY=0;score=0;lives=3;speed=3;spawnTimer=0;fireCD=0;
+  gameState='play';paused=false;
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+
+function togglePause(){if(gameState!=='play')return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop()}
+
+function spawnCar(){
+  let lane=lanes[Math.floor(Math.random()*lanes.length)];
+  let isEnemy=Math.random()<0.6;
+  let dir=Math.random()<0.3?1:-1; // 1=same dir (slow), -1=oncoming
+  cars.push({x:lane,y:dir===1?-40:H+40,w:22,h:34,enemy:isEnemy,speed:dir===1?speed*0.5:speed*1.5,dir});
+}
+
+function update(){
+  if(keys.left)player.x-=3.5;
+  if(keys.right)player.x+=3.5;
+  if(keys.up)player.y-=2;
+  if(keys.down)player.y+=2;
+  player.x=Math.max(50,Math.min(W-50,player.x));
+  player.y=Math.max(H/2,Math.min(H-40,player.y));
+
+  fireCD--;
+  if(keys.fire&&fireCD<=0){
+    bullets.push({x:player.x,y:player.y-20,vy:-8});
+    fireCD=10;
+  }
+
+  roadY=(roadY+speed)%40;
+  score+=Math.floor(speed*0.1);
+  speed=3+score*0.001;
+
+  spawnTimer++;
+  if(spawnTimer>60-Math.min(score*0.01,30)){spawnTimer=0;spawnCar()}
+
+  // Bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    bullets[i].y+=bullets[i].vy;
+    if(bullets[i].y<-10){bullets.splice(i,1);continue}
+    for(let j=cars.length-1;j>=0;j--){
+      let b=bullets[i],c=cars[j];
+      if(b&&Math.abs(b.x-c.x)<c.w&&Math.abs(b.y-c.y)<c.h){
+        if(c.enemy){score+=50;cars.splice(j,1);bullets.splice(i,1)}
+        else{score-=100;lives--;cars.splice(j,1);bullets.splice(i,1);if(lives<=0){endGame();return}}
+        break;
+      }
+    }
+  }
+
+  // Cars
+  for(let i=cars.length-1;i>=0;i--){
+    let c=cars[i];
+    if(c.dir===1)c.y+=c.speed;else c.y-=c.speed;
+    if(c.y<-60||c.y>H+60){cars.splice(i,1);continue}
+    // Collision with player
+    if(Math.abs(c.x-player.x)<(c.w+player.w)/2&&Math.abs(c.y-player.y)<(c.h+player.h)/2){
+      lives--;cars.splice(i,1);
+      if(lives<=0){endGame();return}
+      player.y=H-80;
+    }
+  }
+
+  document.getElementById('score').textContent=score;
+  document.getElementById('lives').textContent=lives;
+}
+
+function endGame(){
+  gameState='over';
+  if(score>highScore){highScore=score;save()}
+  document.getElementById('hi').textContent=highScore;
+  document.getElementById('final-score').textContent=score;
+  document.getElementById('over-overlay').style.display='flex';
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Road
+  ctx.fillStyle='#1e293b';ctx.fillRect(50,0,W-100,H);
+  // Lane markings
+  ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.setLineDash([20,20]);
+  for(let lx of [120,180,240]){
+    ctx.beginPath();ctx.moveTo(lx,-roadY);
+    for(let ly=-roadY;ly<H+40;ly+=40){ctx.moveTo(lx,ly);ctx.lineTo(lx,ly+20)}
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // Road edges
+  ctx.strokeStyle='#e2e8f0';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(50,0);ctx.lineTo(50,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(W-50,0);ctx.lineTo(W-50,H);ctx.stroke();
+  // Player car
+  ctx.fillStyle='#22c55e';ctx.fillRect(player.x-player.w/2,player.y-player.h/2,player.w,player.h);
+  ctx.fillStyle='#e2e8f0';ctx.fillRect(player.x-6,player.y-player.h/2,12,6);
+  // Cars
+  for(let c of cars){
+    ctx.fillStyle=c.enemy?'#ef4444':'#3b82f6';
+    ctx.fillRect(c.x-c.w/2,c.y-c.h/2,c.w,c.h);
+  }
+  // Bullets
+  ctx.fillStyle='#facc15';
+  for(let b of bullets){ctx.fillRect(b.x-2,b.y-4,4,8)}
+}
+
+function loop(){if(gameState!=='play'||paused)return;update();draw();requestAnimationFrame(loop)}
+ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+</script>
+</body>
+</html>

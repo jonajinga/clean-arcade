@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Maze</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Number Maze</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Click a highlighted cell to move exactly N squares</div>
+<div class="controls">
+<button onclick="resetLevel()">Reset Level</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Number Maze</h2>
+<p>Each cell has a number. You must move exactly that many squares in any cardinal direction. Reach the EXIT cell!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let grid,size,playerR,playerC,exitR,exitC,level,moves,validMoves;
+
+function genLevel(){
+  size=5+Math.min(Math.floor(level/4),3);
+  let cs=W/size;
+  grid=Array.from({length:size},()=>Array.from({length:size},()=>Math.floor(Math.random()*3)+1));
+
+  // Place start and exit far apart
+  playerR=0;playerC=0;
+  exitR=size-1;exitC=size-1;
+  grid[exitR][exitC]=0; // 0 = exit
+  moves=0;
+  calcValidMoves();
+}
+
+function calcValidMoves(){
+  validMoves=[];
+  let n=grid[playerR][playerC];
+  if(n===0)return;
+  [[0,-n],[0,n],[-n,0],[n,0]].forEach(([dr,dc])=>{
+    let nr=playerR+dr,nc=playerC+dc;
+    if(nr>=0&&nr<size&&nc>=0&&nc<size)validMoves.push([nr,nc]);
+  });
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  level=1;gameStarted=true;gameOver=false;
+  genLevel();draw();updateInfo();
+}
+
+function resetLevel(){
+  if(!gameStarted||gameOver)return;
+  playerR=0;playerC=0;moves=0;
+  calcValidMoves();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  let cs=W/size;
+  for(let r=0;r<size;r++)for(let c=0;c<size;c++){
+    let x=c*cs,y=r*cs;
+    let isValid=validMoves.some(([vr,vc])=>vr===r&&vc===c);
+    let isPlayer=r===playerR&&c===playerC;
+    let isExit=r===exitR&&c===exitC;
+
+    if(isExit){ctx.fillStyle='#22c55e';}
+    else if(isPlayer){ctx.fillStyle='#3b82f6';}
+    else if(isValid){ctx.fillStyle='#6366f1';ctx.globalAlpha=0.4;ctx.fillRect(x+1,y+1,cs-2,cs-2);ctx.globalAlpha=1;ctx.fillStyle='#1e293b';}
+    else{ctx.fillStyle='#1e293b';}
+    ctx.fillRect(x+1,y+1,cs-2,cs-2);
+    ctx.strokeStyle=isValid?'#6366f1':'#334155';
+    ctx.strokeRect(x+1,y+1,cs-2,cs-2);
+
+    ctx.fillStyle=isPlayer||isExit?'#fff':'#e2e8f0';
+    ctx.font=`bold ${cs/3}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(isExit?'EXIT':grid[r][c],x+cs/2,y+cs/2);
+  }
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let cs=W/size;
+  let c=Math.floor(mx/cs),r=Math.floor(my/cs);
+
+  if(validMoves.some(([vr,vc])=>vr===r&&vc===c)){
+    playerR=r;playerC=c;moves++;
+    if(r===exitR&&c===exitC){
+      level++;highScore=Math.max(highScore,level-1);
+      if(level>20){
+        gameOver=true;
+        document.getElementById('winMsg').textContent='All Mazes Complete!';
+        document.getElementById('winDetail').textContent=`Levels: ${level-1} | Best: ${highScore}`;
+        document.getElementById('overOverlay').classList.remove('hidden');
+        parent.postMessage({type:'ca-save',slug:'number-maze',state:{highScore}},'*');
+      } else {
+        setTimeout(()=>{genLevel();draw();updateInfo();},400);
+      }
+      return;
+    }
+    calcValidMoves();
+    if(validMoves.length===0){
+      document.getElementById('info').textContent='Stuck! Reset the level.';
+    }
+    draw();updateInfo();
+  }
+});
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Level ${level} | Moves: ${moves} | Current: ${grid[playerR][playerC]}`;
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='number-maze'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

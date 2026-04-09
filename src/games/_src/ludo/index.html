@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ludo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem 0;flex-wrap:wrap;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.9rem;margin:0.25rem;text-align:center}
+#dice-display{font-size:1.5rem;color:#facc15;margin:0.25rem}
+</style>
+</head>
+<body>
+<h1>Ludo</h1>
+<div id="dice-display">🎲 -</div>
+<canvas id="game" width="450" height="450"></canvas>
+<div id="info">Your turn (Red). Click Roll!</div>
+<div class="controls">
+<button id="rollBtn" onclick="rollDice()">🎲 Roll</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Ludo</h2>
+<p>Classic 4-player Ludo. You are Red. Roll dice, click a piece to move it. First to get all 4 pieces home wins!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=450,CELL=W/15;
+let highScore=0,paused=false,gameStarted=false;
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15'];
+const NAMES=['Red','Blue','Green','Yellow'];
+
+// Board path positions (56 squares around the board)
+const PATH=[];
+// Generate the main path (52 squares)
+function genPath(){
+  // Top row right
+  for(let i=0;i<6;i++) PATH.push([8*CELL,(6-i)*CELL]);
+  // Top row across
+  for(let i=0;i<6;i++) PATH.push([(8+i)*CELL,0]);
+  PATH.push([14*CELL,CELL*0]);
+  // Right col down
+  for(let i=0;i<6;i++) PATH.push([14*CELL,(i+1)*CELL]);
+  // Right side across
+  for(let i=0;i<6;i++) PATH.push([(14-i)*CELL,6*CELL]);
+  // Going down
+  PATH.push([8*CELL,6*CELL]);
+  for(let i=0;i<6;i++) PATH.push([(8)*CELL,(6+i+1)*CELL]);
+  // Bottom across
+  PATH.push([8*CELL,14*CELL]);
+  for(let i=0;i<6;i++) PATH.push([(8-i-1)*CELL,14*CELL]);
+  // Bottom up
+  for(let i=0;i<6;i++) PATH.push([CELL*1,14*CELL-(i+1)*CELL]);
+  // Left across
+  PATH.push([0,8*CELL]);
+  for(let i=0;i<6;i++) PATH.push([(i)*CELL,8*CELL]);
+  // Going up
+  PATH.push([6*CELL,8*CELL]);
+  for(let i=0;i<6;i++) PATH.push([6*CELL,(8-i-1)*CELL]);
+}
+
+// Simplified Ludo: each player has 4 pieces, track position on a shared 52-square path
+// Home entries at positions 0,13,26,39 for each player
+// Start positions offset by 13 for each player
+
+let players,currentPlayer,diceVal,rolled,gameOver;
+
+const HOME_BASES=[[1.5,1.5],[9.5,1.5],[9.5,9.5],[1.5,9.5]];
+const START_POS=[0,13,26,39];
+
+// Safe squares
+const SAFE=new Set([0,8,13,21,26,34,39,47]);
+
+function initPlayers(){
+  players=[];
+  for(let p=0;p<4;p++){
+    let pieces=[];
+    for(let i=0;i<4;i++){
+      pieces.push({pos:-1,home:false,baseSlot:i});
+    }
+    players.push(pieces);
+  }
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  gameStarted=true;gameOver=false;
+  currentPlayer=0;diceVal=0;rolled=false;
+  initPlayers();
+  draw();
+  updateInfo();
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';
+}
+
+function rollDice(){
+  if(!gameStarted||gameOver||paused||currentPlayer!==0||rolled)return;
+  diceVal=Math.floor(Math.random()*6)+1;
+  document.getElementById('dice-display').textContent='🎲 '+diceVal;
+  rolled=true;
+  // Check if player can move
+  if(!canMove(0)){
+    rolled=false;
+    if(diceVal!==6) nextTurn();
+    else{rolled=false;diceVal=0;updateInfo();}
+  } else {
+    updateInfo();
+  }
+}
+
+function canMove(p){
+  let pieces=players[p];
+  for(let pc of pieces){
+    if(pc.home)continue;
+    if(pc.pos===-1&&diceVal===6)return true;
+    if(pc.pos>=0){
+      let newPos=(pc.pos+diceVal);
+      if(newPos<=51+6)return true;
+    }
+  }
+  return false;
+}
+
+function getAbsPos(p,relPos){
+  if(relPos<0||relPos>51)return null;
+  return (relPos+START_POS[p])%52;
+}
+
+function getBoardXY(absPos){
+  // Simple circular board positions
+  let angle=(absPos/52)*Math.PI*2 - Math.PI/2;
+  let cx=W/2, cy=W/2, r=W/2-40;
+  return [cx+Math.cos(angle)*r, cy+Math.sin(angle)*r];
+}
+
+function getHomeXY(p,slot){
+  // Home run positions toward center
+  let cx=W/2,cy=W/2;
+  let angle=(START_POS[p]/52)*Math.PI*2 - Math.PI/2;
+  let r=(W/2-40)*(1-(slot+1)/7);
+  return [cx+Math.cos(angle)*r, cy+Math.sin(angle)*r];
+}
+
+function getBaseXY(p,slot){
+  let bx=HOME_BASES[p][0]*CELL*15/12;
+  let by=HOME_BASES[p][1]*CELL*15/12;
+  let ox=(slot%2)*25-12;
+  let oy=Math.floor(slot/2)*25-12;
+  return [bx+ox,by+oy];
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';
+  ctx.fillRect(0,0,W,W);
+
+  // Draw board circle
+  ctx.strokeStyle='#334155';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.arc(W/2,W/2,W/2-40,0,Math.PI*2);
+  ctx.stroke();
+
+  // Draw path squares
+  for(let i=0;i<52;i++){
+    let [x,y]=getBoardXY(i);
+    ctx.fillStyle=SAFE.has(i)?'#334155':'#1e293b';
+    ctx.fillRect(x-10,y-10,20,20);
+    ctx.strokeStyle='#475569';
+    ctx.strokeRect(x-10,y-10,20,20);
+    // Color start positions
+    for(let p=0;p<4;p++){
+      if(i===START_POS[p]){
+        ctx.fillStyle=COLORS[p];
+        ctx.globalAlpha=0.3;
+        ctx.fillRect(x-10,y-10,20,20);
+        ctx.globalAlpha=1;
+      }
+    }
+  }
+
+  // Draw home bases
+  for(let p=0;p<4;p++){
+    ctx.fillStyle=COLORS[p];
+    ctx.globalAlpha=0.2;
+    let bx=HOME_BASES[p][0]*CELL*15/12;
+    let by=HOME_BASES[p][1]*CELL*15/12;
+    ctx.fillRect(bx-35,by-35,70,70);
+    ctx.globalAlpha=1;
+    ctx.strokeStyle=COLORS[p];
+    ctx.strokeRect(bx-35,by-35,70,70);
+  }
+
+  // Draw center home
+  ctx.fillStyle='#1e293b';
+  ctx.fillRect(W/2-25,W/2-25,50,50);
+  ctx.strokeStyle='#facc15';
+  ctx.strokeRect(W/2-25,W/2-25,50,50);
+
+  // Draw pieces
+  for(let p=0;p<4;p++){
+    players[p].forEach((pc,i)=>{
+      let x,y;
+      if(pc.home){
+        // In center
+        x=W/2-15+i*10;y=W/2-5+(p%2)*10;
+      } else if(pc.pos===-1){
+        [x,y]=getBaseXY(p,i);
+      } else if(pc.pos>51){
+        [x,y]=getHomeXY(p,pc.pos-52);
+      } else {
+        let absPos=getAbsPos(p,pc.pos);
+        [x,y]=getBoardXY(absPos);
+      }
+      ctx.fillStyle=COLORS[p];
+      ctx.beginPath();
+      ctx.arc(x,y,8,0,Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle='#fff';
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+      // Number
+      ctx.fillStyle='#fff';
+      ctx.font='bold 8px system-ui';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(i+1,x,y);
+    });
+  }
+
+  // Highlight current player
+  ctx.fillStyle=COLORS[currentPlayer];
+  ctx.globalAlpha=0.5;
+  ctx.fillRect(5,W-20,10,10);
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#e2e8f0';
+  ctx.font='11px system-ui';
+  ctx.textAlign='left';
+  ctx.fillText(NAMES[currentPlayer]+"'s turn",20,W-11);
+}
+
+function updateInfo(){
+  let msg=currentPlayer===0?'Your turn (Red).':'AI ('+NAMES[currentPlayer]+') thinking...';
+  if(rolled)msg+=' Dice: '+diceVal+'. Click a piece!';
+  document.getElementById('info').textContent=msg;
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused||currentPlayer!==0||!rolled)return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx;
+  let my=(e.clientY-rect.top)*sy;
+
+  // Find clicked piece
+  let bestPc=-1,bestDist=30;
+  players[0].forEach((pc,i)=>{
+    if(pc.home)return;
+    let x,y;
+    if(pc.pos===-1){[x,y]=getBaseXY(0,i);}
+    else if(pc.pos>51){[x,y]=getHomeXY(0,pc.pos-52);}
+    else{let ap=getAbsPos(0,pc.pos);[x,y]=getBoardXY(ap);}
+    let d=Math.hypot(mx-x,my-y);
+    if(d<bestDist){bestDist=d;bestPc=i;}
+  });
+
+  if(bestPc>=0){
+    if(tryMove(0,bestPc)){
+      rolled=false;
+      if(checkWin(0)){endGame(0);return;}
+      if(diceVal===6){updateInfo();}
+      else nextTurn();
+    }
+  }
+});
+
+function tryMove(p,pcIdx){
+  let pc=players[p][pcIdx];
+  if(pc.home)return false;
+  if(pc.pos===-1){
+    if(diceVal!==6)return false;
+    pc.pos=0;
+    // Capture check
+    capture(p,pc);
+    draw();
+    return true;
+  }
+  let newPos=pc.pos+diceVal;
+  if(newPos>57)return false; // Can't overshoot home
+  if(newPos>=52&&newPos<=57){
+    pc.pos=newPos;
+    if(newPos===57)pc.home=true;
+    draw();
+    return true;
+  }
+  pc.pos=newPos;
+  capture(p,pc);
+  draw();
+  return true;
+}
+
+function capture(p,pc){
+  if(pc.pos<0||pc.pos>51)return;
+  let absPos=getAbsPos(p,pc.pos);
+  if(SAFE.has(absPos))return;
+  for(let op=0;op<4;op++){
+    if(op===p)continue;
+    players[op].forEach(opc=>{
+      if(opc.pos>=0&&opc.pos<=51&&!opc.home){
+        let oAbs=getAbsPos(op,opc.pos);
+        if(oAbs===absPos)opc.pos=-1;
+      }
+    });
+  }
+}
+
+function checkWin(p){
+  return players[p].every(pc=>pc.home);
+}
+
+function nextTurn(){
+  currentPlayer=(currentPlayer+1)%4;
+  rolled=false;diceVal=0;
+  document.getElementById('dice-display').textContent='🎲 -';
+  draw();
+  updateInfo();
+  if(currentPlayer!==0)setTimeout(aiTurn,600);
+}
+
+function aiTurn(){
+  if(!gameStarted||gameOver||paused)return;
+  diceVal=Math.floor(Math.random()*6)+1;
+  document.getElementById('dice-display').textContent='🎲 '+diceVal;
+  rolled=true;
+
+  if(!canMove(currentPlayer)){
+    rolled=false;
+    if(diceVal===6){diceVal=0;setTimeout(aiTurn,400);return;}
+    nextTurn();
+    return;
+  }
+
+  // AI: try to move best piece
+  let moved=false;
+  let pieces=players[currentPlayer];
+  // Priority: enter piece, capture, advance furthest
+  // Try entering first
+  if(diceVal===6){
+    for(let i=0;i<4;i++){
+      if(pieces[i].pos===-1&&!pieces[i].home){
+        if(tryMove(currentPlayer,i)){moved=true;break;}
+      }
+    }
+  }
+  if(!moved){
+    // Try moving furthest piece
+    let best=-1,bestPos=-1;
+    for(let i=0;i<4;i++){
+      if(pieces[i].pos>=0&&!pieces[i].home&&pieces[i].pos+diceVal<=57){
+        if(pieces[i].pos>bestPos){bestPos=pieces[i].pos;best=i;}
+      }
+    }
+    if(best>=0)tryMove(currentPlayer,best);
+  }
+
+  rolled=false;
+  if(checkWin(currentPlayer)){endGame(currentPlayer);return;}
+  if(diceVal===6)setTimeout(aiTurn,400);
+  else nextTurn();
+}
+
+function endGame(winner){
+  gameOver=true;
+  let won=winner===0;
+  if(won)highScore++;
+  document.getElementById('winMsg').textContent=won?'You Win!':NAMES[winner]+' Wins!';
+  document.getElementById('winDetail').textContent='Wins: '+highScore;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  saveState();
+}
+
+function saveState(){
+  parent.postMessage({type:'ca-save',slug:'ludo',state:{highScore}},'*');
+}
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='ludo'&&e.data.state){
+    highScore=e.data.state.highScore||0;
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

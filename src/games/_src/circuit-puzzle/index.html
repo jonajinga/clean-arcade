@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Circuit Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:500px}
+canvas{display:block;border:2px solid #6366f1;max-width:100%;margin:0 auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:12px}
+.overlay h2{color:#facc15;font-size:1.4rem}
+.overlay p{color:#e2e8f0;font-size:0.9rem;text-align:center;max-width:85%}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 28px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#pause-btn{background:#334155;margin-top:6px}
+#hud{display:flex;justify-content:space-between;max-width:500px;width:100%;padding:2px 4px;font-size:0.85rem}
+#controls{display:flex;gap:8px;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Circuit Puzzle</h1>
+<div id="hud"><span id="hud-level">Level: 1/10</span><span id="hud-hs">Best: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="500" height="500"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Circuit Puzzle</h2>
+<p>Click grid cells to place wires and connect the battery (green) to the bulb (red). Complete the circuit to light the bulb!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay" id="win-overlay" style="display:none">
+<h2 id="win-title">Level Complete!</h2>
+<p id="win-msg"></p>
+<button id="win-btn" onclick="nextLevel()">Next Level</button>
+</div>
+</div>
+<div id="controls">
+<button onclick="clearWires()">🗑 Clear</button>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=500,H=500,SLUG='circuit-puzzle';
+let currentLevel=0,highScore=0,paused=false,gameStarted=false;
+let grid=[],COLS=0,ROWS=0,CS=0,battery={},bulb={},walls=[];
+
+// Cell types: 0=empty, 1=wire, 2=battery, 3=bulb, 4=wall
+const levels=[
+  {cols:5,rows:5,battery:{x:0,y:2},bulb:{x:4,y:2},walls:[]},
+  {cols:5,rows:5,battery:{x:0,y:0},bulb:{x:4,y:4},walls:[{x:2,y:1},{x:2,y:2},{x:2,y:3}]},
+  {cols:6,rows:6,battery:{x:0,y:0},bulb:{x:5,y:5},walls:[{x:1,y:1},{x:2,y:1},{x:3,y:3},{x:4,y:3}]},
+  {cols:6,rows:6,battery:{x:0,y:3},bulb:{x:5,y:0},walls:[{x:1,y:1},{x:2,y:1},{x:3,y:1},{x:3,y:2},{x:3,y:3},{x:3,y:4}]},
+  {cols:7,rows:7,battery:{x:0,y:3},bulb:{x:6,y:3},walls:[{x:1,y:1},{x:2,y:1},{x:3,y:0},{x:3,y:1},{x:3,y:2},{x:3,y:4},{x:3,y:5},{x:3,y:6},{x:5,y:2},{x:5,y:3},{x:5,y:4}]},
+  {cols:7,rows:7,battery:{x:0,y:0},bulb:{x:6,y:6},walls:[{x:1,y:2},{x:2,y:2},{x:2,y:4},{x:3,y:4},{x:4,y:1},{x:4,y:2},{x:4,y:4},{x:5,y:4}]},
+  {cols:8,rows:8,battery:{x:0,y:4},bulb:{x:7,y:4},walls:[{x:2,y:0},{x:2,y:1},{x:2,y:2},{x:2,y:3},{x:2,y:5},{x:2,y:6},{x:5,y:2},{x:5,y:3},{x:5,y:4},{x:5,y:5},{x:5,y:6},{x:5,y:7}]},
+  {cols:8,rows:8,battery:{x:0,y:0},bulb:{x:7,y:7},walls:[{x:1,y:1},{x:2,y:1},{x:3,y:1},{x:1,y:3},{x:2,y:3},{x:3,y:3},{x:4,y:4},{x:5,y:4},{x:6,y:4},{x:4,y:6},{x:5,y:6},{x:6,y:6}]},
+  {cols:9,rows:9,battery:{x:0,y:4},bulb:{x:8,y:4},walls:[{x:2,y:1},{x:2,y:2},{x:2,y:3},{x:2,y:5},{x:2,y:6},{x:2,y:7},{x:4,y:0},{x:4,y:1},{x:4,y:3},{x:4,y:5},{x:4,y:7},{x:4,y:8},{x:6,y:1},{x:6,y:2},{x:6,y:3},{x:6,y:5},{x:6,y:6},{x:6,y:7}]},
+  {cols:10,rows:10,battery:{x:0,y:5},bulb:{x:9,y:5},walls:[{x:2,y:0},{x:2,y:1},{x:2,y:2},{x:2,y:3},{x:2,y:5},{x:2,y:7},{x:2,y:8},{x:2,y:9},{x:4,y:1},{x:4,y:2},{x:4,y:4},{x:4,y:5},{x:4,y:6},{x:4,y:8},{x:4,y:9},{x:6,y:0},{x:6,y:1},{x:6,y:3},{x:6,y:4},{x:6,y:5},{x:6,y:7},{x:6,y:8},{x:8,y:1},{x:8,y:2},{x:8,y:3},{x:8,y:5},{x:8,y:6},{x:8,y:8},{x:8,y:9}]}
+];
+
+function loadLevel(n){
+  const l=levels[n];
+  COLS=l.cols;ROWS=l.rows;CS=Math.floor(W/Math.max(COLS,ROWS));
+  battery=l.battery;bulb=l.bulb;walls=l.walls;
+  grid=[];
+  for(let y=0;y<ROWS;y++){grid[y]=[];for(let x=0;x<COLS;x++)grid[y][x]=0}
+  grid[battery.y][battery.x]=2;
+  grid[bulb.y][bulb.x]=3;
+  for(let w of walls)grid[w.y][w.x]=4;
+  document.getElementById('hud-level').textContent=`Level: ${n+1}/10`;
+}
+
+function clearWires(){
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(grid[y][x]===1)grid[y][x]=0;
+  draw();
+}
+
+function checkCircuit(){
+  // BFS from battery to bulb through wires
+  let visited=new Set();
+  let queue=[`${battery.x},${battery.y}`];
+  visited.add(queue[0]);
+  while(queue.length>0){
+    let [cx,cy]=queue.shift().split(',').map(Number);
+    if(cx===bulb.x&&cy===bulb.y)return true;
+    let dirs=[[0,1],[0,-1],[1,0],[-1,0]];
+    for(let[dx,dy]of dirs){
+      let nx=cx+dx,ny=cy+dy;
+      let key=`${nx},${ny}`;
+      if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&!visited.has(key)&&grid[ny][nx]!==0&&grid[ny][nx]!==4){
+        visited.add(key);queue.push(key);
+      }
+    }
+  }
+  return false;
+}
+
+function getConnected(){
+  let connected=new Set();
+  let queue=[`${battery.x},${battery.y}`];
+  connected.add(queue[0]);
+  while(queue.length>0){
+    let [cx,cy]=queue.shift().split(',').map(Number);
+    let dirs=[[0,1],[0,-1],[1,0],[-1,0]];
+    for(let[dx,dy]of dirs){
+      let nx=cx+dx,ny=cy+dy;
+      let key=`${nx},${ny}`;
+      if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&!connected.has(key)&&(grid[ny][nx]===1||grid[ny][nx]===3)){
+        connected.add(key);queue.push(key);
+      }
+    }
+  }
+  return connected;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  let ox=(W-COLS*CS)/2,oy=(H-ROWS*CS)/2;
+  let lit=checkCircuit();
+  let connected=lit?getConnected():new Set();
+  // grid
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    let px=ox+x*CS,py=oy+y*CS;
+    ctx.strokeStyle='#1e293b';ctx.lineWidth=1;ctx.strokeRect(px,py,CS,CS);
+    let v=grid[y][x];
+    if(v===4){ctx.fillStyle='#334155';ctx.fillRect(px+2,py+2,CS-4,CS-4)}
+    else if(v===1){
+      let isConn=connected.has(`${x},${y}`);
+      ctx.fillStyle=isConn?'#facc15':'#6366f1';
+      // draw wire connections
+      let cx2=px+CS/2,cy2=py+CS/2;
+      ctx.fillRect(cx2-4,cy2-4,8,8);
+      let dirs=[[0,1],[0,-1],[1,0],[-1,0]];
+      for(let[dx,dy]of dirs){
+        let nx=x+dx,ny=y+dy;
+        if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS&&grid[ny][nx]!==0&&grid[ny][nx]!==4){
+          ctx.fillRect(cx2+Math.min(0,dx*CS/2)-2,cy2+Math.min(0,dy*CS/2)-2,dx!==0?CS/2+4:4,dy!==0?CS/2+4:4);
+        }
+      }
+    }
+    else if(v===2){
+      // battery
+      ctx.fillStyle='#22c55e';ctx.fillRect(px+6,py+6,CS-12,CS-12);
+      ctx.fillStyle='#e2e8f0';ctx.font=`bold ${CS/3}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('+',px+CS/2,py+CS/2);
+    }
+    else if(v===3){
+      // bulb
+      ctx.fillStyle=lit?'#facc15':'#ef4444';
+      ctx.beginPath();ctx.arc(px+CS/2,py+CS/2,(CS-12)/2,0,Math.PI*2);ctx.fill();
+      if(lit){ctx.shadowColor='#facc15';ctx.shadowBlur=15;ctx.beginPath();ctx.arc(px+CS/2,py+CS/2,(CS-16)/2,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}
+      ctx.fillStyle='#0f172a';ctx.font=`bold ${CS/3}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('💡',px+CS/2,py+CS/2);
+    }
+  }
+}
+
+function handleClick(e){
+  if(!gameStarted||paused)return;
+  let r=canvas.getBoundingClientRect();
+  let sx=W/r.width,sy=H/r.height;
+  let cx=((e.clientX||e.touches[0].clientX)-r.left)*sx;
+  let cy=((e.clientY||e.touches[0].clientY)-r.top)*sy;
+  let ox=(W-COLS*CS)/2,oy=(H-ROWS*CS)/2;
+  let gx=Math.floor((cx-ox)/CS),gy=Math.floor((cy-oy)/CS);
+  if(gx<0||gx>=COLS||gy<0||gy>=ROWS)return;
+  if(grid[gy][gx]===0)grid[gy][gx]=1;
+  else if(grid[gy][gx]===1)grid[gy][gx]=0;
+  else return;
+  draw();
+  if(checkCircuit()){
+    let wireCount=0;
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(grid[y][x]===1)wireCount++;
+    let score=(currentLevel+1)*100+Math.max(0,(20-wireCount)*10);
+    highScore+=score;
+    document.getElementById('hud-hs').textContent=`Best: ${highScore}`;
+    saveState();
+    setTimeout(()=>{
+      if(currentLevel>=9){
+        document.getElementById('win-title').textContent='All Circuits Complete!';
+        document.getElementById('win-msg').textContent=`Total score: ${highScore}`;
+        document.getElementById('win-btn').textContent='Play Again';
+        document.getElementById('win-btn').onclick=()=>{currentLevel=0;highScore=0;loadLevel(0);draw();document.getElementById('win-overlay').style.display='none'};
+      } else {
+        document.getElementById('win-title').textContent='Circuit Complete!';
+        document.getElementById('win-msg').textContent=`Bulb is lit! Wires used: ${wireCount}`;
+        document.getElementById('win-btn').textContent='Next Level';
+        document.getElementById('win-btn').onclick=nextLevel;
+      }
+      document.getElementById('win-overlay').style.display='flex';
+    },500);
+  }
+}
+
+canvas.addEventListener('click',handleClick);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleClick(e)},{passive:false});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause()});
+
+function togglePause(){paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function nextLevel(){currentLevel++;loadLevel(currentLevel);draw();document.getElementById('win-overlay').style.display='none'}
+function startGame(){gameStarted=true;document.getElementById('start-overlay').style.display='none';loadLevel(0);draw()}
+function saveState(){try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('hud-hs').textContent=`Best: ${highScore}`}});
+function resizeCanvas(){let w=document.getElementById('game-wrap').clientWidth;canvas.style.width=w+'px';canvas.style.height=w+'px'}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+loadLevel(0);draw();
+</script>
+</body>
+</html>

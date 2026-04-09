@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sequence Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:0.5rem}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:500px}
+#game-area{border:2px solid #6366f1;padding:1.5rem;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;padding:0 1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.85}
+#sequence{font-size:1.8rem;font-weight:bold;color:#facc15;text-align:center;letter-spacing:0.1em}
+#choices{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;width:100%;max-width:300px}
+#choices button{padding:0.8rem;font-size:1.2rem;background:#334155}
+#choices button:hover{background:#475569}
+#choices button.correct{background:#22c55e;color:#0f172a}
+#choices button.wrong{background:#ef4444}
+#info{font-size:0.95rem;text-align:center;margin:0.3rem 0}
+#feedback{font-size:1rem;min-height:1.5rem;text-align:center;margin:0.3rem 0}
+</style>
+</head>
+<body>
+<h1>Sequence Puzzle</h1>
+<div id="info">Round <span id="round">1</span>/20 | Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="sequence"></div>
+<div id="feedback"></div>
+<div id="choices"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Sequence Puzzle</h2>
+<p>Find the next number in the sequence. 20 rounds!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Game Over</h2>
+<p id="end-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const SLUG='sequence-puzzle';
+let round=0,score=0,highScore=0,sequences=[],answered=false;
+function genSequences(){
+ sequences=[];
+ for(let i=0;i<20;i++){
+  const type=Math.floor(Math.random()*6);
+  let seq=[],answer,rule;
+  const a=Math.floor(Math.random()*5)+1;
+  const b=Math.floor(Math.random()*5)+2;
+  switch(type){
+   case 0:// arithmetic +
+    seq=[a,a+b,a+2*b,a+3*b];answer=a+4*b;rule='+'+b;break;
+   case 1:// arithmetic -
+    {const s=a+5*b;seq=[s,s-b,s-2*b,s-3*b];answer=s-4*b;rule='-'+b;}break;
+   case 2:// multiply
+    seq=[a,a*2,a*4,a*8];answer=a*16;rule='x2';break;
+   case 3:// squares
+    {const s2=Math.floor(Math.random()*3)+2;seq=[s2*s2,(s2+1)*(s2+1),(s2+2)*(s2+2),(s2+3)*(s2+3)];answer=(s2+4)*(s2+4);rule='squares';}break;
+   case 4:// add increasing
+    {const s3=Math.floor(Math.random()*3)+1;seq=[s3,s3+1,s3+3,s3+6];answer=s3+10;rule='+1,+2,+3,+4';}break;
+   case 5:// fibonacci-like
+    {const f1=Math.floor(Math.random()*3)+1,f2=Math.floor(Math.random()*3)+2;seq=[f1,f2,f1+f2,f2+f1+f2];answer=f1+f2+f2+f1+f2;rule='fib-like';}break;
+  }
+  const wrongs=new Set();
+  while(wrongs.size<3){
+   const w=answer+Math.floor(Math.random()*11)-5;
+   if(w!==answer&&w>=0)wrongs.add(w);
+  }
+  const options=[answer,...wrongs].sort(()=>Math.random()-0.5);
+  sequences.push({seq,answer,options});
+ }
+}
+function startGame(){
+ document.getElementById('start-overlay').classList.add('hidden');
+ document.getElementById('end-overlay').classList.add('hidden');
+ round=0;score=0;genSequences();showRound();
+}
+function showRound(){
+ answered=false;
+ document.getElementById('round').textContent=round+1;
+ document.getElementById('score').textContent=score;
+ document.getElementById('best').textContent=highScore;
+ document.getElementById('feedback').textContent='';
+ const s=sequences[round];
+ document.getElementById('sequence').textContent=s.seq.join(', ')+', ?';
+ const ch=document.getElementById('choices');ch.innerHTML='';
+ s.options.forEach(opt=>{
+  const b=document.createElement('button');b.textContent=opt;
+  b.onclick=()=>pick(opt,b);ch.appendChild(b);
+ });
+}
+function pick(val,btn){
+ if(answered)return;answered=true;
+ const s=sequences[round];
+ const fb=document.getElementById('feedback');
+ if(val===s.answer){
+  btn.classList.add('correct');fb.textContent='Correct!';fb.style.color='#22c55e';score++;
+ }else{
+  btn.classList.add('wrong');fb.textContent='Answer: '+s.answer;fb.style.color='#ef4444';
+  document.querySelectorAll('#choices button').forEach(b=>{if(parseInt(b.textContent)===s.answer)b.classList.add('correct');});
+ }
+ document.getElementById('score').textContent=score;
+ setTimeout(()=>{
+  round++;
+  if(round>=20){endGame();}else{showRound();}
+ },1200);
+}
+function endGame(){
+ if(score>highScore){highScore=score;try{parent.postMessage({type:'ca-save',slug:SLUG,state:{highScore}},'*');}catch(e){}}
+ document.getElementById('best').textContent=highScore;
+ document.getElementById('end-msg').textContent='Score: '+score+'/20 | Best: '+highScore;
+ document.getElementById('end-overlay').classList.remove('hidden');
+}
+window.addEventListener('message',e=>{
+ if(e.data&&e.data.type==='ca-load'&&e.data.slug===SLUG&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('best').textContent=highScore;}
+});
+</script>
+</body>
+</html>

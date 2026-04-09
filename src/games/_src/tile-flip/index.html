@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tile Flip</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Tile Flip</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Click a tile to flip it and its neighbors</div>
+<div class="controls">
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Tile Flip</h2>
+<p>Click a tile to flip it and all adjacent tiles. Make all tiles the same color to win!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">You Win!</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let grid,size,moves,level;
+
+function genLevel(){
+  size=3+Math.min(Math.floor(level/3),3);
+  grid=Array.from({length:size},()=>new Array(size).fill(0));
+  // Random scramble
+  let flips=size*2+level;
+  for(let i=0;i<flips;i++){
+    let r=Math.floor(Math.random()*size),c=Math.floor(Math.random()*size);
+    flipAt(r,c);
+  }
+  // Make sure it's not already solved
+  if(grid.every(row=>row.every(v=>v===0))){grid[0][0]=1;grid[0][1]=1;}
+  moves=0;
+}
+
+function flipAt(r,c){
+  grid[r][c]^=1;
+  if(r>0)grid[r-1][c]^=1;
+  if(r<size-1)grid[r+1][c]^=1;
+  if(c>0)grid[r][c-1]^=1;
+  if(c<size-1)grid[r][c+1]^=1;
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  level=1;gameStarted=true;gameOver=false;
+  genLevel();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  let cs=Math.floor((W-40)/size);
+  let off=(W-cs*size)/2;
+  for(let r=0;r<size;r++)for(let c=0;c<size;c++){
+    let x=off+c*cs,y=off+r*cs;
+    ctx.fillStyle=grid[r][c]===0?'#6366f1':'#ef4444';
+    ctx.fillRect(x+2,y+2,cs-4,cs-4);
+    ctx.strokeStyle='#1e293b';ctx.strokeRect(x+2,y+2,cs-4,cs-4);
+  }
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=W/rect.width,sy=W/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+  let cs=Math.floor((W-40)/size);
+  let off=(W-cs*size)/2;
+  let c=Math.floor((mx-off)/cs),r=Math.floor((my-off)/cs);
+  if(r<0||r>=size||c<0||c>=size)return;
+
+  flipAt(r,c);moves++;draw();updateInfo();
+
+  // Check win
+  let allSame=grid.every(row=>row.every(v=>v===grid[0][0]));
+  if(allSame){
+    level++;highScore=Math.max(highScore,level-1);
+    if(level>20){
+      gameOver=true;
+      document.getElementById('winMsg').textContent='All Levels Complete!';
+      document.getElementById('winDetail').textContent=`Moves: ${moves} | Best level: ${highScore}`;
+      document.getElementById('overOverlay').classList.remove('hidden');
+      parent.postMessage({type:'ca-save',slug:'tile-flip',state:{highScore}},'*');
+    } else {
+      setTimeout(()=>{genLevel();draw();updateInfo();},400);
+    }
+  }
+});
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Level ${level} | Moves: ${moves} | Grid: ${size}x${size}`;
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tile-flip'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

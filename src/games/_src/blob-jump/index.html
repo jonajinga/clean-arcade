@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blob Jump</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center}
+.pause-btn{background:#334155}
+.tap-btn{background:#22c55e;font-size:1.2rem;padding:0.8rem 2.5rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Blob Jump</h1>
+<canvas id="game" width="360" height="480"></canvas>
+<div id="info">Tap to change direction!</div>
+<div class="controls">
+<button class="tap-btn" onclick="tap()">Tap</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Blob Jump</h2>
+<p>A blob bounces between walls. Tap to change direction. Avoid spikes and obstacles. Score = height climbed. Endless!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=360,CH=480;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+let blob,obstacles,score,speed,lastTime,camera,particles;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  blob={x:CW/2,y:CH-60,vx:3,vy:-2,size:12};
+  obstacles=[];score=0;speed=3;camera=0;particles=[];
+  gameStarted=true;gameOver=false;lastTime=performance.now();
+  // Pre-generate obstacles
+  for(let i=0;i<20;i++)spawnObstacle(CH-200-i*120);
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function tap(){
+  if(!gameStarted||gameOver||paused)return;
+  blob.vx*=-1;
+  for(let i=0;i<4;i++)particles.push({x:blob.x,y:blob.y,vx:Math.random()*4-2,vy:Math.random()*4-2,life:12,color:'#facc15'});
+}
+
+function spawnObstacle(y){
+  let type=Math.floor(Math.random()*3);
+  if(type===0){
+    // Spike from wall
+    let side=Math.random()<0.5?'left':'right';
+    let w=30+Math.random()*50;
+    obstacles.push({x:side==='left'?30:CW-30-w,y,w,h:12,type:'spike'});
+  } else if(type===1){
+    // Floating spike
+    let x=50+Math.random()*(CW-130);
+    obstacles.push({x,y,w:30,h:12,type:'spike'});
+  } else {
+    // Moving platform
+    let x=50+Math.random()*(CW-130);
+    obstacles.push({x,y,w:40,h:10,type:'moving',dir:1,ox:x});
+  }
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=Math.min((now-lastTime)/16,3);lastTime=now;
+
+    // Move blob
+    blob.x+=blob.vx*dt;
+    blob.vy+=0.15*dt; // Gravity
+    blob.y+=blob.vy*dt;
+
+    // Wall bounce
+    if(blob.x<=35){blob.x=35;blob.vx=Math.abs(blob.vx);}
+    if(blob.x>=CW-35){blob.x=CW-35;blob.vx=-Math.abs(blob.vx);}
+
+    // Auto bounce up when hitting floor (relative to camera)
+    if(blob.y>=camera+CH-20){
+      blob.vy=-7-speed;
+    }
+
+    // Camera follows blob up
+    let targetCam=blob.y-CH*0.6;
+    if(targetCam<camera)camera+=(targetCam-camera)*0.1;
+
+    // Score
+    let newScore=Math.max(score,Math.floor(-(blob.y-CH+60)/10));
+    if(newScore>score){score=newScore;speed=3+score/50;}
+
+    // Move moving obstacles
+    obstacles.forEach(o=>{
+      if(o.type==='moving'){
+        o.x=o.ox+Math.sin(now/500)*40;
+      }
+    });
+
+    // Collision
+    for(let o of obstacles){
+      let bx=blob.x,by=blob.y;
+      if(bx+blob.size>o.x&&bx-blob.size<o.x+o.w&&by+blob.size>o.y&&by-blob.size<o.y+o.h){
+        if(o.type==='spike'){endGame();return;}
+        else{
+          // Bounce off platform
+          if(blob.vy>0){blob.vy=-6;blob.y=o.y-blob.size;}
+        }
+      }
+    }
+
+    // Remove old obstacles, spawn new
+    obstacles=obstacles.filter(o=>o.y>camera-50);
+    let minY=obstacles.length?Math.min(...obstacles.map(o=>o.y)):camera;
+    while(minY>camera-CH){minY-=100+Math.random()*60;spawnObstacle(minY);}
+
+    // Fall death
+    if(blob.y>camera+CH+100){endGame();return;}
+
+    // Particles
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;});
+    particles=particles.filter(p=>p.life>0);
+    // Trail
+    if(Math.random()<0.4)particles.push({x:blob.x,y:blob.y+blob.size,vx:0,vy:1,life:8,color:'#3b82f6'});
+
+  } else lastTime=now;
+  draw();requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  ctx.save();ctx.translate(0,-camera);
+
+  // Walls
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,camera-10,30,CH+20);ctx.fillRect(CW-30,camera-10,30,CH+20);
+  ctx.strokeStyle='#475569';
+  ctx.beginPath();ctx.moveTo(30,camera-10);ctx.lineTo(30,camera+CH+10);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(CW-30,camera-10);ctx.lineTo(CW-30,camera+CH+10);ctx.stroke();
+
+  // Obstacles
+  obstacles.forEach(o=>{
+    if(o.type==='spike'){
+      ctx.fillStyle='#ef4444';ctx.fillRect(o.x,o.y,o.w,o.h);
+      for(let i=0;i<o.w;i+=8){
+        ctx.beginPath();ctx.moveTo(o.x+i,o.y);ctx.lineTo(o.x+i+4,o.y-8);ctx.lineTo(o.x+i+8,o.y);ctx.fill();
+      }
+    } else {
+      ctx.fillStyle='#64748b';ctx.fillRect(o.x,o.y,o.w,o.h);
+    }
+  });
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.fillStyle=p.color;ctx.globalAlpha=p.life/12;
+    ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+
+  // Blob
+  let squish=1+Math.abs(blob.vy)*0.02;
+  ctx.fillStyle='#22c55e';ctx.save();ctx.translate(blob.x,blob.y);
+  ctx.scale(1/squish,squish);
+  ctx.beginPath();ctx.arc(0,0,blob.size,0,Math.PI*2);ctx.fill();
+  // Eyes
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(-4,-3,3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(4,-3,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#0f172a';
+  let ex=blob.vx>0?1:-1;
+  ctx.beginPath();ctx.arc(-4+ex,-3,1.5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(4+ex,-3,1.5,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+
+  // Score
+  ctx.fillStyle='#facc15';ctx.font='bold 18px system-ui';ctx.textAlign='center';
+  ctx.fillText(score,CW/2,35);
+}
+
+function endGame(){
+  gameOver=true;
+  highScore=Math.max(highScore,score);
+  document.getElementById('winMsg').textContent='Game Over!';
+  document.getElementById('winDetail').textContent=`Score: ${score} | Best: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'blob-jump',state:{highScore}},'*');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key===' '||e.key==='ArrowLeft'||e.key==='ArrowRight')tap();
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+C.addEventListener('click',tap);
+C.addEventListener('touchstart',e=>{e.preventDefault();tap();},{passive:false});
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='blob-jump'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+</script>
+</body>
+</html>

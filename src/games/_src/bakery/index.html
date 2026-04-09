@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bakery</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:320px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+.bake-btn{background:#22c55e}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Bakery</h1>
+<canvas id="game" width="480" height="400"></canvas>
+<div id="info">Bake goods and fill orders!</div>
+<div class="controls">
+<button class="bake-btn" onclick="bake(0)">🍞 Bread $3</button>
+<button class="bake-btn" onclick="bake(1)">🧁 Cupcake $5</button>
+<button class="bake-btn" onclick="bake(2)">🎂 Cake $10</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Bakery</h2>
+<p>Bake bread, cupcakes, and cakes to fill customer orders. Each item takes time to bake. Earn $200 before time runs out!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=400;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+
+const ITEMS=[
+  {name:'Bread',emoji:'🍞',price:3,time:3,color:'#d4a017'},
+  {name:'Cupcake',emoji:'🧁',price:5,time:5,color:'#f472b6'},
+  {name:'Cake',emoji:'🎂',price:10,time:8,color:'#a78bfa'}
+];
+
+let money,timeLeft,ovens,inventory,orders,orderTimer,lastTime;
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  money=0;timeLeft=120;
+  ovens=[null,null,null]; // {type, remaining}
+  inventory=[0,0,0];
+  orders=[];orderTimer=0;
+  gameStarted=true;gameOver=false;
+  lastTime=performance.now();
+  spawnOrder();spawnOrder();
+  requestAnimationFrame(update);
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function bake(type){
+  if(!gameStarted||gameOver||paused)return;
+  let slot=ovens.findIndex(o=>o===null);
+  if(slot<0){document.getElementById('info').textContent='All ovens full!';return;}
+  ovens[slot]={type,remaining:ITEMS[type].time};
+}
+
+function spawnOrder(){
+  let type=Math.floor(Math.random()*3);
+  let qty=Math.floor(Math.random()*3)+1;
+  orders.push({type,qty,timer:20+Math.random()*10});
+}
+
+function fillOrder(idx){
+  let o=orders[idx];
+  if(inventory[o.type]>=o.qty){
+    inventory[o.type]-=o.qty;
+    money+=o.qty*ITEMS[o.type].price+5; // tip
+    orders.splice(idx,1);
+  }
+}
+
+function update(now){
+  if(!gameStarted||gameOver)return;
+  if(!paused){
+    let dt=(now-lastTime)/1000;
+    lastTime=now;
+    timeLeft-=dt;
+    if(timeLeft<=0){endGame();return;}
+
+    // Update ovens
+    ovens.forEach((o,i)=>{
+      if(!o)return;
+      o.remaining-=dt;
+      if(o.remaining<=0){inventory[o.type]++;ovens[i]=null;}
+    });
+
+    // Update orders
+    orderTimer+=dt;
+    if(orderTimer>8){orderTimer=0;if(orders.length<5)spawnOrder();}
+    orders.forEach(o=>o.timer-=dt);
+    orders=orders.filter(o=>o.timer>0);
+
+    // Auto-fill orders
+    for(let i=orders.length-1;i>=0;i--){
+      let o=orders[i];
+      if(inventory[o.type]>=o.qty)fillOrder(i);
+    }
+  } else {lastTime=now;}
+
+  draw();
+  requestAnimationFrame(update);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  // Header
+  ctx.fillStyle='#facc15';ctx.font='bold 16px system-ui';ctx.textAlign='left';
+  ctx.fillText(`$${money}`,10,25);
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';ctx.textAlign='right';
+  ctx.fillText(`Time: ${Math.ceil(timeLeft)}s`,CW-10,25);
+
+  // Goal bar
+  ctx.fillStyle='#334155';ctx.fillRect(10,35,CW-20,10);
+  ctx.fillStyle='#22c55e';ctx.fillRect(10,35,Math.min(money/200,1)*(CW-20),10);
+  ctx.fillStyle='#64748b';ctx.font='9px system-ui';ctx.textAlign='center';
+  ctx.fillText('Goal: $200',CW/2,43);
+
+  // Ovens
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+  ctx.fillText('Ovens:',10,70);
+  for(let i=0;i<3;i++){
+    let x=80+i*130,y=55;
+    ctx.fillStyle='#1e293b';ctx.fillRect(x,y,110,35);
+    ctx.strokeStyle='#475569';ctx.strokeRect(x,y,110,35);
+    if(ovens[i]){
+      let item=ITEMS[ovens[i].type];
+      let pct=1-ovens[i].remaining/item.time;
+      ctx.fillStyle=item.color;ctx.globalAlpha=0.3;ctx.fillRect(x,y,110*pct,35);ctx.globalAlpha=1;
+      ctx.fillStyle='#e2e8f0';ctx.font='11px system-ui';
+      ctx.fillText(`${item.emoji} ${Math.ceil(ovens[i].remaining)}s`,x+5,y+22);
+    } else {
+      ctx.fillStyle='#64748b';ctx.font='11px system-ui';
+      ctx.fillText('Empty',x+30,y+22);
+    }
+  }
+
+  // Inventory
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+  ctx.fillText('Stock:',10,115);
+  ITEMS.forEach((item,i)=>{
+    ctx.fillText(`${item.emoji} x${inventory[i]}`,80+i*130,115);
+  });
+
+  // Orders
+  ctx.fillStyle='#e2e8f0';ctx.font='bold 13px system-ui';
+  ctx.fillText('Orders:',10,145);
+  orders.forEach((o,i)=>{
+    let x=10,y=155+i*45;
+    let item=ITEMS[o.type];
+    ctx.fillStyle='#1e293b';ctx.fillRect(x,y,CW-20,40);
+    ctx.strokeStyle=o.timer<5?'#ef4444':'#475569';ctx.strokeRect(x,y,CW-20,40);
+    // Timer bar
+    ctx.fillStyle=o.timer<5?'#ef4444':'#22c55e';
+    ctx.fillRect(x,y,Math.max(0,o.timer/30)*(CW-20),3);
+    ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';ctx.textAlign='left';
+    ctx.fillText(`${item.emoji} x${o.qty}  ($${o.qty*item.price+5})`,x+10,y+25);
+    let canFill=inventory[o.type]>=o.qty;
+    ctx.fillStyle=canFill?'#22c55e':'#64748b';ctx.textAlign='right';
+    ctx.fillText(canFill?'Ready!':'Need stock',CW-20,y+25);
+  });
+}
+
+function endGame(){
+  gameOver=true;
+  let won=money>=200;
+  if(won)highScore=Math.max(highScore,money);
+  document.getElementById('winMsg').textContent=won?'You Win!':'Time\'s Up!';
+  document.getElementById('winDetail').textContent=`Earned: $${money} | Best: $${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'bakery',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='bakery'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Balance Scale</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;justify-content:center;flex-wrap:wrap}
+.pause-btn{background:#334155}
+.weight-btn{background:#22c55e;font-size:0.9rem;padding:0.5rem 0.8rem}
+#info{color:#e2e8f0;font-size:0.85rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Balance Scale</h1>
+<canvas id="game" width="480" height="350"></canvas>
+<div id="info">Place weights to balance the beam!</div>
+<div class="controls">
+<button class="weight-btn" onclick="selectWeight(1)">1kg</button>
+<button class="weight-btn" onclick="selectWeight(2)">2kg</button>
+<button class="weight-btn" onclick="selectWeight(3)">3kg</button>
+<button class="weight-btn" onclick="selectWeight(5)">5kg</button>
+<button class="weight-btn" onclick="selectWeight(10)">10kg</button>
+<button onclick="checkBalance()">Check</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Balance Scale</h2>
+<p>Place weights on the beam to balance both sides. Click a position on the beam to place your selected weight. 20 levels!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const CW=480,CH=350;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let level,slots,fixedWeights,selectedWeight,beamAngle;
+
+const POSITIONS=[-5,-4,-3,-2,-1,1,2,3,4,5]; // Distance from center
+
+function genLevel(){
+  slots=new Array(10).fill(0);
+  fixedWeights=new Array(10).fill(false);
+  // Place some fixed weights
+  let numFixed=Math.min(2+Math.floor(level/4),5);
+  let placed=0;
+  while(placed<numFixed){
+    let idx=Math.floor(Math.random()*10);
+    if(!fixedWeights[idx]){
+      fixedWeights[idx]=true;
+      slots[idx]=[1,2,3,5][Math.floor(Math.random()*4)];
+      placed++;
+    }
+  }
+  selectedWeight=1;
+  calcAngle();
+}
+
+function calcAngle(){
+  let torque=0;
+  for(let i=0;i<10;i++){
+    torque+=slots[i]*POSITIONS[i];
+  }
+  beamAngle=Math.max(-15,Math.min(15,torque*2));
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  level=1;gameStarted=true;gameOver=false;
+  genLevel();draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function selectWeight(w){selectedWeight=w;updateInfo();}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,CW,CH);
+
+  let cx=CW/2,cy=180;
+  // Fulcrum
+  ctx.fillStyle='#64748b';
+  ctx.beginPath();ctx.moveTo(cx,cy+10);ctx.lineTo(cx-20,cy+60);ctx.lineTo(cx+20,cy+60);ctx.closePath();ctx.fill();
+
+  // Beam
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(beamAngle*Math.PI/180);
+  ctx.fillStyle='#475569';ctx.fillRect(-200,-5,400,10);
+
+  // Slots and weights
+  for(let i=0;i<10;i++){
+    let x=POSITIONS[i]*38;
+    // Slot marker
+    ctx.fillStyle='#64748b';ctx.fillRect(x-2,-8,4,3);
+    // Position label
+    ctx.fillStyle='#94a3b8';ctx.font='9px system-ui';ctx.textAlign='center';
+    ctx.fillText(POSITIONS[i],x,-12);
+
+    if(slots[i]>0){
+      let h=slots[i]*8;
+      ctx.fillStyle=fixedWeights[i]?'#ef4444':'#3b82f6';
+      ctx.fillRect(x-12,-5-h,24,h);
+      ctx.strokeStyle='#fff';ctx.strokeRect(x-12,-5-h,24,h);
+      ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';
+      ctx.fillText(slots[i],x,-5-h/2);
+    }
+  }
+  ctx.restore();
+
+  // Level info
+  ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';ctx.textAlign='center';
+  ctx.fillText(`Level ${level}/20`,CW/2,25);
+
+  // Balance indicator
+  let torque=0;for(let i=0;i<10;i++)torque+=slots[i]*POSITIONS[i];
+  ctx.fillStyle=Math.abs(torque)===0?'#22c55e':'#e2e8f0';ctx.font='12px system-ui';
+  ctx.fillText(`Torque: ${torque>0?'+':''}${torque}`,CW/2,CH-20);
+
+  // Selected weight
+  ctx.fillStyle='#3b82f6';ctx.font='12px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Selected: ${selectedWeight}kg`,10,CH-10);
+}
+
+C.addEventListener('click',e=>{
+  if(!gameStarted||gameOver||paused)return;
+  let rect=C.getBoundingClientRect();
+  let sx=CW/rect.width,sy=CH/rect.height;
+  let mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  // Find closest slot
+  let cx=CW/2,cy=180;
+  let best=-1,bestDist=40;
+  for(let i=0;i<10;i++){
+    let x=cx+POSITIONS[i]*38;
+    let d=Math.abs(mx-x);
+    if(d<bestDist&&my>cy-60&&my<cy+20){bestDist=d;best=i;}
+  }
+  if(best>=0&&!fixedWeights[best]){
+    if(slots[best]===selectedWeight)slots[best]=0; // Toggle off
+    else slots[best]=selectedWeight;
+    calcAngle();draw();
+  }
+});
+
+function checkBalance(){
+  if(!gameStarted||gameOver||paused)return;
+  let torque=0;
+  for(let i=0;i<10;i++)torque+=slots[i]*POSITIONS[i];
+  if(torque===0){
+    level++;highScore=Math.max(highScore,level-1);
+    if(level>20){
+      gameOver=true;
+      document.getElementById('winMsg').textContent='All 20 Levels Complete!';
+      document.getElementById('winDetail').textContent=`Best: ${highScore} levels`;
+      document.getElementById('overOverlay').classList.remove('hidden');
+      parent.postMessage({type:'ca-save',slug:'balance-scale',state:{highScore}},'*');
+    } else {
+      genLevel();draw();updateInfo();
+    }
+  } else {
+    document.getElementById('info').textContent=`Not balanced! Torque: ${torque}`;
+  }
+}
+
+function updateInfo(){
+  document.getElementById('info').textContent=`Level ${level} | Selected: ${selectedWeight}kg | Click beam to place`;
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='balance-scale'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snakes & Ladders</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+canvas{border:2px solid #6366f1;max-width:100%;display:block}
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+.overlay h2{color:#facc15;font-size:1.5rem;margin-bottom:1rem}
+.overlay p{color:#e2e8f0;margin-bottom:1rem;text-align:center;max-width:300px}
+button{background:#6366f1;color:#fff;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;margin:0.25rem}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:0.5rem;margin:0.5rem;flex-wrap:wrap;justify-content:center}
+.pause-btn{background:#334155}
+#info{color:#e2e8f0;font-size:0.9rem;margin:0.25rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Snakes & Ladders</h1>
+<canvas id="game" width="400" height="400"></canvas>
+<div id="info">Roll the dice!</div>
+<div class="controls">
+<button id="rollBtn" onclick="rollDice()">🎲 Roll Dice</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
+</div>
+<div class="overlay" id="startOverlay">
+<h2>Snakes & Ladders</h2>
+<p>Roll dice, climb ladders, avoid snakes! First to square 100 wins. You vs AI.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="overOverlay">
+<h2 id="winMsg">Game Over</h2>
+<p id="winDetail"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<script>
+const C=document.getElementById('game'),ctx=C.getContext('2d');
+const W=400,CELL=W/10;
+let highScore=0,paused=false,gameStarted=false,gameOver=false;
+let playerPos=0,aiPos=0,playerTurn=true,diceVal=0,animating=false;
+
+const SNAKES={16:6,47:26,49:11,56:53,62:19,64:60,87:24,93:73,95:75,98:78};
+const LADDERS={1:38,4:14,9:31,21:42,28:84,36:44,51:67,71:91,80:100};
+
+function sqToXY(sq){
+  if(sq<=0)return[-20,W+10];
+  sq=sq-1;
+  let row=Math.floor(sq/10),col=sq%10;
+  if(row%2===1)col=9-col;
+  let x=col*CELL+CELL/2;
+  let y=W-(row*CELL+CELL/2);
+  return[x,y];
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  // Draw board
+  for(let i=0;i<100;i++){
+    let row=Math.floor(i/10),col=i%10;
+    if(row%2===1)col=9-col;
+    let x=col*CELL,y=W-(row+1)*CELL;
+    ctx.fillStyle=(row+col)%2===0?'#1e293b':'#0f172a';
+    ctx.fillRect(x,y,CELL,CELL);
+    ctx.strokeStyle='#334155';ctx.strokeRect(x,y,CELL,CELL);
+    ctx.fillStyle='#64748b';ctx.font='9px system-ui';ctx.textAlign='center';
+    ctx.fillText(i+1,x+CELL/2,y+12);
+  }
+  // Draw ladders
+  ctx.lineWidth=3;
+  for(let[f,t]of Object.entries(LADDERS)){
+    let[x1,y1]=sqToXY(+f);let[x2,y2]=sqToXY(+t);
+    ctx.strokeStyle='#22c55e';ctx.beginPath();ctx.moveTo(x1-3,y1);ctx.lineTo(x2-3,y2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x1+3,y1);ctx.lineTo(x2+3,y2);ctx.stroke();
+    // Rungs
+    let steps=4;
+    for(let s=1;s<steps;s++){
+      let rx=x1+(x2-x1)*s/steps,ry=y1+(y2-y1)*s/steps;
+      ctx.beginPath();ctx.moveTo(rx-3,ry);ctx.lineTo(rx+3,ry);ctx.stroke();
+    }
+  }
+  // Draw snakes
+  for(let[f,t]of Object.entries(SNAKES)){
+    let[x1,y1]=sqToXY(+f);let[x2,y2]=sqToXY(+t);
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(x1,y1);
+    let mx=(x1+x2)/2+20,my=(y1+y2)/2;
+    ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();
+    // Head
+    ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(x1,y1,4,0,Math.PI*2);ctx.fill();
+  }
+  ctx.lineWidth=1;
+  // Draw pieces
+  let[px,py]=sqToXY(playerPos);
+  ctx.fillStyle='#3b82f6';ctx.beginPath();ctx.arc(px-5,py,8,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 8px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('P',px-5,py);
+
+  let[ax,ay]=sqToXY(aiPos);
+  ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(ax+5,ay,8,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.fillText('A',ax+5,ay);
+
+  // Dice
+  if(diceVal>0){
+    ctx.fillStyle='#facc15';ctx.font='bold 14px system-ui';ctx.textAlign='right';
+    ctx.fillText('🎲 '+diceVal,W-10,20);
+  }
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('overOverlay').classList.add('hidden');
+  gameStarted=true;gameOver=false;animating=false;
+  playerPos=0;aiPos=0;playerTurn=true;diceVal=0;
+  draw();updateInfo();
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'▶':'⏸';}
+
+function rollDice(){
+  if(!gameStarted||gameOver||paused||!playerTurn||animating)return;
+  diceVal=Math.floor(Math.random()*6)+1;
+  animating=true;
+  movePiece('player');
+}
+
+function movePiece(who){
+  let pos=who==='player'?playerPos:aiPos;
+  let newPos=pos+diceVal;
+  if(newPos>100){animating=false;if(who==='player'){playerTurn=false;setTimeout(aiRoll,500);}else{playerTurn=true;updateInfo();}return;}
+  if(who==='player')playerPos=newPos;else aiPos=newPos;
+  draw();
+
+  setTimeout(()=>{
+    // Check snakes/ladders
+    let p=who==='player'?playerPos:aiPos;
+    if(SNAKES[p]){if(who==='player')playerPos=SNAKES[p];else aiPos=SNAKES[p];}
+    if(LADDERS[p]){if(who==='player')playerPos=LADDERS[p];else aiPos=LADDERS[p];}
+    draw();
+
+    let finalPos=who==='player'?playerPos:aiPos;
+    if(finalPos>=100){endGame(who==='player');return;}
+    animating=false;
+    if(who==='player'){playerTurn=false;setTimeout(aiRoll,500);}
+    else{playerTurn=true;updateInfo();}
+  },300);
+}
+
+function aiRoll(){
+  if(gameOver||paused)return;
+  diceVal=Math.floor(Math.random()*6)+1;
+  updateInfo();animating=true;
+  setTimeout(()=>movePiece('ai'),300);
+}
+
+function updateInfo(){
+  let msg=playerTurn?'Your turn! Roll the dice.':'AI rolling...';
+  msg+=` | You: ${playerPos} | AI: ${aiPos}`;
+  document.getElementById('info').textContent=msg;
+}
+
+function endGame(playerWon){
+  gameOver=true;
+  if(playerWon)highScore++;
+  document.getElementById('winMsg').textContent=playerWon?'You Win!':'AI Wins!';
+  document.getElementById('winDetail').textContent=`You: ${playerPos} | AI: ${aiPos} | Wins: ${highScore}`;
+  document.getElementById('overOverlay').classList.remove('hidden');
+  parent.postMessage({type:'ca-save',slug:'snakes-ladders',state:{highScore}},'*');
+}
+
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='ca-load'&&e.data.slug==='snakes-ladders'&&e.data.state)
+    highScore=e.data.state.highScore||0;
+});
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause();});
+</script>
+</body>
+</html>
