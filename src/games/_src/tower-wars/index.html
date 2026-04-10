@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tower Wars</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:420px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:4px;padding:6px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{background:#334155;padding:8px 12px;font-size:0.8rem;min-height:44px}
+.ctrl-btn.active{border:2px solid #facc15}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:2px 8px;flex-wrap:wrap;gap:2px}
+</style>
+</head>
+<body>
+<h1>Tower Wars</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Tower Wars</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Build towers, send troops!<br>Destroy the enemy base.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info">
+<span>Gold: <b id="gold">100</b></span>
+<span>Base HP: <b id="baseHP">100</b></span>
+<span>Enemy HP: <b id="enemyHP">100</b></span>
+<span>Wave: <b id="wave">1</b></span>
+</div>
+<canvas id="c" width="420" height="300"></canvas>
+<div class="controls">
+<button class="ctrl-btn" onclick="buildTower('arrow')">Arrow Tower ($50)</button>
+<button class="ctrl-btn" onclick="buildTower('cannon')">Cannon ($80)</button>
+<button class="ctrl-btn" onclick="sendTroop('soldier')">Soldier ($30)</button>
+<button class="ctrl-btn" onclick="sendTroop('knight')">Knight ($60)</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=420,H=300;
+const LANE_Y=180;
+let gold,baseHP,enemyHP,towers,troops,enemyTroops,projectiles,particles;
+let wave,waveTimer,paused,gameRunning,highScore=0,goldRate;
+const TOWER_SLOTS=[{x:60,y:140},{x:120,y:140},{x:180,y:140},{x:60,y:220},{x:120,y:220},{x:180,y:220}];
+
+function init(){
+  gold=100;baseHP=100;enemyHP=100;wave=1;waveTimer=0;goldRate=0;
+  towers=[];troops=[];enemyTroops=[];projectiles=[];particles=[];
+  paused=false;
+}
+
+function buildTower(type){
+  if(!gameRunning||paused)return;
+  const cost=type==='arrow'?50:80;
+  if(gold<cost)return;
+  // find empty slot
+  const slot=TOWER_SLOTS.find(s=>!towers.some(t=>t.x===s.x&&t.y===s.y));
+  if(!slot)return;
+  gold-=cost;
+  towers.push({x:slot.x,y:slot.y,type,range:type==='arrow'?100:80,damage:type==='arrow'?5:15,cooldown:0,maxCD:type==='arrow'?30:60});
+  updateUI();
+}
+
+function sendTroop(type){
+  if(!gameRunning||paused)return;
+  const cost=type==='soldier'?30:60;
+  if(gold<cost)return;
+  gold-=cost;
+  const hp=type==='soldier'?30:60;
+  const spd=type==='soldier'?1.2:0.8;
+  const dmg=type==='soldier'?5:12;
+  troops.push({x:30,y:LANE_Y-5+Math.random()*10,hp,maxHP:hp,speed:spd,damage:dmg,attackCD:0});
+  updateUI();
+}
+
+function spawnEnemy(){
+  const types=['soldier','knight'];
+  const t=types[Math.floor(Math.random()*Math.min(types.length,wave))];
+  const hp=t==='soldier'?20+wave*5:40+wave*8;
+  const spd=t==='soldier'?1:0.6;
+  const dmg=t==='soldier'?3+wave:6+wave*2;
+  enemyTroops.push({x:W-30,y:LANE_Y-5+Math.random()*10,hp,maxHP:hp,speed:spd,damage:dmg,attackCD:0});
+}
+
+function updateUI(){
+  document.getElementById('gold').textContent=Math.floor(gold);
+  document.getElementById('baseHP').textContent=Math.max(0,baseHP);
+  document.getElementById('enemyHP').textContent=Math.max(0,enemyHP);
+  document.getElementById('wave').textContent=wave;
+}
+
+function update(){
+  if(paused||!gameRunning)return;
+  gold+=0.05+wave*0.02;
+  waveTimer++;
+  if(waveTimer%120===0)spawnEnemy();
+  if(waveTimer>=600){wave++;waveTimer=0;updateUI()}
+
+  // towers shoot
+  towers.forEach(t=>{
+    t.cooldown--;
+    if(t.cooldown>0)return;
+    // find nearest enemy
+    let nearest=null,minD=Infinity;
+    enemyTroops.forEach(e=>{
+      const d=Math.hypot(e.x-t.x,e.y-t.y);
+      if(d<t.range&&d<minD){minD=d;nearest=e}
+    });
+    if(nearest){
+      t.cooldown=t.maxCD;
+      projectiles.push({x:t.x,y:t.y,tx:nearest.x,ty:nearest.y,damage:t.damage,speed:4,color:t.type==='arrow'?'#facc15':'#ef4444'});
+    }
+  });
+
+  // projectiles
+  projectiles=projectiles.filter(p=>{
+    const dx=p.tx-p.x,dy=p.ty-p.y,d=Math.hypot(dx,dy);
+    if(d<5){
+      // hit enemies near target
+      enemyTroops.forEach(e=>{if(Math.hypot(e.x-p.tx,e.y-p.ty)<15)e.hp-=p.damage});
+      return false;
+    }
+    p.x+=dx/d*p.speed;p.y+=dy/d*p.speed;
+    return true;
+  });
+
+  // player troops move right
+  troops.forEach(t=>{
+    const target=enemyTroops.find(e=>Math.abs(e.x-t.x)<20&&e.hp>0);
+    if(target){
+      t.attackCD--;
+      if(t.attackCD<=0){target.hp-=t.damage;t.attackCD=30}
+    } else {
+      t.x+=t.speed;
+      if(t.x>=W-30){enemyHP-=t.damage;t.hp=0}
+    }
+  });
+
+  // enemy troops move left
+  enemyTroops.forEach(e=>{
+    const target=troops.find(t=>Math.abs(t.x-e.x)<20&&t.hp>0);
+    if(target){
+      e.attackCD--;
+      if(e.attackCD<=0){target.hp-=e.damage;e.attackCD=30}
+    } else {
+      e.x-=e.speed;
+      if(e.x<=30){baseHP-=e.damage;e.hp=0}
+    }
+  });
+
+  // remove dead
+  troops=troops.filter(t=>t.hp>0);
+  enemyTroops=enemyTroops.filter(e=>{
+    if(e.hp<=0){gold+=5;for(let i=0;i<3;i++)particles.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,life:15});return false}
+    return true;
+  });
+  particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;return p.life>0});
+
+  updateUI();
+  if(baseHP<=0)gameOver(false);
+  if(enemyHP<=0)gameOver(true);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // lane
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,LANE_Y-15,W,30);
+  ctx.strokeStyle='#334155';ctx.strokeRect(0,LANE_Y-15,W,30);
+  // bases
+  ctx.fillStyle='#22c55e';ctx.fillRect(5,LANE_Y-25,25,50);ctx.fillStyle='#e2e8f0';ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillText('BASE',17,LANE_Y+3);
+  ctx.fillStyle='#ef4444';ctx.fillRect(W-30,LANE_Y-25,25,50);ctx.fillStyle='#e2e8f0';ctx.fillText('ENEMY',W-17,LANE_Y+3);
+  // tower slots
+  TOWER_SLOTS.forEach(s=>{ctx.strokeStyle='#334155';ctx.strokeRect(s.x-12,s.y-12,24,24)});
+  // towers
+  towers.forEach(t=>{
+    ctx.fillStyle=t.type==='arrow'?'#6366f1':'#ef4444';
+    ctx.fillRect(t.x-10,t.y-10,20,20);
+    ctx.fillStyle='#e2e8f0';ctx.font='8px sans-serif';ctx.textAlign='center';
+    ctx.fillText(t.type==='arrow'?'A':'C',t.x,t.y+3);
+    // range circle
+    ctx.strokeStyle='rgba(99,102,241,0.15)';ctx.beginPath();ctx.arc(t.x,t.y,t.range,0,Math.PI*2);ctx.stroke();
+  });
+  // troops
+  troops.forEach(t=>{
+    ctx.fillStyle='#22c55e';ctx.fillRect(t.x-5,t.y-8,10,16);
+    // hp bar
+    ctx.fillStyle='#1e293b';ctx.fillRect(t.x-5,t.y-12,10,3);
+    ctx.fillStyle='#22c55e';ctx.fillRect(t.x-5,t.y-12,10*(t.hp/t.maxHP),3);
+  });
+  // enemy troops
+  enemyTroops.forEach(e=>{
+    ctx.fillStyle='#ef4444';ctx.fillRect(e.x-5,e.y-8,10,16);
+    ctx.fillStyle='#1e293b';ctx.fillRect(e.x-5,e.y-12,10,3);
+    ctx.fillStyle='#ef4444';ctx.fillRect(e.x-5,e.y-12,10*(e.hp/e.maxHP),3);
+  });
+  // projectiles
+  projectiles.forEach(p=>{ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill()});
+  // particles
+  particles.forEach(p=>{ctx.fillStyle=`rgba(239,68,68,${p.life/15})`;ctx.fillRect(p.x,p.y,3,3)});
+}
+
+function gameLoop(){update();draw();if(gameRunning)requestAnimationFrame(gameLoop)}
+
+function gameOver(won){
+  gameRunning=false;
+  const sc=wave*100+(won?500:0);
+  if(sc>highScore){highScore=sc;saveState()}
+  document.getElementById('goTitle').textContent=won?'Victory!':'Defeated!';
+  document.getElementById('goScore').textContent='Wave: '+wave+' | Score: '+sc;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8'}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  init();gameRunning=true;
+  document.getElementById('gold').textContent=gold;
+  gameLoop();
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='p'||e.key==='P')togglePause()});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'tower-wars',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tower-wars'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

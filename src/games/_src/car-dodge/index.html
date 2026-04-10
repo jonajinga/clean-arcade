@@ -20,6 +20,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
 .game-controls button:active{background:#475569}
 #score-display{font-size:1rem;margin-top:.5rem;color:#facc15}
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 .hidden{display:none}
 </style>
 </head>
@@ -28,6 +31,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <div id="start-overlay" class="overlay">
 <h1>Car Dodge</h1>
 <p>Dodge oncoming cars!<br>Arrow keys / swipe to change lanes.<br>Speed increases over time.</p>
+<div class="diff-select">
+  <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+  <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+  <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+</div>
 <button class="btn" onclick="startGame()">Play</button>
 </div>
 <div id="gameover-overlay" class="overlay hidden">
@@ -52,13 +60,20 @@ const LANE_W=W/3;
 const CAR_W=50,CAR_H=80;
 const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#6366f1'];
 
+var difficulty='medium';
+function setDiff(d){
+  difficulty=d;
+  document.querySelectorAll('.diff-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===d);});
+}
 let player,enemies,score,speed,paused,running,animId;
 let touchStartX=0,touchStartY=0;
 
 function init(){
   player={lane:1,x:0,y:H-CAR_H-30,w:CAR_W,h:CAR_H};
   player.x=LANE_W*player.lane+LANE_W/2-CAR_W/2;
-  enemies=[];score=0;speed=3;paused=false;running=true;
+  enemies=[];score=0;
+  speed=difficulty==='easy'?2:difficulty==='hard'?4.5:3;
+  paused=false;running=true;
   document.getElementById('pause-btn').textContent='⏸';
   document.getElementById('score-display').textContent='Score: 0';
 }
@@ -93,8 +108,10 @@ function drawCar(x,y,w,h,color,isPlayer){
 
 function update(){
   score+=Math.floor(speed);
-  speed+=0.003;
-  if(Math.random()<0.02+speed*0.002)spawnEnemy();
+  var accel=difficulty==='easy'?0.002:difficulty==='hard'?0.005:0.003;
+  var spawnRate=difficulty==='easy'?0.015:difficulty==='hard'?0.03:0.02;
+  speed+=accel;
+  if(Math.random()<spawnRate+speed*0.002)spawnEnemy();
   for(let i=enemies.length-1;i>=0;i--){
     enemies[i].y+=speed;
     if(enemies[i].y>H){enemies.splice(i,1);continue;}

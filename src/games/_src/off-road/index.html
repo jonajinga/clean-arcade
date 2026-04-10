@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Off-Road</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:4px;padding:6px;justify-content:center}
+.ctrl-btn{background:#334155;padding:10px 18px;font-size:1.1rem;min-width:48px;min-height:48px}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:2px 8px}
+</style>
+</head>
+<body>
+<h1>Off-Road</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Off-Road</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Drive through rough terrain!<br>Mud slows you down, jumps give boost.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Distance: <b id="dist">0</b>m</span><span>Speed: <b id="speed">0</b></span><span>Best: <b id="best">0</b>m</span></div>
+<canvas id="c" width="400" height="350"></canvas>
+<div class="controls">
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.left=true" ontouchend="keys.left=false">&#9664;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.up=true" ontouchend="keys.up=false">&#9650;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.right=true" ontouchend="keys.right=false">&#9654;</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=350;
+let truck,terrain,obstacles,jumps,mudPatches,particles;
+let distance=0,highScore=0,paused=false,gameRunning=false,scrollSpeed=0;
+let keys={up:false,left:false,right:false};
+
+function init(){
+  truck={x:180,y:250,w:30,h:20,vy:0,onGround:true,boost:0,health:100};
+  terrain=[];obstacles=[];jumps=[];mudPatches=[];particles=[];
+  distance=0;scrollSpeed=2;
+  // generate initial terrain
+  for(let i=0;i<50;i++)terrain.push({x:i*80,y:280+Math.sin(i*0.3)*20,w:80,h:80});
+  for(let i=0;i<10;i++){
+    if(Math.random()<0.4)obstacles.push({x:400+Math.random()*2000,y:240+Math.random()*40,w:20,h:20,type:'rock'});
+    if(Math.random()<0.3)jumps.push({x:600+Math.random()*2000,y:270,w:40,h:10});
+    if(Math.random()<0.3)mudPatches.push({x:500+Math.random()*2000,y:260,w:60,h:30});
+  }
+}
+
+function update(){
+  if(paused||!gameRunning)return;
+  const accel=keys.up?0.15:0;
+  scrollSpeed=Math.max(1,Math.min(5+truck.boost,scrollSpeed+accel-0.02));
+  truck.boost=Math.max(0,truck.boost-0.01);
+
+  if(keys.left)truck.x=Math.max(10,truck.x-3);
+  if(keys.right)truck.x=Math.min(W-truck.w-10,truck.x+3);
+
+  // gravity
+  if(!truck.onGround){truck.vy+=0.4;truck.y+=truck.vy}
+  if(truck.y>=250){truck.y=250;truck.vy=0;truck.onGround=true}
+
+  distance+=scrollSpeed*0.1;
+  document.getElementById('dist').textContent=Math.round(distance);
+  document.getElementById('speed').textContent=Math.round(scrollSpeed*20);
+
+  // scroll everything
+  terrain.forEach(t=>t.x-=scrollSpeed);
+  obstacles.forEach(o=>o.x-=scrollSpeed);
+  jumps.forEach(j=>j.x-=scrollSpeed);
+  mudPatches.forEach(m=>m.x-=scrollSpeed);
+
+  // regenerate
+  if(terrain[terrain.length-1].x<W+100){
+    const last=terrain[terrain.length-1];
+    terrain.push({x:last.x+80,y:280+Math.sin(terrain.length*0.3)*20,w:80,h:80});
+  }
+  terrain=terrain.filter(t=>t.x>-100);
+
+  // obstacles
+  obstacles=obstacles.filter(o=>{
+    if(o.x<-50){
+      obstacles.push({x:W+200+Math.random()*400,y:240+Math.random()*40,w:20,h:20,type:'rock'});
+      return false;
+    }
+    // collision
+    if(o.x<truck.x+truck.w&&o.x+o.w>truck.x&&o.y<truck.y+truck.h&&o.y+o.h>truck.y){
+      truck.health-=20;scrollSpeed*=0.5;
+      for(let i=0;i<5;i++)particles.push({x:o.x,y:o.y,vx:(Math.random()-0.5)*3,vy:-Math.random()*3,life:20,color:'#94a3b8'});
+      if(truck.health<=0)gameOver();
+      return false;
+    }
+    return true;
+  });
+
+  // jumps
+  jumps.forEach(j=>{
+    if(j.x<-50){j.x=W+200+Math.random()*600}
+    if(j.x<truck.x+truck.w&&j.x+j.w>truck.x&&Math.abs(truck.y+truck.h-j.y)<10&&truck.onGround){
+      truck.vy=-8;truck.onGround=false;truck.boost=2;
+      for(let i=0;i<3;i++)particles.push({x:truck.x,y:truck.y+truck.h,vx:(Math.random()-0.5)*2,vy:Math.random()*2,life:15,color:'#facc15'});
+    }
+  });
+
+  // mud
+  mudPatches.forEach(m=>{
+    if(m.x<-80){m.x=W+300+Math.random()*500}
+    if(m.x<truck.x+truck.w&&m.x+m.w>truck.x&&m.y<truck.y+truck.h&&m.y+m.h>truck.y){
+      scrollSpeed=Math.max(1,scrollSpeed-0.05);
+      if(Math.random()<0.3)particles.push({x:truck.x+Math.random()*truck.w,y:truck.y+truck.h,vx:(Math.random()-0.5)*2,vy:-Math.random()*2,life:10,color:'#78350f'});
+    }
+  });
+
+  particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;return p.life>0});
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // sky
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,200);
+  // terrain
+  terrain.forEach(t=>{ctx.fillStyle='#334155';ctx.fillRect(t.x,t.y,t.w,t.h)});
+  // mud patches
+  ctx.fillStyle='#78350f';mudPatches.forEach(m=>ctx.fillRect(m.x,m.y,m.w,m.h));
+  // jumps (ramps)
+  ctx.fillStyle='#facc15';jumps.forEach(j=>{
+    ctx.beginPath();ctx.moveTo(j.x,j.y+j.h);ctx.lineTo(j.x+j.w/2,j.y);ctx.lineTo(j.x+j.w,j.y+j.h);ctx.fill();
+  });
+  // obstacles
+  ctx.fillStyle='#94a3b8';obstacles.forEach(o=>ctx.fillRect(o.x,o.y,o.w,o.h));
+  // truck
+  ctx.fillStyle='#22c55e';ctx.fillRect(truck.x,truck.y,truck.w,truck.h);
+  ctx.fillStyle='#1e293b';ctx.fillRect(truck.x+2,truck.y+2,10,8);// window
+  ctx.fillStyle='#e2e8f0';
+  ctx.fillRect(truck.x+2,truck.y+truck.h,6,4);ctx.fillRect(truck.x+truck.w-8,truck.y+truck.h,6,4);// wheels
+  // health bar
+  ctx.fillStyle='#1e293b';ctx.fillRect(10,10,100,8);
+  ctx.fillStyle=truck.health>50?'#22c55e':'#ef4444';ctx.fillRect(10,10,truck.health,8);
+  ctx.fillStyle='#e2e8f0';ctx.font='8px sans-serif';ctx.fillText('HP',12,17);
+  // particles
+  particles.forEach(p=>{ctx.fillStyle=p.color;ctx.globalAlpha=p.life/20;ctx.fillRect(p.x,p.y,3,3)});
+  ctx.globalAlpha=1;
+}
+
+function gameLoop(){update();draw();if(gameRunning)requestAnimationFrame(gameLoop)}
+
+function gameOver(){
+  gameRunning=false;
+  const d=Math.round(distance);
+  if(d>highScore){highScore=d;saveState()}
+  document.getElementById('goScore').textContent='Distance: '+d+'m';
+  document.getElementById('goHigh').textContent='Best: '+highScore+'m';
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8'}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  init();gameRunning=true;paused=false;
+  document.getElementById('best').textContent=highScore;
+  gameLoop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'){keys.up=true;e.preventDefault()}
+  if(e.key==='ArrowLeft')keys.left=true;if(e.key==='ArrowRight')keys.right=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp')keys.up=false;
+  if(e.key==='ArrowLeft')keys.left=false;if(e.key==='ArrowRight')keys.right=false;
+});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'off-road',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='off-road'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

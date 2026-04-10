@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Javelin Throw</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:4px 8px}
+.controls{padding:8px;text-align:center}
+.action-btn{background:#22c55e;color:#0f172a;padding:14px 32px;font-size:1.1rem;min-height:48px;min-width:120px;font-weight:bold}
+.meter{margin:0 8px;height:20px;background:#1e293b;border:1px solid #334155;position:relative}
+.meter-fill{height:100%;transition:width 0.05s}
+.meter-label{font-size:0.75rem;color:#94a3b8;text-align:center;margin-top:2px}
+.attempts{text-align:center;font-size:0.9rem;margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Javelin Throw</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Javelin Throw</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Tap to build speed, set angle, and throw!<br>3 attempts. Best distance wins.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Results!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Attempt: <b id="attempt">1</b>/3</span><span>Best: <b id="bestDist">0</b>m</span><span>Record: <b id="record">0</b>m</span></div>
+<canvas id="c" width="400" height="250"></canvas>
+<div class="meter"><div class="meter-fill" id="speedFill" style="width:0%;background:#22c55e"></div></div>
+<div class="meter-label" id="meterLabel">Tap rapidly to build speed!</div>
+<div class="meter"><div class="meter-fill" id="angleFill" style="width:50%;background:#3b82f6"></div></div>
+<div class="meter-label">Angle</div>
+<div class="controls">
+<button class="action-btn" id="actionBtn" onclick="handleAction()" ontouchstart="event.preventDefault();handleAction()">TAP!</button>
+</div>
+<div class="attempts" id="attempts"></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=250;
+let phase='idle',speed=0,angle=45,power=0,attempt=1,bestDist=0,highScore=0;
+let javX,javY,javVX,javVY,thrown=false,landed=false,landDist=0;
+let angleOsc=0,tapCount=0,results=[];
+let runnerX=50,animFrame=0;
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // ground
+  ctx.fillStyle='#334155';ctx.fillRect(0,200,W,50);
+  // track lines
+  ctx.strokeStyle='#475569';
+  for(let i=0;i<10;i++){const x=40+i*36;ctx.beginPath();ctx.moveTo(x,195);ctx.lineTo(x,205);ctx.stroke();ctx.fillStyle='#94a3b8';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText((i*10)+'m',x,215)}
+  // foul line
+  ctx.fillStyle='#ef4444';ctx.fillRect(38,190,2,15);
+
+  if(phase==='run'||phase==='angle'){
+    // runner
+    ctx.fillStyle='#e2e8f0';
+    ctx.fillRect(runnerX,175,8,20);
+    ctx.fillRect(runnerX+2,168,4,8);
+    // javelin in hand
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+    const a=-angle*Math.PI/180;
+    ctx.beginPath();ctx.moveTo(runnerX+8,175);ctx.lineTo(runnerX+8+Math.cos(a)*30,175+Math.sin(a)*30);ctx.stroke();
+  }
+
+  if(thrown){
+    // javelin in flight
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+    const a=Math.atan2(javVY,javVX);
+    ctx.beginPath();ctx.moveTo(javX,javY);ctx.lineTo(javX+Math.cos(a)*20,javY+Math.sin(a)*20);ctx.stroke();
+    // shadow
+    ctx.fillStyle='rgba(0,0,0,0.3)';ctx.beginPath();ctx.ellipse(javX,200,8,2,0,0,Math.PI*2);ctx.fill();
+    if(landed){
+      ctx.fillStyle='#facc15';ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+      ctx.fillText(landDist.toFixed(1)+'m',javX,javY-15);
+    }
+  }
+
+  // results display
+  if(results.length>0){
+    ctx.fillStyle='#94a3b8';ctx.font='10px sans-serif';ctx.textAlign='left';
+    results.forEach((r,i)=>ctx.fillText('Throw '+(i+1)+': '+r.toFixed(1)+'m',10,20+i*14));
+  }
+}
+
+function updateAngle(){
+  if(phase!=='angle')return;
+  angleOsc+=3;
+  angle=45+Math.sin(angleOsc*Math.PI/180)*40;
+  document.getElementById('angleFill').style.width=(angle/90*100)+'%';
+  requestAnimationFrame(updateAngle);
+}
+
+function handleAction(){
+  if(phase==='idle'){
+    phase='run';tapCount=0;speed=0;runnerX=50;
+    document.getElementById('meterLabel').textContent='TAP to build speed!';
+    document.getElementById('actionBtn').textContent='TAP!';
+  } else if(phase==='run'){
+    tapCount++;
+    speed=Math.min(100,speed+5);
+    document.getElementById('speedFill').style.width=speed+'%';
+    runnerX=Math.min(35,50-15+tapCount);
+    if(tapCount>=15){
+      phase='angle';angleOsc=0;
+      document.getElementById('meterLabel').textContent='Tap to set angle!';
+      document.getElementById('actionBtn').textContent='SET!';
+      updateAngle();
+    }
+  } else if(phase==='angle'){
+    phase='throw';
+    power=speed;
+    const rad=angle*Math.PI/180;
+    javX=40;javY=185;
+    javVX=Math.cos(rad)*power*0.08;
+    javVY=-Math.sin(rad)*power*0.08;
+    thrown=true;landed=false;
+    document.getElementById('actionBtn').textContent='...';
+    document.getElementById('actionBtn').disabled=true;
+    animateThrow();
+  } else if(phase==='landed'){
+    results.push(landDist);
+    if(landDist>bestDist)bestDist=landDist;
+    document.getElementById('bestDist').textContent=bestDist.toFixed(1);
+    attempt++;
+    if(attempt>3){endGame();return}
+    document.getElementById('attempt').textContent=attempt;
+    phase='idle';thrown=false;landed=false;speed=0;
+    document.getElementById('speedFill').style.width='0%';
+    document.getElementById('angleFill').style.width='50%';
+    document.getElementById('actionBtn').textContent='TAP!';
+    document.getElementById('actionBtn').disabled=false;
+    document.getElementById('meterLabel').textContent='Tap rapidly to build speed!';
+    draw();
+  }
+}
+
+function animateThrow(){
+  if(phase!=='throw')return;
+  javVY+=0.15;// gravity
+  javX+=javVX;javY+=javVY;
+  if(javY>=195){
+    javY=195;landed=true;phase='landed';
+    landDist=Math.max(0,(javX-40)/3.6);
+    document.getElementById('actionBtn').textContent='NEXT';
+    document.getElementById('actionBtn').disabled=false;
+    document.getElementById('meterLabel').textContent=landDist.toFixed(1)+'m!';
+    draw();return;
+  }
+  draw();requestAnimationFrame(animateThrow);
+}
+
+function endGame(){
+  if(bestDist>highScore){highScore=bestDist;saveState()}
+  document.getElementById('goScore').textContent='Best throw: '+bestDist.toFixed(1)+'m';
+  document.getElementById('goHigh').textContent='Record: '+highScore.toFixed(1)+'m';
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  phase='idle';attempt=1;bestDist=0;results=[];thrown=false;landed=false;speed=0;
+  document.getElementById('attempt').textContent=1;
+  document.getElementById('bestDist').textContent=0;
+  document.getElementById('record').textContent=highScore.toFixed(1);
+  document.getElementById('speedFill').style.width='0%';
+  document.getElementById('angleFill').style.width='50%';
+  document.getElementById('actionBtn').textContent='TAP!';
+  document.getElementById('actionBtn').disabled=false;
+  document.getElementById('meterLabel').textContent='Tap rapidly to build speed!';
+  draw();
+}
+
+document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();handleAction()}});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'javelin-throw',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='javelin-throw'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

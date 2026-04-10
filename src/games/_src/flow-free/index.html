@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flow Free</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:380px;padding:12px;position:relative;min-height:440px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.info{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:8px}
+canvas{display:block;margin:0 auto;cursor:pointer}
+.controls{display:flex;gap:8px;justify-content:center;margin-top:8px}
+.controls button{padding:8px 16px;font-size:0.85rem}
+.status{text-align:center;font-size:0.85rem;margin-top:6px;min-height:20px;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Flow Free</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Flow Free</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Connect same-colored dots!<br>Fill the entire grid.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Puzzle Complete!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Level: <b id="level">1</b></span><span>Moves: <b id="moves">0</b></span><span>Best: <b id="best">0</b></span></div>
+<canvas id="c" width="350" height="350"></canvas>
+<div class="controls">
+<button onclick="clearPaths()">Clear</button>
+<button onclick="nextPuzzle()">Skip</button>
+</div>
+<div class="status" id="status">Drag from dot to dot</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316','#ec4899','#14b8a6'];
+let gridSize=5,cellSize=70,grid,endpoints,paths,currentPath,currentColor,dragging=false;
+let levelNum=1,moves=0,highScore=0,puzzles;
+
+function genPuzzle(size){
+  // Generate puzzle by placing random endpoint pairs
+  const g=Array.from({length:size},()=>Array(size).fill(-1));
+  const eps=[];
+  const numFlows=Math.min(size,COLORS.length);
+  const cells=[];
+  for(let r=0;r<size;r++)for(let c=0;c<size;c++)cells.push([r,c]);
+  // shuffle cells
+  for(let i=cells.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]]}
+  let placed=0;
+  for(let i=0;i<cells.length-1&&placed<numFlows;i++){
+    const[r1,c1]=cells[i];
+    if(g[r1][c1]!==-1)continue;
+    // find another empty cell not adjacent
+    for(let j=i+1;j<cells.length;j++){
+      const[r2,c2]=cells[j];
+      if(g[r2][c2]!==-1)continue;
+      if(Math.abs(r1-r2)+Math.abs(c1-c2)<2)continue; // too close
+      g[r1][c1]=placed;g[r2][c2]=placed;
+      eps.push({color:placed,points:[[r1,c1],[r2,c2]]});
+      placed++;break;
+    }
+  }
+  return{grid:g,endpoints:eps,size};
+}
+
+function loadPuzzle(p){
+  gridSize=p.size;cellSize=Math.floor(350/gridSize);
+  canvas.width=cellSize*gridSize;canvas.height=cellSize*gridSize;
+  grid=Array.from({length:gridSize},()=>Array(gridSize).fill(-1));
+  endpoints=p.endpoints;
+  paths={};
+  endpoints.forEach(ep=>{
+    ep.points.forEach(([r,c])=>grid[r][c]=ep.color);
+    paths[ep.color]=[];
+  });
+  currentPath=null;currentColor=-1;moves=0;
+  document.getElementById('moves').textContent=0;
+  draw();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,canvas.width,canvas.height);
+  // grid lines
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  for(let i=0;i<=gridSize;i++){
+    ctx.beginPath();ctx.moveTo(i*cellSize,0);ctx.lineTo(i*cellSize,canvas.height);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*cellSize);ctx.lineTo(canvas.width,i*cellSize);ctx.stroke();
+  }
+  // paths
+  Object.keys(paths).forEach(c=>{
+    const p=paths[c];
+    if(p.length>1){
+      ctx.strokeStyle=COLORS[c];ctx.lineWidth=cellSize*0.4;ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.beginPath();ctx.moveTo(p[0][1]*cellSize+cellSize/2,p[0][0]*cellSize+cellSize/2);
+      for(let i=1;i<p.length;i++)ctx.lineTo(p[i][1]*cellSize+cellSize/2,p[i][0]*cellSize+cellSize/2);
+      ctx.stroke();
+    }
+  });
+  // endpoints
+  endpoints.forEach(ep=>{
+    ep.points.forEach(([r,c])=>{
+      ctx.fillStyle=COLORS[ep.color];
+      ctx.beginPath();ctx.arc(c*cellSize+cellSize/2,r*cellSize+cellSize/2,cellSize*0.3,0,Math.PI*2);ctx.fill();
+    });
+  });
+}
+
+function getCellFromPos(x,y){
+  const rect=canvas.getBoundingClientRect();
+  const sx=(x-rect.left)/rect.width*canvas.width;
+  const sy=(y-rect.top)/rect.height*canvas.height;
+  return[Math.floor(sy/cellSize),Math.floor(sx/cellSize)];
+}
+
+function isEndpoint(r,c){
+  for(const ep of endpoints){
+    for(const[er,ec]of ep.points){if(er===r&&ec===c)return ep.color}
+  }
+  return-1;
+}
+
+function startDrag(r,c){
+  const col=isEndpoint(r,c);
+  if(col===-1)return;
+  currentColor=col;
+  paths[col]=[[r,c]];
+  dragging=true;
+  draw();
+}
+
+function continueDrag(r,c){
+  if(!dragging||currentColor===-1)return;
+  const path=paths[currentColor];
+  const last=path[path.length-1];
+  if(r===last[0]&&c===last[1])return;
+  if(Math.abs(r-last[0])+Math.abs(c-last[1])!==1)return;
+  // check if backtracking
+  if(path.length>1&&path[path.length-2][0]===r&&path[path.length-2][1]===c){path.pop();draw();return}
+  // check if cell occupied by another path (not endpoint)
+  const cellColor=isEndpoint(r,c);
+  if(cellColor!==-1&&cellColor!==currentColor)return;
+  // check if cell is in another path
+  for(const[col,p]of Object.entries(paths)){
+    if(+col===currentColor)continue;
+    if(p.some(([pr,pc])=>pr===r&&pc===c))return;
+  }
+  // check if already in this path
+  if(path.some(([pr,pc])=>pr===r&&pc===c))return;
+  path.push([r,c]);moves++;document.getElementById('moves').textContent=moves;
+  draw();
+  // check if connected both endpoints
+  if(cellColor===currentColor&&path.length>1){
+    dragging=false;
+    checkWin();
+  }
+}
+
+function endDrag(){dragging=false}
+
+function checkWin(){
+  let allConnected=true;
+  endpoints.forEach(ep=>{
+    const p=paths[ep.color];
+    if(!p||p.length<2)allConnected=false;
+    else{
+      const first=p[0],last=p[p.length-1];
+      const[e0,e1]=ep.points;
+      if(!((first[0]===e0[0]&&first[1]===e0[1]&&last[0]===e1[0]&&last[1]===e1[1])||
+           (first[0]===e1[0]&&first[1]===e1[1]&&last[0]===e0[0]&&last[1]===e0[1])))allConnected=false;
+    }
+  });
+  if(allConnected){
+    // check grid filled
+    let totalCells=0;
+    Object.values(paths).forEach(p=>totalCells+=p.length);
+    if(totalCells>=gridSize*gridSize){
+      document.getElementById('status').textContent='Puzzle complete!';
+      document.getElementById('status').style.color='#22c55e';
+      const sc=levelNum*100;
+      if(sc>highScore){highScore=sc;saveState()}
+      levelNum++;
+      setTimeout(()=>nextPuzzle(),1500);
+    }
+  }
+}
+
+function clearPaths(){
+  endpoints.forEach(ep=>paths[ep.color]=[]);
+  draw();
+}
+
+function nextPuzzle(){
+  const size=Math.min(5+Math.floor((levelNum-1)/3),7);
+  loadPuzzle(genPuzzle(size));
+  document.getElementById('level').textContent=levelNum;
+  document.getElementById('status').textContent='Drag from dot to dot';
+  document.getElementById('status').style.color='#94a3b8';
+}
+
+canvas.addEventListener('mousedown',e=>{const[r,c]=getCellFromPos(e.clientX,e.clientY);startDrag(r,c)});
+canvas.addEventListener('mousemove',e=>{if(dragging){const[r,c]=getCellFromPos(e.clientX,e.clientY);continueDrag(r,c)}});
+canvas.addEventListener('mouseup',endDrag);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];const[r,c]=getCellFromPos(t.clientX,t.clientY);startDrag(r,c)});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const[r,c]=getCellFromPos(t.clientX,t.clientY);continueDrag(r,c)});
+canvas.addEventListener('touchend',e=>{e.preventDefault();endDrag()});
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  levelNum=1;
+  document.getElementById('best').textContent=highScore;
+  nextPuzzle();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'flow-free',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='flow-free'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elevator Action</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:4px;padding:6px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{background:#334155;padding:10px 14px;font-size:1rem;min-width:44px;min-height:44px}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:2px 8px}
+</style>
+</head>
+<body>
+<h1>Elevator Action</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Elevator Action</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Ride elevators, shoot enemies, collect documents!<br>Arrows move, Space shoots, Up/Down for elevators.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Floor: <b id="floor">1</b></span><span>Score: <b id="score">0</b></span><span>Docs: <b id="docs">0</b>/<b id="totalDocs">0</b></span><span>Lives: <b id="lives">3</b></span></div>
+<canvas id="c" width="400" height="400"></canvas>
+<div class="controls">
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.left=true" ontouchend="keys.left=false">&#9664;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.right=true" ontouchend="keys.right=false">&#9654;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.up=true" ontouchend="keys.up=false">&#9650;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.down=true" ontouchend="keys.down=false">&#9660;</button>
+<button class="ctrl-btn" style="background:#ef4444" ontouchstart="event.preventDefault();shootBullet()">FIRE</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=400,FLOOR_H=60,FLOORS=6;
+let player,enemies,bullets,elevators,doors,camY;
+let score=0,highScore=0,lives=3,docsCollected=0,totalDocs=0,paused=false,gameRunning=false;
+let keys={left:false,right:false,up:false,down:false};
+let inElevator=null;
+
+function init(){
+  player={x:190,y:20,w:16,h:24,vx:0,vy:0,dir:1,onFloor:false};
+  enemies=[];bullets=[];camY=0;docsCollected=0;
+  // elevators (shafts at fixed x positions)
+  elevators=[
+    {x:80,y:60,w:30,h:24,minY:60,maxY:60+(FLOORS-1)*FLOOR_H,vy:0,moving:false},
+    {x:280,y:180,w:30,h:24,minY:60,maxY:60+(FLOORS-1)*FLOOR_H,vy:0,moving:false},
+  ];
+  // doors with documents
+  doors=[];totalDocs=0;
+  for(let f=0;f<FLOORS;f++){
+    const y=60+f*FLOOR_H;
+    if(Math.random()<0.5){doors.push({x:160,y:y-20,w:20,h:20,collected:false,floor:f});totalDocs++}
+    if(Math.random()<0.4){doors.push({x:340,y:y-20,w:20,h:20,collected:false,floor:f});totalDocs++}
+  }
+  if(totalDocs===0){doors.push({x:160,y:100,w:20,h:20,collected:false,floor:1});totalDocs=1}
+  document.getElementById('totalDocs').textContent=totalDocs;
+  // enemies on floors
+  for(let f=1;f<FLOORS;f++){
+    if(Math.random()<0.6){
+      enemies.push({x:20+Math.random()*340,y:60+f*FLOOR_H-24,w:16,h:24,vx:(Math.random()>0.5?1:-1),dir:1,floor:f,shootCD:60+Math.random()*120});
+    }
+  }
+}
+
+function shootBullet(){
+  if(!gameRunning||paused)return;
+  bullets.push({x:player.x+(player.dir>0?player.w:0),y:player.y+10,vx:player.dir*6,vy:0,owner:'player'});
+}
+
+function getFloorY(y){
+  for(let f=0;f<FLOORS;f++){
+    const fy=60+f*FLOOR_H;
+    if(Math.abs(y+24-fy)<4)return fy;
+  }
+  return null;
+}
+
+function update(){
+  if(paused||!gameRunning)return;
+  const spd=2.5;
+  if(inElevator){
+    // riding elevator
+    if(keys.up)inElevator.vy=-2;
+    else if(keys.down)inElevator.vy=2;
+    else inElevator.vy=0;
+    inElevator.y+=inElevator.vy;
+    inElevator.y=Math.max(inElevator.minY,Math.min(inElevator.maxY,inElevator.y));
+    player.x=inElevator.x+7;player.y=inElevator.y-player.h;
+    if(keys.left||keys.right){inElevator.vy=0;inElevator=null}
+  } else {
+    if(keys.left){player.vx=-spd;player.dir=-1}
+    else if(keys.right){player.vx=spd;player.dir=1}
+    else player.vx=0;
+    player.vy+=0.5;
+    player.x+=player.vx;player.y+=player.vy;
+    player.x=Math.max(0,Math.min(W-player.w,player.x));
+    // floor collision
+    player.onFloor=false;
+    for(let f=0;f<FLOORS;f++){
+      const fy=60+f*FLOOR_H;
+      if(player.vy>=0&&player.y+player.h>=fy&&player.y+player.h<fy+10){
+        player.y=fy-player.h;player.vy=0;player.onFloor=true;
+        document.getElementById('floor').textContent=FLOORS-f;
+      }
+    }
+    // ground
+    if(player.y+player.h>=H){player.y=H-player.h;player.vy=0;player.onFloor=true}
+    // check elevator entry
+    elevators.forEach(el=>{
+      if(Math.abs(player.x-el.x)<20&&Math.abs(player.y+player.h-el.y)<8&&(keys.up||keys.down)){
+        inElevator=el;player.x=el.x+7;player.y=el.y-player.h;
+      }
+    });
+  }
+
+  // doors
+  doors.forEach(d=>{
+    if(!d.collected&&Math.abs(player.x-d.x)<20&&Math.abs(player.y-d.y)<20){
+      d.collected=true;docsCollected++;score+=500;
+      document.getElementById('docs').textContent=docsCollected;
+      document.getElementById('score').textContent=score;
+      if(docsCollected>=totalDocs){score+=2000;document.getElementById('score').textContent=score;nextLevel()}
+    }
+  });
+
+  // enemies
+  enemies.forEach(e=>{
+    e.x+=e.vx;
+    if(e.x<10||e.x>W-30)e.vx*=-1;
+    e.dir=e.vx>0?1:-1;
+    e.shootCD--;
+    if(e.shootCD<=0&&Math.abs(e.x-player.x)<200){
+      const dir=player.x>e.x?1:-1;
+      bullets.push({x:e.x+(dir>0?e.w:0),y:e.y+10,vx:dir*4,vy:0,owner:'enemy'});
+      e.shootCD=80+Math.random()*80;
+    }
+  });
+
+  // bullets
+  bullets=bullets.filter(b=>{
+    b.x+=b.vx;
+    if(b.owner==='player'){
+      for(let i=enemies.length-1;i>=0;i--){
+        const e=enemies[i];
+        if(b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
+          enemies.splice(i,1);score+=200;document.getElementById('score').textContent=score;return false;
+        }
+      }
+    } else {
+      if(b.x>player.x&&b.x<player.x+player.w&&b.y>player.y&&b.y<player.y+player.h){
+        playerHit();return false;
+      }
+    }
+    return b.x>0&&b.x<W;
+  });
+
+  // enemy-player collision
+  enemies.forEach(e=>{
+    if(Math.abs(e.x-player.x)<14&&Math.abs(e.y-player.y)<20)playerHit();
+  });
+}
+
+function playerHit(){
+  lives--;document.getElementById('lives').textContent=lives;
+  player.x=190;player.y=20;inElevator=null;
+  if(lives<=0)gameOver();
+}
+
+function nextLevel(){
+  init();
+  document.getElementById('docs').textContent=0;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // floors
+  for(let f=0;f<FLOORS;f++){
+    const y=60+f*FLOOR_H;
+    ctx.fillStyle='#334155';ctx.fillRect(0,y,W,4);
+    // elevator shafts
+    ctx.fillStyle='#1e293b';
+    ctx.fillRect(78,y-FLOOR_H,34,FLOOR_H);
+    ctx.fillRect(278,y-FLOOR_H,34,FLOOR_H);
+  }
+  // doors
+  doors.forEach(d=>{
+    ctx.fillStyle=d.collected?'#334155':'#ef4444';
+    ctx.fillRect(d.x,d.y,d.w,d.h);
+    if(!d.collected){ctx.fillStyle='#facc15';ctx.font='10px sans-serif';ctx.fillText('DOC',d.x+1,d.y+13)}
+  });
+  // elevators
+  ctx.fillStyle='#6366f1';elevators.forEach(el=>ctx.fillRect(el.x,el.y,el.w,el.h));
+  // player
+  ctx.fillStyle='#22c55e';ctx.fillRect(player.x,player.y,player.w,player.h);
+  ctx.fillStyle='#fff';ctx.fillRect(player.x+(player.dir>0?10:2),player.y+4,4,3);
+  // enemies
+  ctx.fillStyle='#ef4444';enemies.forEach(e=>{ctx.fillRect(e.x,e.y,e.w,e.h);ctx.fillStyle='#fff';ctx.fillRect(e.x+(e.dir>0?10:2),e.y+4,4,3);ctx.fillStyle='#ef4444'});
+  // bullets
+  bullets.forEach(b=>{ctx.fillStyle=b.owner==='player'?'#facc15':'#ef4444';ctx.fillRect(b.x,b.y,5,2)});
+}
+
+function gameLoop(){update();draw();if(gameRunning)requestAnimationFrame(gameLoop)}
+
+function gameOver(){
+  gameRunning=false;
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8'}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  score=0;lives=3;paused=false;gameRunning=true;
+  document.getElementById('score').textContent=0;document.getElementById('lives').textContent=3;
+  document.getElementById('best').textContent=highScore;
+  init();gameLoop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')keys.left=true;if(e.key==='ArrowRight')keys.right=true;
+  if(e.key==='ArrowUp'){keys.up=true;e.preventDefault()}if(e.key==='ArrowDown'){keys.down=true;e.preventDefault()}
+  if(e.key===' '){shootBullet();e.preventDefault()}
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')keys.left=false;if(e.key==='ArrowRight')keys.right=false;
+  if(e.key==='ArrowUp')keys.up=false;if(e.key==='ArrowDown')keys.down=false;
+});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'elevator-action',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='elevator-action'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Letter Drop</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:380px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.info{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;padding:4px 8px}
+.word-input{display:flex;gap:6px;padding:8px;align-items:center;justify-content:center}
+.word-input input{background:#1e293b;border:2px solid #334155;color:#e2e8f0;padding:10px;font-size:1.1rem;width:180px;text-transform:uppercase;font-family:inherit;border-radius:0}
+.word-input button{padding:10px 18px;min-height:44px}
+.current-word{text-align:center;font-size:1.2rem;font-weight:bold;color:#facc15;min-height:30px;padding:4px}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem;margin:0 8px}
+</style>
+</head>
+<body>
+<h1>Letter Drop</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Letter Drop</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Letters fall from the top.<br>Type words using falling letters to clear them!<br>60 seconds.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Time's Up!</p>
+<p style="margin-bottom:4px" id="goScore"></p>
+<p style="margin-bottom:4px" id="goWords"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Time: <b id="timer">60</b>s</span><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span></div>
+<canvas id="c" width="380" height="320"></canvas>
+<div class="current-word" id="currentWord"></div>
+<div class="word-input">
+<input type="text" id="wordInput" placeholder="Type a word..." autocomplete="off" autocapitalize="off" onkeydown="if(event.key==='Enter')submitWord()">
+<button onclick="submitWord()">GO</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=380,H=320;
+const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const FREQ='EEEEEEEEEETTTTTTTAAAAAAAAOOOOOOIIIIIIINNNNNNSSSSSSRRRRRRHHHHHLLLLLDDDDCCCCUUUMMMPPPFFBBWWYYGKVJXQZ';
+let letters=[],score=0,highScore=0,timeLeft=60,paused=false,gameRunning=false,wordsFound=0;
+let timerInterval,spawnInterval;
+
+function randomLetter(){return FREQ[Math.floor(Math.random()*FREQ.length)]}
+
+function spawnLetter(){
+  if(paused||!gameRunning)return;
+  letters.push({
+    letter:randomLetter(),
+    x:20+Math.random()*(W-40),
+    y:-20,
+    speed:0.5+Math.random()*1,
+    size:20,
+    alpha:1,
+    removing:false
+  });
+}
+
+function update(){
+  if(paused||!gameRunning)return;
+  letters.forEach(l=>{
+    if(l.removing){l.alpha-=0.05;l.size+=1;return}
+    l.y+=l.speed;
+  });
+  // remove letters that fell off or faded
+  const before=letters.length;
+  letters=letters.filter(l=>l.y<H+20&&l.alpha>0);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // danger zone
+  ctx.fillStyle='rgba(239,68,68,0.1)';ctx.fillRect(0,H-40,W,40);
+  ctx.strokeStyle='#ef4444';ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(0,H-40);ctx.lineTo(W,H-40);ctx.stroke();ctx.setLineDash([]);
+  // letters
+  letters.forEach(l=>{
+    ctx.globalAlpha=l.alpha;
+    ctx.fillStyle=l.removing?'#22c55e':(l.y>H-60?'#ef4444':'#e2e8f0');
+    ctx.font=`bold ${l.size}px sans-serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(l.letter,l.x,l.y);
+  });
+  ctx.globalAlpha=1;
+  // letter count
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('Letters: '+letters.filter(l=>!l.removing).length,5,15);
+}
+
+function submitWord(){
+  if(!gameRunning||paused)return;
+  const input=document.getElementById('wordInput');
+  const word=input.value.toUpperCase().trim();
+  if(word.length<2){input.value='';return}
+  // check if all letters exist in falling letters
+  const available=[...letters.filter(l=>!l.removing)];
+  const used=[];
+  let valid=true;
+  for(const ch of word){
+    const idx=available.findIndex(l=>l.letter===ch&&!used.includes(available.indexOf(l)));
+    if(idx===-1){valid=false;break}
+    used.push(idx);
+  }
+  if(valid){
+    // remove used letters with animation
+    used.sort((a,b)=>b-a);
+    used.forEach(i=>available[i].removing=true);
+    const pts=word.length*word.length*10;
+    score+=pts;wordsFound++;
+    document.getElementById('score').textContent=score;
+    document.getElementById('currentWord').textContent=word+' +'+pts;
+    document.getElementById('currentWord').style.color='#22c55e';
+    setTimeout(()=>{document.getElementById('currentWord').textContent='';},800);
+  } else {
+    document.getElementById('currentWord').textContent='Not available!';
+    document.getElementById('currentWord').style.color='#ef4444';
+    setTimeout(()=>{document.getElementById('currentWord').textContent='';},600);
+  }
+  input.value='';input.focus();
+}
+
+function gameLoop(){
+  update();draw();
+  if(gameRunning)requestAnimationFrame(gameLoop);
+}
+
+function endGame(){
+  gameRunning=false;clearInterval(timerInterval);clearInterval(spawnInterval);
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score;
+  document.getElementById('goWords').textContent='Words: '+wordsFound;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8';
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  letters=[];score=0;timeLeft=60;wordsFound=0;paused=false;gameRunning=true;
+  document.getElementById('score').textContent=0;
+  document.getElementById('timer').textContent=60;
+  document.getElementById('best').textContent=highScore;
+  document.getElementById('wordInput').value='';
+  document.getElementById('currentWord').textContent='';
+  // spawn letters periodically
+  spawnInterval=setInterval(spawnLetter,400);
+  timerInterval=setInterval(()=>{
+    if(paused)return;
+    timeLeft--;document.getElementById('timer').textContent=timeLeft;
+    if(timeLeft<=0)endGame();
+  },1000);
+  document.getElementById('wordInput').focus();
+  gameLoop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='p'&&document.activeElement!==document.getElementById('wordInput'))togglePause();
+});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'letter-drop',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='letter-drop'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

@@ -22,6 +22,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .dpad button{width:48px;height:40px;font-size:1.2rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer;touch-action:manipulation}
 .dpad button:active{background:#475569}
 .dpad{display:flex}
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 .hidden{display:none!important}
 </style>
 </head>
@@ -45,6 +48,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
   <h2>Frogger</h2>
   <p>Cross traffic & river to reach the top!</p>
   <p style="font-size:.85rem;color:#94a3b8">Arrow keys or swipe to move</p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+  </div>
   <button class="btn" id="playBtn">Play</button>
 </div>
 
@@ -56,6 +64,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 </div>
 
 <script>
+var difficulty='medium';
+function setDiff(d){
+  difficulty=d;
+  document.querySelectorAll('.diff-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===d);});
+}
 const SLUG='frogger';
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -84,6 +97,7 @@ window.addEventListener('resize',()=>{resize();if(running)draw();});
 
 function initLanes(){
   lanes=[];
+  var sm=difficulty==='easy'?0.6:difficulty==='hard'?1.5:1;
   // Road lanes: rows 7-11
   const roadCfg=[
     {row:7, dir:1, speed:1.2, len:2, count:3},
@@ -98,7 +112,7 @@ function initLanes(){
     for(let j=0;j<cfg.count;j++){
       objs.push({x:j*spacing, w:cfg.len*CELL});
     }
-    lanes.push({row:cfg.row,type:'road',dir:cfg.dir,speed:cfg.speed,objs});
+    lanes.push({row:cfg.row,type:'road',dir:cfg.dir,speed:cfg.speed*sm,objs});
   }
   // River lanes: rows 1-5
   const riverCfg=[
@@ -114,7 +128,7 @@ function initLanes(){
     for(let j=0;j<cfg.count;j++){
       objs.push({x:j*spacing, w:cfg.len*CELL});
     }
-    lanes.push({row:cfg.row,type:'river',dir:cfg.dir,speed:cfg.speed,objs});
+    lanes.push({row:cfg.row,type:'river',dir:cfg.dir,speed:cfg.speed*sm,objs});
   }
   homes=[1,4,7,10];
   homeFilled=[false,false,false,false];

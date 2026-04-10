@@ -89,6 +89,9 @@
       from { transform: scale(1); }
       to { transform: scale(1.1); }
     }
+    .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+    .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+    .diff-btn.active{background:#6366f1;border-color:#6366f1}
     @media (max-width: 480px) {
       h1 { font-size: 1.2rem; }
       .controls { gap: 0.3rem; }
@@ -99,6 +102,11 @@
 <body>
 <h1 style="font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center">Connect Four</h1>
   <h1>Connect Four</h1>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="setDifficulty('easy')">Easy</button>
+    <button class="diff-btn active" onclick="setDifficulty('medium')">Medium</button>
+    <button class="diff-btn" onclick="setDifficulty('hard')">Hard</button>
+  </div>
   <div class="controls">
     <button id="btnComputer" class="active" onclick="setMode('computer')">vs Computer</button>
     <button id="btnLocal" onclick="setMode('local')">vs Player</button>
@@ -118,6 +126,12 @@
 
   <script>
     var ROWS = 6, COLS = 7;
+    var difficulty = 'medium';
+    function setDifficulty(d) {
+      difficulty = d;
+      document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+    }
+
     var board, currentPlayer, gameOver, mode, wins, myColor, peerReady;
     var scores = { red: 0, yellow: 0, draw: 0 };
 
@@ -360,6 +374,13 @@
     }
 
     function aiPickColumn() {
+      if (difficulty === 'easy') {
+        // Random: just pick any open column
+        var open = [];
+        for (var c = 0; c < COLS; c++) { if (!isColumnFull(c)) open.push(c); }
+        return open.length > 0 ? open[Math.floor(Math.random() * open.length)] : -1;
+      }
+
       // 1. Win if possible
       for (var c = 0; c < COLS; c++) {
         if (isColumnFull(c)) continue;
@@ -391,15 +412,42 @@
         board[r][c] = null;
         if (!bad) safe.push(c);
       }
+
+      if (difficulty === 'hard') {
+        // Deeper: also look for setups (two-way threats)
+        var scored = [];
+        var pool = safe.length > 0 ? safe : [];
+        if (pool.length === 0) {
+          for (var c2 = 0; c2 < COLS; c2++) { if (!isColumnFull(c2)) pool.push(c2); }
+        }
+        for (var i = 0; i < pool.length; i++) {
+          var cc = pool[i];
+          var rr = getDropRow(cc);
+          board[rr][cc] = 'yellow';
+          // Count how many winning threats we'd have after this move
+          var threats = 0;
+          for (var c3 = 0; c3 < COLS; c3++) {
+            if (isColumnFull(c3)) continue;
+            var r3 = getDropRow(c3);
+            board[r3][c3] = 'yellow';
+            if (checkWin()) threats++;
+            board[r3][c3] = null;
+          }
+          board[rr][cc] = null;
+          scored.push({ col: cc, score: threats * 5 + (3.5 - Math.abs(cc - 3)) });
+        }
+        scored.sort(function(a, b) { return b.score - a.score; });
+        return scored.length > 0 ? scored[0].col : -1;
+      }
+
+      // Medium: greedy
       // 4. Prefer center
       var candidates = safe.length > 0 ? safe : [];
       if (candidates.length === 0) {
         for (var c = 0; c < COLS; c++) { if (!isColumnFull(c)) candidates.push(c); }
       }
       if (candidates.length === 0) return -1;
-      // Prefer center columns
       candidates.sort(function(a, b) { return Math.abs(a - 3) - Math.abs(b - 3); });
-      // Pick from top 3 with some randomness
       var top = candidates.slice(0, Math.min(3, candidates.length));
       return top[Math.floor(Math.random() * top.length)];
     }

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bubble Bobble</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:4px;padding:6px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{background:#334155;padding:10px 16px;font-size:1.1rem;min-width:48px;min-height:44px}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:2px 8px}
+</style>
+</head>
+<body>
+<h1>Bubble Bobble</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Bubble Bobble</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Trap enemies in bubbles, then pop them!<br>Arrow keys or on-screen buttons.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Level: <b id="level">1</b></span><span>Score: <b id="score">0</b></span><span>Lives: <b id="lives">3</b></span><span>Best: <b id="best">0</b></span></div>
+<canvas id="c" width="400" height="350"></canvas>
+<div class="controls">
+<button class="ctrl-btn" onclick="moveLeft()" ontouchstart="event.preventDefault();keys.left=true" ontouchend="keys.left=false">&#9664;</button>
+<button class="ctrl-btn" onclick="moveRight()" ontouchstart="event.preventDefault();keys.right=true" ontouchend="keys.right=false">&#9654;</button>
+<button class="ctrl-btn" onclick="jump()" ontouchstart="event.preventDefault();keys.up=true" ontouchend="keys.up=false">&#9650;</button>
+<button class="ctrl-btn" onclick="shoot()" ontouchstart="event.preventDefault();shootBubble()">&#9679;</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=350;
+let player={x:180,y:300,w:20,h:20,vx:0,vy:0,dir:1,onGround:false};
+let enemies=[],bubbles=[],trappedBubbles=[],particles=[];
+let platforms=[],score=0,highScore=0,lives=3,level=1,paused=false,gameRunning=false;
+let keys={left:false,right:false,up:false};
+const GRAVITY=0.4,JUMP=-8,SPEED=3;
+
+function genLevel(lv){
+  platforms=[
+    {x:0,y:H-10,w:W,h:10},// floor
+    {x:50,y:280,w:100,h:8},{x:250,y:280,w:100,h:8},
+    {x:120,y:220,w:160,h:8},
+    {x:30,y:160,w:120,h:8},{x:250,y:160,w:120,h:8},
+    {x:140,y:100,w:120,h:8},
+  ];
+  enemies=[];
+  const count=2+lv;
+  for(let i=0;i<count;i++){
+    enemies.push({x:50+Math.random()*300,y:50+Math.random()*200,w:16,h:16,vx:(Math.random()>0.5?1:-1)*1.5,vy:0,alive:true});
+  }
+  bubbles=[];trappedBubbles=[];
+}
+
+function shootBubble(){
+  if(!gameRunning||paused)return;
+  bubbles.push({x:player.x+player.w/2,y:player.y,vx:player.dir*5,vy:0,life:60});
+}
+
+function moveLeft(){keys.left=true;setTimeout(()=>keys.left=false,100)}
+function moveRight(){keys.right=true;setTimeout(()=>keys.right=false,100)}
+function jump(){keys.up=true;setTimeout(()=>keys.up=false,100)}
+function shoot(){shootBubble()}
+
+function collides(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+
+function update(){
+  if(paused||!gameRunning)return;
+  // player movement
+  if(keys.left){player.vx=-SPEED;player.dir=-1}
+  else if(keys.right){player.vx=SPEED;player.dir=1}
+  else player.vx=0;
+  if(keys.up&&player.onGround){player.vy=JUMP;player.onGround=false}
+  player.vy+=GRAVITY;
+  player.x+=player.vx;player.y+=player.vy;
+  // wall wrap
+  if(player.x<-player.w)player.x=W;if(player.x>W)player.x=-player.w;
+  // platform collision
+  player.onGround=false;
+  platforms.forEach(p=>{
+    if(player.vy>=0&&player.y+player.h>=p.y&&player.y+player.h<=p.y+p.h+player.vy+1&&player.x+player.w>p.x&&player.x<p.x+p.w){
+      player.y=p.y-player.h;player.vy=0;player.onGround=true;
+    }
+  });
+  // bubbles
+  bubbles=bubbles.filter(b=>{
+    b.x+=b.vx;b.vy-=0.05;b.y+=b.vy;b.life--;
+    if(b.life<30)b.vx*=0.95;
+    // trap enemies
+    enemies.forEach(e=>{
+      if(e.alive&&Math.abs(b.x-e.x)<20&&Math.abs(b.y-e.y)<20){
+        e.alive=false;
+        trappedBubbles.push({x:e.x,y:e.y,vy:-0.5,life:200});
+        b.life=0;
+      }
+    });
+    return b.life>0&&b.x>-10&&b.x<W+10&&b.y>-10;
+  });
+  // trapped bubbles
+  trappedBubbles=trappedBubbles.filter(tb=>{
+    tb.y+=tb.vy;tb.life--;
+    // pop by player
+    if(Math.abs(player.x-tb.x)<24&&Math.abs(player.y-tb.y)<24){
+      score+=100;document.getElementById('score').textContent=score;
+      for(let i=0;i<5;i++)particles.push({x:tb.x,y:tb.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:20});
+      return false;
+    }
+    if(tb.life<=0){// enemy escapes
+      enemies.push({x:tb.x,y:tb.y,w:16,h:16,vx:(Math.random()>0.5?1:-1)*1.5,vy:0,alive:true});
+      return false;
+    }
+    return true;
+  });
+  // enemies
+  enemies.forEach(e=>{
+    if(!e.alive)return;
+    e.vy+=GRAVITY;e.x+=e.vx;e.y+=e.vy;
+    if(e.x<0||e.x+e.w>W)e.vx*=-1;
+    platforms.forEach(p=>{
+      if(e.vy>=0&&e.y+e.h>=p.y&&e.y+e.h<=p.y+p.h+e.vy+1&&e.x+e.w>p.x&&e.x<p.x+p.w){
+        e.y=p.y-e.h;e.vy=0;
+        if(Math.random()<0.02)e.vy=-6;
+      }
+    });
+    // hit player
+    if(collides(player,e)){
+      lives--;document.getElementById('lives').textContent=lives;
+      player.x=180;player.y=300;
+      if(lives<=0)gameOver();
+    }
+  });
+  // particles
+  particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;return p.life>0});
+  // level clear
+  if(enemies.filter(e=>e.alive).length===0&&trappedBubbles.length===0){
+    level++;document.getElementById('level').textContent=level;genLevel(level);player.x=180;player.y=300;
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // platforms
+  ctx.fillStyle='#334155';platforms.forEach(p=>ctx.fillRect(p.x,p.y,p.w,p.h));
+  // player
+  ctx.fillStyle='#22c55e';ctx.fillRect(player.x,player.y,player.w,player.h);
+  ctx.fillStyle='#fff';ctx.fillRect(player.x+(player.dir>0?12:4),player.y+4,4,4);
+  // enemies
+  enemies.forEach(e=>{if(e.alive){ctx.fillStyle='#ef4444';ctx.fillRect(e.x,e.y,e.w,e.h)}});
+  // bubbles
+  ctx.strokeStyle='#6366f1';ctx.lineWidth=2;
+  bubbles.forEach(b=>{ctx.beginPath();ctx.arc(b.x,b.y,8,0,Math.PI*2);ctx.stroke()});
+  // trapped
+  trappedBubbles.forEach(tb=>{
+    ctx.strokeStyle='#22c55e';ctx.beginPath();ctx.arc(tb.x+8,tb.y+8,12,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='#ef4444';ctx.fillRect(tb.x+4,tb.y+4,8,8);
+  });
+  // particles
+  particles.forEach(p=>{ctx.fillStyle=`rgba(250,204,21,${p.life/20})`;ctx.fillRect(p.x,p.y,3,3)});
+}
+
+function gameLoop(){
+  update();draw();
+  if(gameRunning)requestAnimationFrame(gameLoop);
+}
+
+function gameOver(){
+  gameRunning=false;
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){
+  paused=!paused;
+  document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8';
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  score=0;lives=3;level=1;paused=false;gameRunning=true;
+  player={x:180,y:300,w:20,h:20,vx:0,vy:0,dir:1,onGround:false};
+  document.getElementById('score').textContent=0;
+  document.getElementById('lives').textContent=3;
+  document.getElementById('level').textContent=1;
+  document.getElementById('best').textContent=highScore;
+  genLevel(1);gameLoop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')keys.left=true;
+  if(e.key==='ArrowRight')keys.right=true;
+  if(e.key==='ArrowUp')keys.up=true;
+  if(e.key===' ')shootBubble();
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')keys.left=false;
+  if(e.key==='ArrowRight')keys.right=false;
+  if(e.key==='ArrowUp')keys.up=false;
+});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'bubble-bobble',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='bubble-bobble'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

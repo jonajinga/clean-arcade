@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gradius</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{display:flex;gap:4px;padding:6px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{background:#334155;padding:10px 14px;font-size:1rem;min-width:44px;min-height:44px}
+.pause-btn{background:#334155;padding:6px 14px;font-size:0.85rem}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:2px 8px}
+.powerups{display:flex;gap:4px;padding:2px 8px;font-size:0.7rem}
+.pu{background:#1e293b;padding:2px 6px;border:1px solid #334155}.pu.active{border-color:#facc15;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Gradius</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Gradius</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Side-scrolling shooter!<br>Arrows to move, Space to shoot, P to pause.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Wave: <b id="wave">1</b></span><span>Score: <b id="score">0</b></span><span>Lives: <b id="lives">3</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="powerups"><span class="pu" id="puSpeed">Speed</span><span class="pu" id="puMissile">Missile</span><span class="pu" id="puLaser">Laser</span></div>
+<canvas id="c" width="400" height="300"></canvas>
+<div class="controls">
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.up=true" ontouchend="keys.up=false">&#9650;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.down=true" ontouchend="keys.down=false">&#9660;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.left=true" ontouchend="keys.left=false">&#9664;</button>
+<button class="ctrl-btn" ontouchstart="event.preventDefault();keys.right=true" ontouchend="keys.right=false">&#9654;</button>
+<button class="ctrl-btn" style="background:#ef4444" ontouchstart="event.preventDefault();keys.fire=true" ontouchend="keys.fire=false">FIRE</button>
+<button class="pause-btn" id="pauseBtn" onclick="togglePause()">&#9208;</button>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const W=400,H=300;
+let player,bullets,enemies,eBullets,powerups,particles,stars;
+let score=0,highScore=0,lives=3,wave=1,paused=false,gameRunning=false;
+let keys={up:false,down:false,left:false,right:false,fire:false};
+let fireCD=0,spawnCD=0,waveEnemies=0,puLevel=0;
+let hasSpeed=false,hasMissile=false,hasLaser=false;
+
+function init(){
+  player={x:40,y:150,w:24,h:12};
+  bullets=[];enemies=[];eBullets=[];powerups=[];particles=[];
+  stars=Array.from({length:50},()=>({x:Math.random()*W,y:Math.random()*H,s:Math.random()*2+0.5}));
+  score=0;lives=3;wave=1;fireCD=0;spawnCD=0;waveEnemies=0;puLevel=0;
+  hasSpeed=false;hasMissile=false;hasLaser=false;
+  updatePU();
+}
+
+function updatePU(){
+  document.getElementById('puSpeed').className='pu'+(hasSpeed?' active':'');
+  document.getElementById('puMissile').className='pu'+(hasMissile?' active':'');
+  document.getElementById('puLaser').className='pu'+(hasLaser?' active':'');
+}
+
+function spawnEnemy(){
+  const types=['basic','sine','fast'];
+  const t=types[Math.floor(Math.random()*types.length)];
+  const e={x:W+10,y:20+Math.random()*(H-40),w:18,h:14,vx:t==='fast'?-4:-2,type:t,hp:t==='fast'?1:2,time:0};
+  enemies.push(e);waveEnemies++;
+}
+
+function update(){
+  if(paused||!gameRunning)return;
+  const spd=hasSpeed?4:2.5;
+  if(keys.up)player.y-=spd;if(keys.down)player.y+=spd;
+  if(keys.left)player.x-=spd;if(keys.right)player.x+=spd;
+  player.x=Math.max(0,Math.min(W-player.w,player.x));
+  player.y=Math.max(0,Math.min(H-player.h,player.y));
+
+  if(keys.fire&&fireCD<=0){
+    const bw=hasLaser?20:6,bh=hasLaser?2:3;
+    bullets.push({x:player.x+player.w,y:player.y+player.h/2-1,w:bw,h:bh,vx:hasLaser?10:6,vy:0,dmg:hasLaser?2:1});
+    if(hasMissile)bullets.push({x:player.x+player.w,y:player.y+player.h/2,w:6,h:3,vx:5,vy:-2,dmg:1});
+    fireCD=hasLaser?12:8;
+  }
+  if(fireCD>0)fireCD--;
+
+  // stars
+  stars.forEach(s=>{s.x-=s.s;if(s.x<0)s.x=W});
+
+  // bullets
+  bullets=bullets.filter(b=>{b.x+=b.vx;b.y+=b.vy;return b.x<W+20&&b.y>-10&&b.y<H+10});
+
+  // spawn
+  spawnCD--;
+  if(spawnCD<=0&&waveEnemies<5+wave*2){spawnEnemy();spawnCD=30+Math.random()*40}
+
+  // enemies
+  enemies=enemies.filter(e=>{
+    e.time++;e.x+=e.vx;
+    if(e.type==='sine')e.y+=Math.sin(e.time*0.05)*2;
+    if(Math.random()<0.01)eBullets.push({x:e.x,y:e.y+e.h/2,vx:-4,vy:0,w:5,h:2});
+    // hit by bullet
+    for(let i=bullets.length-1;i>=0;i--){
+      const b=bullets[i];
+      if(b.x+b.w>e.x&&b.x<e.x+e.w&&b.y+b.h>e.y&&b.y<e.y+e.h){
+        e.hp-=b.dmg;bullets.splice(i,1);
+        if(e.hp<=0){
+          score+=100;document.getElementById('score').textContent=score;
+          for(let j=0;j<4;j++)particles.push({x:e.x,y:e.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:15});
+          if(Math.random()<0.2)powerups.push({x:e.x,y:e.y,vx:-1,vy:0,type:puLevel%3});
+          return false;
+        }
+      }
+    }
+    // hit player
+    if(e.x<player.x+player.w&&e.x+e.w>player.x&&e.y<player.y+player.h&&e.y+e.h>player.y){playerHit();return false}
+    return e.x>-30;
+  });
+
+  // enemy bullets
+  eBullets=eBullets.filter(b=>{
+    b.x+=b.vx;
+    if(b.x<player.x+player.w&&b.x+b.w>player.x&&b.y<player.y+player.h&&b.y+b.h>player.y){playerHit();return false}
+    return b.x>-10;
+  });
+
+  // powerups
+  powerups=powerups.filter(p=>{
+    p.x+=p.vx;
+    if(p.x<player.x+player.w&&p.x+10>player.x&&p.y<player.y+player.h&&p.y+10>player.y){
+      if(p.type===0){hasSpeed=true}else if(p.type===1){hasMissile=true}else{hasLaser=true}
+      puLevel++;updatePU();score+=50;document.getElementById('score').textContent=score;return false;
+    }
+    return p.x>-10;
+  });
+
+  particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.life--;return p.life>0});
+
+  // wave clear
+  if(waveEnemies>=5+wave*2&&enemies.length===0){wave++;waveEnemies=0;document.getElementById('wave').textContent=wave}
+}
+
+function playerHit(){
+  lives--;document.getElementById('lives').textContent=lives;
+  player.x=40;player.y=150;
+  hasSpeed=false;hasMissile=false;hasLaser=false;puLevel=0;updatePU();
+  if(lives<=0)gameOver();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  stars.forEach(s=>{ctx.fillStyle='#475569';ctx.fillRect(s.x,s.y,1,1)});
+  // player
+  ctx.fillStyle='#22c55e';ctx.beginPath();ctx.moveTo(player.x,player.y);ctx.lineTo(player.x+player.w,player.y+player.h/2);ctx.lineTo(player.x,player.y+player.h);ctx.fill();
+  // bullets
+  bullets.forEach(b=>{ctx.fillStyle=hasLaser?'#3b82f6':'#facc15';ctx.fillRect(b.x,b.y,b.w,b.h)});
+  // enemies
+  enemies.forEach(e=>{ctx.fillStyle='#ef4444';ctx.fillRect(e.x,e.y,e.w,e.h)});
+  // enemy bullets
+  eBullets.forEach(b=>{ctx.fillStyle='#ef4444';ctx.fillRect(b.x,b.y,b.w,b.h)});
+  // powerups
+  powerups.forEach(p=>{ctx.fillStyle=['#facc15','#3b82f6','#22c55e'][p.type];ctx.fillRect(p.x,p.y,10,10)});
+  // particles
+  particles.forEach(p=>{ctx.fillStyle=`rgba(239,68,68,${p.life/15})`;ctx.fillRect(p.x,p.y,3,3)});
+}
+
+function gameLoop(){
+  update();draw();
+  if(gameRunning)requestAnimationFrame(gameLoop);
+}
+
+function gameOver(){
+  gameRunning=false;
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score+' (Wave '+wave+')';
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').textContent=paused?'\u25B6':'\u23F8'}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  init();gameRunning=true;paused=false;
+  document.getElementById('score').textContent=0;document.getElementById('lives').textContent=3;document.getElementById('wave').textContent=1;
+  document.getElementById('best').textContent=highScore;
+  gameLoop();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'){keys.up=true;e.preventDefault()}
+  if(e.key==='ArrowDown'){keys.down=true;e.preventDefault()}
+  if(e.key==='ArrowLeft')keys.left=true;
+  if(e.key==='ArrowRight')keys.right=true;
+  if(e.key===' '){keys.fire=true;e.preventDefault()}
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp')keys.up=false;if(e.key==='ArrowDown')keys.down=false;
+  if(e.key==='ArrowLeft')keys.left=false;if(e.key==='ArrowRight')keys.right=false;
+  if(e.key===' ')keys.fire=false;
+});
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'gradius',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='gradius'&&e.data.state){highScore=e.data.state.highScore||0}});
+draw();
+</script>
+</body>
+</html>

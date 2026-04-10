@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tile Merge</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:360px;padding:12px;position:relative;min-height:440px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.info{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px auto;width:280px}
+.tile{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:bold;background:#1e293b;border:2px solid #334155;transition:transform 0.1s}
+.controls{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.ctrl-btn{background:#334155;padding:12px 18px;font-size:1.1rem;min-width:48px;min-height:48px}
+.rule{text-align:center;font-size:0.75rem;color:#94a3b8;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>Tile Merge</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Tile Merge</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Slide tiles to merge matching numbers!<br>Merging adds them together. Reach 512!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="grid" id="grid"></div>
+<div class="controls">
+<button class="ctrl-btn" onclick="move('up')">&#9650;</button>
+<button class="ctrl-btn" onclick="move('down')">&#9660;</button>
+<button class="ctrl-btn" onclick="move('left')">&#9664;</button>
+<button class="ctrl-btn" onclick="move('right')">&#9654;</button>
+</div>
+<div class="rule">Same numbers merge by addition. Get to 512!</div>
+</div>
+<script>
+const TILE_COLORS={0:'#1e293b',2:'#334155',4:'#475569',8:'#6366f1',16:'#3b82f6',32:'#22c55e',64:'#facc15',128:'#ef4444',256:'#ec4899',512:'#f97316'};
+let board,score=0,highScore=0,gameOver=false;
+
+function init(){
+  board=Array.from({length:4},()=>Array(4).fill(0));
+  score=0;gameOver=false;
+  addTile();addTile();
+  render();
+}
+
+function addTile(){
+  const empty=[];
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++)if(board[r][c]===0)empty.push([r,c]);
+  if(empty.length===0)return;
+  const[r,c]=empty[Math.floor(Math.random()*empty.length)];
+  board[r][c]=Math.random()<0.9?2:4;
+}
+
+function render(){
+  const g=document.getElementById('grid');g.innerHTML='';
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    const d=document.createElement('div');d.className='tile';
+    const v=board[r][c];
+    d.textContent=v||'';
+    d.style.background=TILE_COLORS[v]||'#6366f1';
+    if(v>=64)d.style.color='#0f172a';
+    if(v>=128)d.style.fontSize='1.1rem';
+    g.appendChild(d);
+  }
+  document.getElementById('score').textContent=score;
+}
+
+function slideRow(row){
+  let arr=row.filter(x=>x!==0);
+  let merged=false;
+  for(let i=0;i<arr.length-1;i++){
+    if(arr[i]===arr[i+1]){
+      arr[i]*=2;score+=arr[i];arr.splice(i+1,1);merged=true;
+    }
+  }
+  while(arr.length<4)arr.push(0);
+  return{row:arr,changed:merged||JSON.stringify(arr)!==JSON.stringify(row)};
+}
+
+function move(dir){
+  if(gameOver)return;
+  let changed=false;
+  if(dir==='left'){
+    for(let r=0;r<4;r++){const res=slideRow([...board[r]]);if(res.changed)changed=true;board[r]=res.row}
+  } else if(dir==='right'){
+    for(let r=0;r<4;r++){const res=slideRow([...board[r]].reverse());if(res.changed)changed=true;board[r]=res.row.reverse()}
+  } else if(dir==='up'){
+    for(let c=0;c<4;c++){const col=[board[0][c],board[1][c],board[2][c],board[3][c]];const res=slideRow(col);if(res.changed)changed=true;for(let r=0;r<4;r++)board[r][c]=res.row[r]}
+  } else if(dir==='down'){
+    for(let c=0;c<4;c++){const col=[board[3][c],board[2][c],board[1][c],board[0][c]];const res=slideRow(col);if(res.changed)changed=true;for(let r=0;r<4;r++)board[3-r][c]=res.row[r]}
+  }
+  if(changed){
+    addTile();render();
+    // check win
+    for(let r=0;r<4;r++)for(let c=0;c<4;c++)if(board[r][c]>=512){
+      gameOver=true;
+      document.getElementById('goTitle').textContent='You Win!';
+      if(score>highScore){highScore=score;saveState()}
+      document.getElementById('goScore').textContent='Score: '+score;
+      document.getElementById('goHigh').textContent='Best: '+highScore;
+      document.getElementById('gameOverOverlay').classList.remove('hidden');return;
+    }
+    // check game over
+    if(!canMove()){
+      gameOver=true;
+      document.getElementById('goTitle').textContent='Game Over!';
+      if(score>highScore){highScore=score;saveState()}
+      document.getElementById('goScore').textContent='Score: '+score;
+      document.getElementById('goHigh').textContent='Best: '+highScore;
+      document.getElementById('gameOverOverlay').classList.remove('hidden');
+    }
+  }
+}
+
+function canMove(){
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    if(board[r][c]===0)return true;
+    if(c<3&&board[r][c]===board[r][c+1])return true;
+    if(r<3&&board[r][c]===board[r+1][c])return true;
+  }
+  return false;
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'){move('up');e.preventDefault()}
+  if(e.key==='ArrowDown'){move('down');e.preventDefault()}
+  if(e.key==='ArrowLeft')move('left');
+  if(e.key==='ArrowRight')move('right');
+});
+
+let touchStartX,touchStartY;
+document.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY});
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX,dy=e.changedTouches[0].clientY-touchStartY;
+  if(Math.abs(dx)<30&&Math.abs(dy)<30)return;
+  if(Math.abs(dx)>Math.abs(dy)){move(dx>0?'right':'left')}else{move(dy>0?'down':'up')}
+});
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  document.getElementById('best').textContent=highScore;
+  init();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'tile-merge',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tile-merge'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

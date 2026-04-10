@@ -52,6 +52,9 @@
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
   .hidden { display: none !important; }
+  .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+  .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+  .diff-btn.active{background:#6366f1;border-color:#6366f1}
   .pause-wrap { display: none; text-align: center; padding: 6px 0; }
   #pauseBtn {
     width: 40px; height: 40px;
@@ -104,6 +107,11 @@
 <div id="overlay">
   <h1 id="overlayTitle">Pong</h1>
   <p class="final-score hidden" id="finalScore"></p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="window._setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="window._setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="window._setDiff('hard')">Hard</button>
+  </div>
   <p id="overlayMsg">First to 5 wins. Click to Play.</p>
   <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
 </div>
@@ -121,9 +129,17 @@
   const pauseWrap = document.getElementById('pause-wrap');
   const pauseBtn = document.getElementById('pauseBtn');
 
+  let difficulty = 'medium';
+  window._setDiff = function(d) {
+    difficulty = d;
+    document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+  };
+
   let W, H, sc;
   const GW = 600, GH = 400;
-  const PADDLE_W = 12, PADDLE_H = 80, BALL_R = 8;
+  const PADDLE_W = 12;
+  var PADDLE_H = 80;
+  const BALL_R = 8;
   const WIN_Score = 5;
 
   function resize() {
@@ -145,13 +161,15 @@
   let touchDir = 0;
 
   function resetBall(dir) {
+    var ballSpd = difficulty === 'easy' ? 3 : difficulty === 'hard' ? 5.5 : 4;
     ball = {
       x: GW / 2, y: GH / 2,
-      vx: 4 * dir, vy: (Math.random() * 4 - 2)
+      vx: ballSpd * dir, vy: (Math.random() * 4 - 2)
     };
   }
 
   function init() {
+    PADDLE_H = difficulty === 'easy' ? 100 : difficulty === 'hard' ? 60 : 80;
     player = { y: GH / 2 - PADDLE_H / 2 };
     cpu = { y: GH / 2 - PADDLE_H / 2 };
     pScore = 0; cScore = 0;
@@ -229,7 +247,7 @@
     // CPU AI
     const cpuCenter = cpu.y + PADDLE_H / 2;
     const diff = ball.y - cpuCenter;
-    const cpuSpeed = 3.5;
+    const cpuSpeed = difficulty === 'easy' ? 2.5 : difficulty === 'hard' ? 4.5 : 3.5;
     if (Math.abs(diff) > 10) cpu.y += Math.sign(diff) * cpuSpeed;
     cpu.y = Math.max(0, Math.min(GH - PADDLE_H, cpu.y));
 

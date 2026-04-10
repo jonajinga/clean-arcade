@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Texas Hold'em</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:420px;padding:10px;position:relative;min-height:520px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.table{background:#1a472a;border:3px solid #334155;padding:10px;margin:8px 0;min-height:280px;position:relative}
+.community{display:flex;gap:4px;justify-content:center;margin:8px 0;min-height:60px;flex-wrap:wrap}
+.card{width:42px;height:60px;background:#fff;color:#000;border:1px solid #999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.8rem;font-weight:bold;line-height:1}
+.card.red{color:#ef4444}
+.card.back{background:#3b82f6;color:#fff;font-size:0.6rem}
+.player-area{display:flex;gap:4px;align-items:center;margin:4px 0;padding:4px;font-size:0.75rem}
+.player-area.active{background:rgba(250,204,21,0.15);border:1px solid #facc15}
+.player-area .name{width:60px;font-weight:bold;white-space:nowrap;overflow:hidden}
+.player-area .chips{color:#facc15;width:50px}
+.player-area .bet{color:#22c55e;width:40px}
+.player-area .status{color:#94a3b8;font-size:0.7rem}
+.my-hand{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.my-hand .card{width:52px;height:72px;font-size:1rem}
+.pot{text-align:center;color:#facc15;font-weight:bold;font-size:1rem;margin:4px 0}
+.actions{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.actions button{padding:8px 14px;font-size:0.85rem;min-height:44px}
+.fold-btn{background:#ef4444}
+.check-btn{background:#334155}
+.call-btn{background:#22c55e;color:#0f172a}
+.raise-btn{background:#facc15;color:#0f172a}
+.msg{text-align:center;font-size:0.85rem;min-height:20px;margin-top:4px}
+.info{display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Texas Hold'em</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Texas Hold'em</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Play poker against 3 AI opponents!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Your Chips: <b id="myChips">1000</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="table">
+<div id="aiPlayers"></div>
+<div class="pot">Pot: <span id="pot">0</span></div>
+<div class="community" id="community"></div>
+<div class="my-hand" id="myHand"></div>
+</div>
+<div class="msg" id="msg"></div>
+<div class="actions" id="actions"></div>
+</div>
+<script>
+const SUITS=['♠','♥','♦','♣'],RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const RANK_VAL={2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13,A:14};
+let deck,players,community,pot,currentBet,phase,dealerIdx,activePlayer,highScore=0,gameActive=false;
+const NAMES=['You','Alice','Bob','Carol'];
+
+function makeDeck(){const d=[];SUITS.forEach(s=>RANKS.forEach(r=>d.push({rank:r,suit:s})));for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]]}return d}
+
+function cardHTML(c,hidden=false){
+  if(hidden)return'<div class="card back">?</div>';
+  const red=c.suit==='♥'||c.suit==='♦'?'red':'';
+  return`<div class="card ${red}"><span>${c.rank}</span><span>${c.suit}</span></div>`;
+}
+
+function initHand(){
+  deck=makeDeck();community=[];pot=0;currentBet=0;phase='preflop';
+  players.forEach(p=>{p.hand=[];p.bet=0;p.folded=false;p.allIn=false});
+  // deal 2 to each
+  for(let i=0;i<2;i++)players.forEach(p=>{if(p.chips>0)p.hand.push(deck.pop())});
+  // blinds
+  const sb=(dealerIdx+1)%4,bb=(dealerIdx+2)%4;
+  placeBet(sb,10);placeBet(bb,20);currentBet=20;
+  activePlayer=(dealerIdx+3)%4;
+  render();
+  if(activePlayer!==0)setTimeout(aiTurn,800);
+}
+
+function placeBet(idx,amt){
+  const p=players[idx];
+  const actual=Math.min(amt,p.chips);
+  p.bet+=actual;p.chips-=actual;pot+=actual;
+  if(p.chips===0)p.allIn=true;
+}
+
+function render(){
+  document.getElementById('myChips').textContent=players[0].chips;
+  document.getElementById('pot').textContent=pot;
+  // AI
+  const aiDiv=document.getElementById('aiPlayers');aiDiv.innerHTML='';
+  for(let i=1;i<4;i++){
+    const p=players[i];
+    const act=activePlayer===i?'active':'';
+    const status=p.folded?'Folded':p.allIn?'All In':'';
+    const cards=p.folded?'':p.hand.map(c=>cardHTML(c,phase!=='showdown')).join('');
+    aiDiv.innerHTML+=`<div class="player-area ${act}"><span class="name">${NAMES[i]}</span><span class="chips">$${p.chips}</span><span class="bet">Bet:${p.bet}</span>${cards}<span class="status">${status}</span></div>`;
+  }
+  // community
+  document.getElementById('community').innerHTML=community.map(c=>cardHTML(c)).join('');
+  // my hand
+  document.getElementById('myHand').innerHTML=players[0].hand.map(c=>cardHTML(c)).join('');
+  // actions
+  const acts=document.getElementById('actions');acts.innerHTML='';
+  if(activePlayer===0&&!players[0].folded&&gameActive){
+    const toCall=currentBet-players[0].bet;
+    acts.innerHTML=`<button class="fold-btn" onclick="playerAct('fold')">Fold</button>`;
+    if(toCall===0)acts.innerHTML+=`<button class="check-btn" onclick="playerAct('check')">Check</button>`;
+    else acts.innerHTML+=`<button class="call-btn" onclick="playerAct('call')">Call $${toCall}</button>`;
+    if(players[0].chips>toCall)acts.innerHTML+=`<button class="raise-btn" onclick="playerAct('raise')">Raise</button>`;
+  }
+}
+
+function playerAct(action){
+  if(activePlayer!==0)return;
+  doAction(0,action);
+  advanceTurn();
+}
+
+function doAction(idx,action){
+  const p=players[idx];
+  if(action==='fold'){p.folded=true}
+  else if(action==='call'){placeBet(idx,currentBet-p.bet)}
+  else if(action==='check'){}
+  else if(action==='raise'){
+    const raise=Math.min(currentBet+20,p.chips+p.bet);
+    placeBet(idx,raise-p.bet);currentBet=raise;
+  }
+}
+
+function aiDecision(idx){
+  const p=players[idx];
+  const toCall=currentBet-p.bet;
+  const handStr=evalHand([...p.hand,...community]);
+  if(toCall===0){return Math.random()<0.3?'raise':'check'}
+  if(handStr>3||Math.random()<0.4)return toCall<=40?'call':'fold';
+  if(handStr>5)return'raise';
+  return Math.random()<0.3?'call':'fold';
+}
+
+function advanceTurn(){
+  let next=(activePlayer+1)%4;
+  let roundDone=false,checked=0;
+  // find next active player or end round
+  for(let i=0;i<4;i++){
+    const idx=(activePlayer+1+i)%4;
+    const p=players[idx];
+    if(!p.folded&&!p.allIn&&p.chips>0){
+      if(p.bet===currentBet&&phase!=='preflop'){checked++}
+      else if(p.bet===currentBet){checked++}
+    }
+  }
+  // check if round over (all matched or folded)
+  const activePlayers=players.filter(p=>!p.folded&&!p.allIn);
+  const allMatched=activePlayers.every(p=>p.bet===currentBet);
+  const onlyOne=players.filter(p=>!p.folded).length===1;
+
+  if(onlyOne){endHand();return}
+
+  if(allMatched&&activePlayer!==(dealerIdx+1)%4||(allMatched&&checked>=activePlayers.length)){
+    nextPhase();return;
+  }
+
+  // find next non-folded player
+  for(let i=1;i<=4;i++){
+    const idx=(activePlayer+i)%4;
+    if(!players[idx].folded&&!players[idx].allIn&&players[idx].chips>0){
+      activePlayer=idx;render();
+      if(idx!==0)setTimeout(aiTurn,600);
+      return;
+    }
+  }
+  nextPhase();
+}
+
+function aiTurn(){
+  if(!gameActive)return;
+  const action=aiDecision(activePlayer);
+  doAction(activePlayer,action);
+  document.getElementById('msg').textContent=NAMES[activePlayer]+' '+action+'s';
+  advanceTurn();
+}
+
+function nextPhase(){
+  players.forEach(p=>p.bet=0);currentBet=0;
+  if(phase==='preflop'){phase='flop';community.push(deck.pop(),deck.pop(),deck.pop())}
+  else if(phase==='flop'){phase='turn';community.push(deck.pop())}
+  else if(phase==='turn'){phase='river';community.push(deck.pop())}
+  else{phase='showdown';endHand();return}
+  activePlayer=(dealerIdx+1)%4;
+  while(players[activePlayer].folded||players[activePlayer].allIn){activePlayer=(activePlayer+1)%4}
+  render();
+  if(activePlayer!==0)setTimeout(aiTurn,800);
+}
+
+function evalHand(cards){
+  if(cards.length<2)return 0;
+  const vals=cards.map(c=>RANK_VAL[c.rank]).sort((a,b)=>b-a);
+  const suits=cards.map(c=>c.suit);
+  const counts={};vals.forEach(v=>counts[v]=(counts[v]||0)+1);
+  const maxCount=Math.max(...Object.values(counts));
+  const pairs=Object.values(counts).filter(c=>c===2).length;
+  const flush=suits.some(s=>suits.filter(x=>x===s).length>=5);
+  let straight=false;
+  for(let i=0;i<=vals.length-5;i++){if(vals[i]-vals[i+4]===4)straight=true}
+  if(flush&&straight)return 8;
+  if(maxCount===4)return 7;
+  if(maxCount===3&&pairs>=1)return 6;
+  if(flush)return 5;
+  if(straight)return 4;
+  if(maxCount===3)return 3;
+  if(pairs>=2)return 2;
+  if(pairs===1)return 1;
+  return vals[0]/14;
+}
+
+function endHand(){
+  phase='showdown';
+  const remaining=players.filter(p=>!p.folded);
+  let bestScore=-1,winner=0;
+  remaining.forEach(p=>{
+    const s=evalHand([...p.hand,...community]);
+    if(s>bestScore){bestScore=s;winner=players.indexOf(p)}
+  });
+  players[winner].chips+=pot;
+  document.getElementById('msg').textContent=NAMES[winner]+' wins $'+pot+'!';
+  render();
+  // check game end
+  if(players[0].chips<=0){
+    gameActive=false;
+    if(players[0].chips>highScore){highScore=players[0].chips;saveState()}
+    document.getElementById('goTitle').textContent='Busted!';
+    document.getElementById('goScore').textContent='Final chips: $'+players[0].chips;
+    document.getElementById('goHigh').textContent='Best: $'+highScore;
+    setTimeout(()=>document.getElementById('gameOverOverlay').classList.remove('hidden'),1500);
+    return;
+  }
+  dealerIdx=(dealerIdx+1)%4;
+  setTimeout(initHand,2000);
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  players=[
+    {name:'You',chips:1000,hand:[],bet:0,folded:false,allIn:false},
+    {name:'Alice',chips:1000,hand:[],bet:0,folded:false,allIn:false},
+    {name:'Bob',chips:1000,hand:[],bet:0,folded:false,allIn:false},
+    {name:'Carol',chips:1000,hand:[],bet:0,folded:false,allIn:false},
+  ];
+  dealerIdx=0;gameActive=true;
+  document.getElementById('best').textContent=highScore;
+  document.getElementById('msg').textContent='';
+  initHand();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'texas-holdem',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='texas-holdem'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>
