@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Match</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;touch-action:manipulation;min-height:100vh;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.hud{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;padding:0.25rem 0.5rem;font-size:0.85rem;color:#94a3b8}
+.hud span{white-space:nowrap}
+.hud b{color:#e2e8f0}
+#game-area{border:2px solid #6366f1;padding:8px;display:grid;gap:6px;width:min(95vw,500px);margin:0.5rem auto}
+.card{aspect-ratio:1;perspective:800px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.card-inner{position:relative;width:100%;height:100%;transition:transform 0.45s;transform-style:preserve-3d}
+.card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
+.card-face{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;backface-visibility:hidden;border:2px solid #334155;font-weight:700}
+.card-back{background:linear-gradient(135deg,#6366f1,#3b82f6);color:#e2e8f0;font-size:1.8rem}
+.card-front{background:#1e293b;border-color:#3b82f6;color:#fff;transform:rotateY(180deg);font-size:1.4rem;word-break:break-all;padding:2px;text-align:center}
+.card.matched .card-front{border-color:#22c55e;background:#1e293b;box-shadow:inset 0 0 20px rgba(34,197,94,0.15)}
+.card.matched{pointer-events:none}
+.card.wrong .card-front{border-color:#ef4444;box-shadow:inset 0 0 20px rgba(239,68,68,0.2)}
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,0.92);display:flex;align-items:center;justify-content:center;z-index:100}
+.overlay.hidden{display:none}
+.panel{background:#1e293b;border:2px solid #6366f1;padding:1.5rem;width:min(92vw,380px);text-align:center}
+.panel h2{color:#facc15;margin-bottom:1rem;font-size:1.2rem}
+.panel p{font-size:0.85rem;color:#94a3b8;margin-bottom:0.75rem}
+.panel label{display:block;text-align:left;font-size:0.8rem;color:#94a3b8;margin-bottom:0.25rem;margin-top:0.5rem}
+.panel select{width:100%;padding:0.4rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:0;font-size:0.9rem;margin-bottom:0.25rem}
+.btn{background:#6366f1;color:#fff;border:none;border-radius:0;padding:0.6rem 1.5rem;font-size:1rem;font-weight:700;cursor:pointer;margin-top:1rem;width:100%}
+.btn:hover{background:#4f46e5}
+.stats{text-align:left;font-size:0.8rem;margin-top:0.75rem;color:#94a3b8}
+.stats b{color:#facc15}
+.result-line{margin:0.5rem 0;font-size:0.9rem;color:#e2e8f0}
+.best{color:#22c55e}
+</style>
+</head>
+<body>
+<h1>Number Match</h1>
+<div class="hud">
+  <span>Moves: <b id="moves">0</b></span>
+  <span>Pairs: <b id="pairs">0</b>/<b id="total">0</b></span>
+  <span>Time: <b id="timer">0:00</b></span>
+</div>
+<div id="game-area"></div>
+
+<!-- Start Overlay -->
+<div class="overlay" id="start-overlay">
+  <div class="panel">
+    <h2>Number Match</h2>
+    <p>Flip cards and find matching pairs!</p>
+    <label for="sel-size">Grid Size</label>
+    <select id="sel-size">
+      <option value="3x2">3 x 2 (3 pairs)</option>
+      <option value="4x4" selected>4 x 4 (8 pairs)</option>
+      <option value="5x4">5 x 4 (10 pairs)</option>
+      <option value="6x5">6 x 5 (15 pairs)</option>
+    </select>
+    <label for="sel-mode">Mode</label>
+    <select id="sel-mode">
+      <option value="same">Match Same (5 &harr; 5)</option>
+      <option value="sum10">Match Sum to 10 (3 &harr; 7)</option>
+      <option value="doubles">Match Doubles (3 &harr; 6)</option>
+      <option value="equations">Match Equations (2+3 &harr; 5)</option>
+      <option value="oddeven">Odd/Even Sort</option>
+    </select>
+    <button class="btn" id="btn-play" onclick="startGame()">Play</button>
+  </div>
+</div>
+
+<!-- Game Over Overlay -->
+<div class="overlay hidden" id="end-overlay">
+  <div class="panel">
+    <h2>Game Complete!</h2>
+    <div id="end-stats"></div>
+    <button class="btn" id="btn-again" onclick="showStart()">Play Again</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const gameArea = $('game-area');
+const startOv = $('start-overlay');
+const endOv = $('end-overlay');
+
+let cards = [], first = null, second = null, locked = false;
+let moves = 0, pairsFound = 0, totalPairs = 0;
+let timerInterval = null, seconds = 0;
+let currentMode = 'same', currentSize = '4x4';
+let highScores = {};
+
+// postMessage save/load
+const SLUG = 'number-match';
+function saveData() {
+  try { parent.postMessage({ type: 'save', slug: SLUG, data: { highScores } }, '*'); } catch(e) {}
+}
+function loadData() {
+  try { parent.postMessage({ type: 'load', slug: SLUG }, '*'); } catch(e) {}
+}
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'loaded' && e.data.slug === SLUG && e.data.data) {
+    if (e.data.data.highScores) highScores = e.data.data.highScores;
+  }
+});
+loadData();
+
+const SIZES = {
+  '3x2': { cols: 3, rows: 2, pairs: 3 },
+  '4x4': { cols: 4, rows: 4, pairs: 8 },
+  '5x4': { cols: 5, rows: 4, pairs: 10 },
+  '6x5': { cols: 6, rows: 5, pairs: 15 }
+};
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function generatePairs(mode, count) {
+  const pairs = [];
+  if (mode === 'same') {
+    const nums = shuffle([...Array(20)].map((_, i) => i + 1)).slice(0, count);
+    nums.forEach(n => pairs.push({ a: String(n), b: String(n), group: n }));
+  } else if (mode === 'sum10') {
+    const options = [[1,9],[2,8],[3,7],[4,6],[5,5]];
+    const pool = shuffle([...options, ...options, ...options]).slice(0, count);
+    pool.forEach(([a, b], i) => pairs.push({ a: String(a), b: String(b), group: i }));
+  } else if (mode === 'doubles') {
+    const options = [[2,4],[3,6],[4,8],[5,10],[6,12],[7,14],[1,2],[8,16],[9,18]];
+    const pool = shuffle([...options]).slice(0, count);
+    pool.forEach(([a, b], i) => pairs.push({ a: String(a), b: String(b), group: i }));
+  } else if (mode === 'equations') {
+    const eqs = [];
+    const ops = [
+      (a,b) => ({ eq: `${a}+${b}`, ans: a + b }),
+      (a,b) => a > b ? { eq: `${a}-${b}`, ans: a - b } : null,
+      (a,b) => ({ eq: `${a}\u00d7${b}`, ans: a * b }),
+    ];
+    for (let i = 0; i < 50 && eqs.length < count; i++) {
+      const a = Math.floor(Math.random() * 9) + 1;
+      const b = Math.floor(Math.random() * 9) + 1;
+      const op = ops[Math.floor(Math.random() * ops.length)];
+      const r = op(a, b);
+      if (r && r.ans >= 0 && r.ans <= 99) {
+        eqs.push({ a: r.eq, b: String(r.ans), group: eqs.length });
+      }
+    }
+    while (eqs.length < count) {
+      const a = Math.floor(Math.random() * 9) + 2;
+      const b = Math.floor(Math.random() * 9) + 1;
+      eqs.push({ a: `${a}+${b}`, b: String(a + b), group: eqs.length });
+    }
+    eqs.forEach(e => pairs.push(e));
+  } else if (mode === 'oddeven') {
+    // Build pairs of same parity but different numbers
+    const odds = shuffle([1,3,5,7,9,11,13,15,17,19]);
+    const evens = shuffle([2,4,6,8,10,12,14,16,18,20]);
+    let pi = 0;
+    // Alternate odd and even pairs
+    for (let i = 0; i < count; i++) {
+      if (i % 2 === 0 && pi * 2 + 1 < odds.length) {
+        pairs.push({ a: String(odds[pi * 2]), b: String(odds[pi * 2 + 1]), group: i });
+        if (i % 2 === 0) pi++;
+      } else {
+        const ei = Math.floor((i - 1) / 2);
+        if (ei * 2 + 1 < evens.length) {
+          pairs.push({ a: String(evens[ei * 2]), b: String(evens[ei * 2 + 1]), group: i });
+        } else {
+          pairs.push({ a: String(evens[0]), b: String(evens[1]), group: i });
+        }
+      }
+    }
+  }
+  return pairs;
+}
+
+function isMatch(c1, c2, mode) {
+  if (mode === 'same') return c1.value === c2.value;
+  if (mode === 'sum10') {
+    return Number(c1.value) + Number(c2.value) === 10;
+  }
+  if (mode === 'doubles') {
+    const a = Number(c1.value), b = Number(c2.value);
+    return a === b * 2 || b === a * 2;
+  }
+  if (mode === 'equations') {
+    // One should be equation, one answer — they are paired
+    return c1.group === c2.group && c1.side !== c2.side;
+  }
+  if (mode === 'oddeven') {
+    const a = Number(c1.value), b = Number(c2.value);
+    if (a === b) return false; // must be different numbers
+    return (a % 2) === (b % 2); // same parity
+  }
+  return false;
+}
+
+function startGame() {
+  currentSize = $('sel-size').value;
+  currentMode = $('sel-mode').value;
+  const cfg = SIZES[currentSize];
+  totalPairs = cfg.pairs;
+  pairsFound = 0;
+  moves = 0;
+  seconds = 0;
+  first = null;
+  second = null;
+  locked = false;
+  cards = [];
+
+  $('moves').textContent = '0';
+  $('pairs').textContent = '0';
+  $('total').textContent = totalPairs;
+  $('timer').textContent = '0:00';
+
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds / 60);
+    const s = String(seconds % 60).padStart(2, '0');
+    $('timer').textContent = `${m}:${s}`;
+  }, 1000);
+
+  const pairData = generatePairs(currentMode, totalPairs);
+  const cardData = [];
+  pairData.forEach((p, i) => {
+    cardData.push({ value: p.a, group: i, side: 'a' });
+    cardData.push({ value: p.b, group: i, side: 'b' });
+  });
+  shuffle(cardData);
+
+  gameArea.style.gridTemplateColumns = `repeat(${cfg.cols}, 1fr)`;
+  gameArea.innerHTML = '';
+
+  // Adjust font sizes for larger grids
+  const fontSize = cfg.cols >= 6 ? '1rem' : cfg.cols >= 5 ? '1.1rem' : '1.4rem';
+  const qSize = cfg.cols >= 6 ? '1.3rem' : '1.8rem';
+
+  cardData.forEach((cd, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.idx = idx;
+    card.innerHTML = `<div class="card-inner"><div class="card-face card-back" style="font-size:${qSize}">?</div><div class="card-face card-front" style="font-size:${fontSize}">${cd.value}</div></div>`;
+    card.addEventListener('click', () => flipCard(card, idx));
+    gameArea.appendChild(card);
+    cards.push({ el: card, ...cd, flipped: false, matched: false });
+  });
+
+  startOv.classList.add('hidden');
+  endOv.classList.add('hidden');
+}
+
+function flipCard(el, idx) {
+  const c = cards[idx];
+  if (locked || c.flipped || c.matched) return;
+  c.flipped = true;
+  el.classList.add('flipped');
+
+  if (!first) {
+    first = c;
+  } else {
+    second = c;
+    locked = true;
+    moves++;
+    $('moves').textContent = moves;
+
+    if (isMatch(first, second, currentMode)) {
+      first.matched = true;
+      second.matched = true;
+      first.el.classList.add('matched');
+      second.el.classList.add('matched');
+      pairsFound++;
+      $('pairs').textContent = pairsFound;
+      first = null;
+      second = null;
+      locked = false;
+      if (pairsFound === totalPairs) endGame();
+    } else {
+      first.el.classList.add('wrong');
+      second.el.classList.add('wrong');
+      setTimeout(() => {
+        first.el.classList.remove('flipped', 'wrong');
+        second.el.classList.remove('flipped', 'wrong');
+        first.flipped = false;
+        second.flipped = false;
+        first = null;
+        second = null;
+        locked = false;
+      }, 800);
+    }
+  }
+}
+
+function endGame() {
+  clearInterval(timerInterval);
+  const key = `${currentMode}_${currentSize}`;
+  const prev = highScores[key];
+  const isNew = !prev || moves < prev;
+  if (isNew) {
+    highScores[key] = moves;
+    saveData();
+  }
+  const m = Math.floor(seconds / 60);
+  const s = String(seconds % 60).padStart(2, '0');
+  const modeNames = { same: 'Match Same', sum10: 'Sum to 10', doubles: 'Doubles', equations: 'Equations', oddeven: 'Odd/Even' };
+  let html = `<p class="result-line">Mode: <b>${modeNames[currentMode]}</b> | Grid: <b>${currentSize}</b></p>`;
+  html += `<p class="result-line">Moves: <b>${moves}</b> | Time: <b>${m}:${s}</b></p>`;
+  if (isNew) html += `<p class="result-line best">New Best Score!</p>`;
+  else html += `<p class="result-line">Best: <b class="best">${prev} moves</b></p>`;
+  $('end-stats').innerHTML = html;
+  endOv.classList.remove('hidden');
+}
+
+function showStart() {
+  endOv.classList.add('hidden');
+  startOv.classList.remove('hidden');
+  if (timerInterval) clearInterval(timerInterval);
+}
+</script>
+</body>
+</html>

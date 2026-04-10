@@ -318,4 +318,5 @@ export default [
   { title: "Ricochet", slug: "ricochet", description: "", category: "puzzle", difficulty: "medium", controls: "", mobileSupport: true, dateAdded: "2026-04-09", featured: false, gamePath: "/games/_src/ricochet/index.html" },
   { title: "Bounce Ball", slug: "bounce-ball", description: "", category: "action", difficulty: "medium", controls: "", mobileSupport: true, dateAdded: "2026-04-09", featured: false, gamePath: "/games/_src/bounce-ball/index.html" },
   { title: "Acronym Game", slug: "acronym-game", description: "", category: "word", difficulty: "medium", controls: "", mobileSupport: true, dateAdded: "2026-04-09", featured: false, gamePath: "/games/_src/acronym-game/index.html" },
+  { title: "Number Match", slug: "number-match", description: "Match number pairs. Multiple modes: same, sum to 10, doubles, equations.", category: "puzzle", difficulty: "easy", controls: "Click cards to flip", mobileSupport: true, dateAdded: "2026-04-09", featured: false, gamePath: "/games/_src/number-match/index.html" },
 ];
