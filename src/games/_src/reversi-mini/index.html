@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reversi Mini</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:420px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:420px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#status{text-align:center;font-size:0.85rem;margin:0.3rem;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Reversi Mini</h1>
+<div id="hud"><span id="hud-black">⚫ 2</span><span id="hud-turn">Your Turn</span><span id="hud-white">⚪ 2</span><span id="hud-hi">Wins: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="420" height="420"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Reversi Mini</h2>
+<p>6x6 Reversi - Quick games!</p>
+<p>You are Black. Flip the AI's pieces!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2 id="end-title">Game Over</h2>
+<p id="end-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="status">Click a valid cell to place your piece</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const SIZE=6,CELL=65,PAD=25;
+const DIRS=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+let board,turn,running=false,wins=0,highScore=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='reversi-mini'){highScore=e.data.state?.highScore||0;wins=highScore;document.getElementById('hud-hi').textContent='Wins: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  board[2][2]=2;board[3][3]=2;board[2][3]=1;board[3][2]=1;
+  turn=1;running=true;
+  draw();
+}
+
+function getFlips(b,r,c,player){
+  if(b[r][c]!==0)return[];
+  const opp=3-player;let allFlips=[];
+  DIRS.forEach(([dr,dc])=>{
+    let flips=[],nr=r+dr,nc=c+dc;
+    while(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&b[nr][nc]===opp){flips.push([nr,nc]);nr+=dr;nc+=dc}
+    if(flips.length>0&&nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&b[nr][nc]===player)allFlips.push(...flips);
+  });
+  return allFlips;
+}
+
+function getValidMoves(b,player){
+  const moves=[];
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){if(getFlips(b,r,c,player).length>0)moves.push({r,c})}
+  return moves;
+}
+
+function makeMove(r,c,player){
+  const flips=getFlips(board,r,c,player);
+  if(flips.length===0)return false;
+  board[r][c]=player;
+  flips.forEach(([fr,fc])=>board[fr][fc]=player);
+  return true;
+}
+
+function count(player){let n=0;for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)if(board[r][c]===player)n++;return n}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,420,420);
+  const validMoves=running&&turn===1?getValidMoves(board,1):[];
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const x=PAD+c*CELL,y=PAD+r*CELL;
+      ctx.fillStyle='#14532d';ctx.fillRect(x,y,CELL,CELL);
+      ctx.strokeStyle='#166534';ctx.strokeRect(x,y,CELL,CELL);
+      // valid move indicator
+      if(validMoves.some(m=>m.r===r&&m.c===c)){
+        ctx.fillStyle='rgba(250,204,21,0.2)';ctx.fillRect(x,y,CELL,CELL);
+        ctx.fillStyle='rgba(250,204,21,0.5)';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,5,0,Math.PI*2);ctx.fill();
+      }
+      if(board[r][c]===1){
+        ctx.fillStyle='#1e293b';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-6,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#334155';ctx.beginPath();ctx.arc(x+CELL/2-3,y+CELL/2-3,CELL/2-14,0,Math.PI*2);ctx.fill();
+      }else if(board[r][c]===2){
+        ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-6,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x+CELL/2-3,y+CELL/2-3,CELL/2-14,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+  document.getElementById('hud-black').textContent='⚫ '+count(1);
+  document.getElementById('hud-white').textContent='⚪ '+count(2);
+  document.getElementById('hud-turn').textContent=turn===1?'Your Turn':'AI Turn';
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||turn!==1)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(420/rect.width)-PAD;
+  const my=(e.clientY-rect.top)*(420/rect.height)-PAD;
+  const c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
+  if(r<0||r>=SIZE||c<0||c>=SIZE)return;
+  if(!makeMove(r,c,1))return;
+  turn=2;draw();
+  setTimeout(()=>{aiTurn()},400);
+});
+
+function aiTurn(){
+  if(!running)return;
+  const moves=getValidMoves(board,2);
+  if(moves.length===0){
+    turn=1;
+    if(getValidMoves(board,1).length===0){endGame();return}
+    draw();return;
+  }
+  // pick best move (most flips)
+  let best=null,bestFlips=0;
+  moves.forEach(m=>{
+    const f=getFlips(board,m.r,m.c,2).length;
+    // prefer corners
+    const corner=(m.r===0||m.r===SIZE-1)&&(m.c===0||m.c===SIZE-1)?10:0;
+    if(f+corner>bestFlips){bestFlips=f+corner;best=m}
+  });
+  if(best)makeMove(best.r,best.c,2);
+  turn=1;
+  if(getValidMoves(board,1).length===0){
+    if(getValidMoves(board,2).length===0){endGame();return}
+    turn=2;setTimeout(aiTurn,400);return;
+  }
+  draw();
+}
+
+function endGame(){
+  running=false;
+  const b=count(1),w=count(2);
+  let msg;
+  if(b>w){msg='You win! '+b+' to '+w;wins++;if(wins>highScore){highScore=wins;parent.postMessage({type:'ca-save',slug:'reversi-mini',state:{highScore}},'*')}}
+  else if(w>b){msg='AI wins! '+w+' to '+b}
+  else{msg='Tie! '+b+' to '+w}
+  document.getElementById('hud-hi').textContent='Wins: '+highScore;
+  document.getElementById('end-title').textContent=b>w?'You Win!':w>b?'AI Wins!':'Tie!';
+  document.getElementById('end-msg').textContent=msg;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  draw();
+}
+</script>
+</body>
+</html>

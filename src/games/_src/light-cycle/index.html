@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Light Cycle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:450px;height:450px;border:2px solid #6366f1;background:#0a0f1a}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:grid;grid-template-columns:repeat(3,1fr);gap:0.3rem;margin-top:0.5rem;max-width:180px}
+.ctrl-btn{background:#334155;padding:0.6rem;font-size:1.2rem;text-align:center}
+#pause-btn{background:#334155;padding:0.5rem 1rem;font-size:0.9rem}
+</style>
+</head>
+<body>
+<h1>Light Cycle</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Light Cycle</h2>
+    <p>Leave a trail your opponent can't cross!</p>
+    <p style="color:#94a3b8">Don't hit any trail or wall. vs AI.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2 id="end-title">Game Over</h2>
+    <p id="end-msg"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <div></div>
+  <button class="ctrl-btn" onclick="setDir(0,-1)">&#9650;</button>
+  <div></div>
+  <button class="ctrl-btn" onclick="setDir(-1,0)">&#9664;</button>
+  <button id="pause-btn" onclick="togglePause()">⏸</button>
+  <button class="ctrl-btn" onclick="setDir(1,0)">&#9654;</button>
+  <div></div>
+  <button class="ctrl-btn" onclick="setDir(0,1)">&#9660;</button>
+  <div></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,GRID,COLS,ROWS,grid,player,ai,gameOver,paused,highScore=0,wins,interval;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height;GRID=6;COLS=Math.floor(W/GRID);ROWS=Math.floor(H/GRID)}
+resize();
+
+function startGame(){
+  resize();
+  grid=Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));
+  player={x:Math.floor(COLS*0.25),y:Math.floor(ROWS/2),dx:1,dy:0,alive:true};
+  ai={x:Math.floor(COLS*0.75),y:Math.floor(ROWS/2),dx:-1,dy:0,alive:true};
+  grid[player.y][player.x]=1;
+  grid[ai.y][ai.x]=2;
+  gameOver=false;paused=false;wins=wins||0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  if(interval)clearInterval(interval);
+  interval=setInterval(step,60);
+}
+function setDir(dx,dy){
+  // Prevent 180 turn
+  if(player.dx===-dx&&player.dy===-dy)return;
+  if(dx===0&&dy===0)return;
+  player.dx=dx;player.dy=dy;
+}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function step(){
+  if(paused||gameOver)return;
+  // Move player
+  player.x+=player.dx;player.y+=player.dy;
+  // Move AI
+  aiThink();
+  ai.x+=ai.dx;ai.y+=ai.dy;
+  // Check collisions
+  if(player.x<0||player.x>=COLS||player.y<0||player.y>=ROWS||grid[player.y][player.x]!==0){
+    player.alive=false;
+  }else{grid[player.y][player.x]=1}
+  if(ai.x<0||ai.x>=COLS||ai.y<0||ai.y>=ROWS||grid[ai.y][ai.x]!==0){
+    ai.alive=false;
+  }else{grid[ai.y][ai.x]=2}
+  if(!player.alive||!ai.alive){
+    clearInterval(interval);gameOver=true;
+    const won=player.alive&&!ai.alive;
+    const draw=!player.alive&&!ai.alive;
+    if(won){wins++;highScore=wins;saveScore()}
+    document.getElementById('end-title').textContent=draw?'Draw!':won?'You Win!':'You Lose!';
+    document.getElementById('end-msg').textContent='';
+    document.getElementById('hs').textContent='Wins: '+highScore;
+    document.getElementById('end-overlay').classList.remove('hidden');
+  }
+  drawGrid();
+}
+function aiThink(){
+  // Simple AI: look ahead and pick best direction
+  const dirs=[{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+  // Filter out reverse
+  const valid=dirs.filter(d=>!(d.dx===-ai.dx&&d.dy===-ai.dy));
+  let bestDir=valid[0],bestScore=-1;
+  valid.forEach(d=>{
+    const nx=ai.x+d.dx,ny=ai.y+d.dy;
+    if(nx<0||nx>=COLS||ny<0||ny>=ROWS||grid[ny][nx]!==0)return;
+    // Count open space ahead
+    let open=0;
+    for(let i=1;i<15;i++){
+      const cx=nx+d.dx*i,cy=ny+d.dy*i;
+      if(cx<0||cx>=COLS||cy<0||cy>=ROWS||grid[cy][cx]!==0)break;
+      open++;
+    }
+    // Also check perpendicular
+    const perps=[{dx:-d.dy,dy:d.dx},{dx:d.dy,dy:-d.dx}];
+    perps.forEach(p=>{for(let i=1;i<8;i++){const cx=nx+p.dx*i,cy=ny+p.dy*i;if(cx<0||cx>=COLS||cy<0||cy>=ROWS||grid[cy][cx]!==0)break;open++}});
+    // Chase player slightly
+    const distToPlayer=Math.abs(nx-player.x)+Math.abs(ny-player.y);
+    open+=Math.max(0,30-distToPlayer)*0.3;
+    if(open>bestScore){bestScore=open;bestDir=d}
+  });
+  if(bestScore<0){/* dead end, keep going */}
+  else{ai.dx=bestDir.dx;ai.dy=bestDir.dy}
+}
+function drawGrid(){
+  ctx.fillStyle='#0a0f1a';ctx.fillRect(0,0,W,H);
+  // Grid lines
+  ctx.strokeStyle='#111827';
+  for(let x=0;x<COLS;x++){ctx.beginPath();ctx.moveTo(x*GRID,0);ctx.lineTo(x*GRID,H);ctx.stroke()}
+  for(let y=0;y<ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*GRID);ctx.lineTo(W,y*GRID);ctx.stroke()}
+  // Trails
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(grid[r][c]===1){ctx.fillStyle='#3b82f6';ctx.fillRect(c*GRID,r*GRID,GRID,GRID)}
+    else if(grid[r][c]===2){ctx.fillStyle='#ef4444';ctx.fillRect(c*GRID,r*GRID,GRID,GRID)}
+  }
+  // Heads (brighter)
+  if(player.alive){ctx.fillStyle='#93c5fd';ctx.fillRect(player.x*GRID,player.y*GRID,GRID,GRID)}
+  if(ai.alive){ctx.fillStyle='#fca5a5';ctx.fillRect(ai.x*GRID,ai.y*GRID,GRID,GRID)}
+}
+document.addEventListener('keydown',e=>{
+  if(e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();setDir(0,-1)}
+  if(e.code==='ArrowDown'||e.code==='KeyS'){e.preventDefault();setDir(0,1)}
+  if(e.code==='ArrowLeft'||e.code==='KeyA')setDir(-1,0);
+  if(e.code==='ArrowRight'||e.code==='KeyD')setDir(1,0);
+  if(e.code==='KeyP')togglePause();
+});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'light-cycle',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='light-cycle'&&e.data.state){highScore=e.data.state.highScore||0;wins=highScore}});
+</script>
+</body>
+</html>

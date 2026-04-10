@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recycling Center</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+.bin-btn{font-size:0.8rem;padding:0.5rem 0.8rem}
+</style>
+</head>
+<body>
+<h1>Recycling Center</h1>
+<div id="hud"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="360"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Recycling Center</h2>
+<p>Sort items into the correct bins!</p>
+<p>Paper, Plastic, Glass, or Trash.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Game Over!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn bin-btn" onclick="sortItem('paper')" style="background:#3b82f6">📄 Paper (1)</button>
+<button class="ctrl-btn bin-btn" onclick="sortItem('plastic')" style="background:#facc15;color:#0f172a">🥤 Plastic (2)</button>
+<button class="ctrl-btn bin-btn" onclick="sortItem('glass')" style="background:#22c55e">🍶 Glass (3)</button>
+<button class="ctrl-btn bin-btn" onclick="sortItem('trash')" style="background:#64748b">🗑 Trash (4)</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const items=[
+  {name:'Newspaper',type:'paper',emoji:'📰'},{name:'Cardboard',type:'paper',emoji:'📦'},
+  {name:'Magazine',type:'paper',emoji:'📖'},{name:'Envelope',type:'paper',emoji:'✉️'},
+  {name:'Water Bottle',type:'plastic',emoji:'🥤'},{name:'Bag',type:'plastic',emoji:'🛍️'},
+  {name:'Container',type:'plastic',emoji:'🫙'},{name:'Straw',type:'plastic',emoji:'🥤'},
+  {name:'Wine Bottle',type:'glass',emoji:'🍷'},{name:'Jar',type:'glass',emoji:'🏺'},
+  {name:'Mirror',type:'glass',emoji:'🪞'},{name:'Vase',type:'glass',emoji:'🏺'},
+  {name:'Banana Peel',type:'trash',emoji:'🍌'},{name:'Chicken Bone',type:'trash',emoji:'🍗'},
+  {name:'Tissue',type:'trash',emoji:'🧻'},{name:'Diaper',type:'trash',emoji:'🧷'},
+  {name:'Chip Bag',type:'trash',emoji:'🥔'},{name:'Notebook',type:'paper',emoji:'📓'},
+  {name:'Soda Can',type:'plastic',emoji:'🥫'},{name:'Light Bulb',type:'glass',emoji:'💡'}
+];
+
+let conveyor=[],score=0,lives=3,highScore=0,speed=1,running=false,paused=false,lastTime,spawnTimer=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='recycling-center'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function spawnItem(){
+  const item=items[Math.floor(Math.random()*items.length)];
+  conveyor.push({...item,x:500,y:140});
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  conveyor=[];score=0;lives=3;speed=1;running=true;paused=false;
+  spawnTimer=0;lastTime=performance.now();
+  spawnItem();
+  requestAnimationFrame(loop);
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}}
+
+function sortItem(bin){
+  if(!running||paused||conveyor.length===0)return;
+  // sort the frontmost item (leftmost)
+  let frontIdx=0;
+  for(let i=1;i<conveyor.length;i++){if(conveyor[i].x<conveyor[frontIdx].x)frontIdx=i}
+  const item=conveyor[frontIdx];
+  if(item.type===bin){score+=10;speed=1+score/100}
+  else{lives--;score=Math.max(0,score-5)}
+  conveyor.splice(frontIdx,1);
+  if(lives<=0){endGame();return}
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+}
+
+function loop(ts){
+  if(!running||paused)return;
+  const dt=ts-lastTime;lastTime=ts;
+  spawnTimer+=dt;
+  if(spawnTimer>Math.max(1000,2500-score*20)){spawnTimer=0;spawnItem()}
+  conveyor.forEach(item=>{item.x-=speed*0.8});
+  // remove items that fell off left
+  const before=conveyor.length;
+  conveyor=conveyor.filter(item=>{
+    if(item.x<-40){lives--;return false}
+    return true;
+  });
+  if(conveyor.length<before){
+    document.getElementById('hud-lives').textContent='Lives: '+lives;
+    if(lives<=0){endGame();return}
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,360);
+  // conveyor belt
+  ctx.fillStyle='#334155';ctx.fillRect(0,160,480,40);
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;
+  const offset=(Date.now()/50*speed)%20;
+  for(let x=-20+offset;x<500;x+=20){ctx.beginPath();ctx.moveTo(x,160);ctx.lineTo(x,200);ctx.stroke()}
+  // bins
+  const bins=[{label:'Paper',color:'#3b82f6',x:40},{label:'Plastic',color:'#facc15',x:160},{label:'Glass',color:'#22c55e',x:280},{label:'Trash',color:'#64748b',x:400}];
+  bins.forEach(b=>{
+    ctx.fillStyle=b.color;ctx.fillRect(b.x-35,250,70,80);
+    ctx.fillStyle='#0f172a';ctx.fillRect(b.x-30,255,60,70);
+    ctx.fillStyle=b.color;ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.fillText(b.label,b.x,345);
+  });
+  // items on conveyor
+  conveyor.forEach(item=>{
+    ctx.fillStyle='#1e293b';ctx.fillRect(item.x-20,item.y-25,40,40);
+    ctx.font='24px system-ui';ctx.textAlign='center';ctx.fillText(item.emoji,item.x,item.y+5);
+    ctx.fillStyle='#e2e8f0';ctx.font='9px system-ui';ctx.fillText(item.name,item.x,item.y+20);
+  });
+  // current item highlight
+  if(conveyor.length>0){
+    let frontIdx=0;
+    for(let i=1;i<conveyor.length;i++){if(conveyor[i].x<conveyor[frontIdx].x)frontIdx=i}
+    const f=conveyor[frontIdx];
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;ctx.strokeRect(f.x-22,f.y-27,44,44);
+  }
+}
+
+function endGame(){
+  running=false;
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'recycling-center',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='1')sortItem('paper');
+  if(e.key==='2')sortItem('plastic');
+  if(e.key==='3')sortItem('glass');
+  if(e.key==='4')sortItem('trash');
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+</script>
+</body>
+</html>

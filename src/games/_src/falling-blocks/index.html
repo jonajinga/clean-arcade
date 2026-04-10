@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Falling Blocks</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:400px;height:500px;border:2px solid #6366f1;background:#1e293b;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem}
+#pause-btn{background:#334155;padding:0.5rem 1.5rem}
+</style>
+</head>
+<body>
+<h1>Falling Blocks</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Falling Blocks</h2>
+    <p>Click blocks to destroy them before they stack!</p>
+    <p style="color:#94a3b8">Chain combos for bonus points</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls"><button id="pause-btn" onclick="togglePause()">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,blocks,stacked,score,highScore=0,combo,comboTimer,gameOver,paused,frame,spawnRate;
+const BLOCK_W=40,BLOCK_H=25;
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#a855f7','#f97316'];
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+
+function startGame(){
+  blocks=[];stacked=[];score=0;combo=0;comboTimer=0;frame=0;spawnRate=80;gameOver=false;paused=false;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  loop();
+}
+function spawnBlock(){
+  const cols=Math.floor(W/BLOCK_W);
+  const col=Math.floor(Math.random()*cols);
+  blocks.push({
+    x:col*BLOCK_W,y:-BLOCK_H,w:BLOCK_W-2,h:BLOCK_H-2,
+    speed:1+Math.random()*1.5+frame*0.0005,
+    color:COLORS[Math.floor(Math.random()*COLORS.length)],
+    alive:true
+  });
+}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop()}
+function loop(){
+  if(paused||gameOver)return;
+  update();draw();requestAnimationFrame(loop);
+}
+function update(){
+  frame++;
+  if(comboTimer>0)comboTimer--;
+  else combo=0;
+  spawnRate=Math.max(20,80-Math.floor(frame/200));
+  if(frame%spawnRate===0)spawnBlock();
+  blocks.forEach(b=>{
+    if(!b.alive)return;
+    b.y+=b.speed;
+    // Check stacking
+    const landY=getStackHeight(b.x);
+    if(b.y+b.h>=landY){
+      b.y=landY-b.h;
+      b.alive=false;
+      stacked.push({x:b.x,y:b.y,w:b.w,h:b.h,color:b.color});
+      // Check game over
+      if(b.y<=30){die()}
+    }
+  });
+  blocks=blocks.filter(b=>b.alive);
+}
+function getStackHeight(x){
+  let minY=H;
+  stacked.forEach(s=>{
+    if(Math.abs(s.x-x)<BLOCK_W*0.5&&s.y<minY)minY=s.y;
+  });
+  return minY;
+}
+function clickAt(cx,cy){
+  if(gameOver||paused)return;
+  // Check falling blocks first
+  for(let i=blocks.length-1;i>=0;i--){
+    const b=blocks[i];
+    if(b.alive&&cx>=b.x&&cx<=b.x+b.w&&cy>=b.y&&cy<=b.y+b.h){
+      b.alive=false;
+      combo++;comboTimer=60;
+      score+=10*combo;
+      return;
+    }
+  }
+  // Check stacked blocks
+  for(let i=stacked.length-1;i>=0;i--){
+    const s=stacked[i];
+    if(cx>=s.x&&cx<=s.x+s.w&&cy>=s.y&&cy<=s.y+s.h){
+      stacked.splice(i,1);
+      combo++;comboTimer=60;
+      score+=5*combo;
+      return;
+    }
+  }
+}
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  clickAt((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();const t=e.touches[0],r=canvas.getBoundingClientRect();
+  clickAt((t.clientX-r.left)*(W/r.width),(t.clientY-r.top)*(H/r.height));
+});
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Danger zone
+  ctx.fillStyle='rgba(239,68,68,0.1)';ctx.fillRect(0,0,W,30);
+  ctx.strokeStyle='#ef4444';ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(0,30);ctx.lineTo(W,30);ctx.stroke();ctx.setLineDash([]);
+  // Stacked
+  stacked.forEach(s=>{
+    ctx.fillStyle=s.color;ctx.fillRect(s.x,s.y,s.w,s.h);
+    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.strokeRect(s.x,s.y,s.w,s.h);
+  });
+  // Falling
+  blocks.forEach(b=>{
+    if(!b.alive)return;
+    ctx.fillStyle=b.color;ctx.fillRect(b.x,b.y,b.w,b.h);
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.strokeRect(b.x,b.y,b.w,b.h);
+  });
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='13px system-ui';
+  ctx.fillText('Score: '+score,10,18);
+  ctx.fillText('Best: '+highScore,W-90,18);
+  if(combo>1){
+    ctx.fillStyle='#facc15';ctx.font='bold 16px system-ui';
+    ctx.fillText('Combo x'+combo+'!',W/2-40,50);
+  }
+}
+function die(){
+  gameOver=true;
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{if(e.code==='KeyP')togglePause()});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'falling-blocks',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='falling-blocks'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

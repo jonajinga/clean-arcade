@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acronym Game</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;min-height:400px;border:2px solid #6366f1;background:#1e293b;display:flex;flex-direction:column;align-items:center;padding:1rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0;font-size:1rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none!important}
+#hud{width:100%;display:flex;justify-content:space-between;margin-bottom:0.75rem;font-size:0.9rem;color:#94a3b8}
+#acronym-display{font-size:2rem;color:#6366f1;font-weight:bold;margin:1rem 0}
+.choices{display:grid;grid-template-columns:1fr;gap:0.5rem;width:100%}
+.choice-btn{background:#334155;color:#e2e8f0;padding:0.75rem;text-align:left;font-size:0.9rem;border:2px solid transparent}
+.choice-btn:hover{border-color:#6366f1}
+.choice-btn.correct{background:#22c55e;color:#0f172a}
+.choice-btn.wrong{background:#ef4444}
+#feedback{height:1.5rem;margin-top:0.5rem;font-size:0.9rem;text-align:center}
+#final-score{font-size:1.3rem;color:#22c55e}
+</style>
+</head>
+<body>
+<h1>Acronym Game</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Acronym Game</h2>
+    <p>Guess what the acronym stands for!</p>
+    <p style="color:#94a3b8">20 rounds</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over!</h2>
+    <p id="final-score"></p>
+    <p id="high-score-display" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="hud"><span>Round: <span id="round">1</span>/20</span><span>Score: <span id="score">0</span></span></div>
+  <div id="acronym-display"></div>
+  <div class="choices" id="choices"></div>
+  <div id="feedback"></div>
+</div>
+<script>
+const ACRONYMS=[
+{a:"NASA",full:"National Aeronautics and Space Administration",fakes:["National Association of Space Agencies","North American Space Alliance","National Aerospace Safety Authority"]},
+{a:"FAQ",full:"Frequently Asked Questions",fakes:["Fast Access Query","File And Queue","Found Answer Quickly"]},
+{a:"HTML",full:"HyperText Markup Language",fakes:["High Tech Modern Language","Hyper Transfer Mail Link","Home Tool Markup Listing"]},
+{a:"CPU",full:"Central Processing Unit",fakes:["Computer Power Utility","Core Program Unit","Central Program Utility"]},
+{a:"GPS",full:"Global Positioning System",fakes:["General Purpose Satellite","Geographic Point Service","Global Point Signal"]},
+{a:"ATM",full:"Automated Teller Machine",fakes:["Automatic Transaction Manager","Any Time Money","Advanced Transfer Module"]},
+{a:"DNA",full:"Deoxyribonucleic Acid",fakes:["Dynamic Nucleic Assembly","Digital Nano Architecture","Dense Nucleotide Array"]},
+{a:"FBI",full:"Federal Bureau of Investigation",fakes:["Federal Board of Intelligence","Foreign Bureau of Inspection","Federal Branch of Inquiries"]},
+{a:"CEO",full:"Chief Executive Officer",fakes:["Corporate Executive Overseer","Chief Enterprise Officer","Central Executive Operator"]},
+{a:"WiFi",full:"Wireless Fidelity",fakes:["Wide Frequency Interface","Wired File Integration","Web Interface for Internet"]},
+{a:"PDF",full:"Portable Document Format",fakes:["Printed Data File","Personal Document Folder","Public Data Format"]},
+{a:"RAM",full:"Random Access Memory",fakes:["Read And Modify","Rapid Access Module","Running Application Memory"]},
+{a:"URL",full:"Uniform Resource Locator",fakes:["Universal Reference Link","Unified Resource Library","User Request Location"]},
+{a:"SCUBA",full:"Self-Contained Underwater Breathing Apparatus",fakes:["Submersible Controlled Underwater Breathing Aid","Sealed Container for Underwater Body Activities","Sub-aquatic Compressed Unit for Breathing Air"]},
+{a:"LASER",full:"Light Amplification by Stimulated Emission of Radiation",fakes:["Linear Accelerated Signal Emitting Rays","Light And Sound Energy Refraction","Luminous Amplified Signal Emission Ray"]},
+{a:"NATO",full:"North Atlantic Treaty Organization",fakes:["National Allied Tactical Operations","Northern Alliance for Territorial Order","North American Treaty Office"]},
+{a:"ASAP",full:"As Soon As Possible",fakes:["Always Send A Priority","Accelerated Speed And Performance","All Systems Active Priority"]},
+{a:"PIN",full:"Personal Identification Number",fakes:["Private Input Number","Protected Identity Notation","Personal Index Number"]},
+{a:"SOS",full:"Save Our Souls",fakes:["Signal Of Stress","Send Out Signal","Secure Our Safety"]},
+{a:"VPN",full:"Virtual Private Network",fakes:["Verified Protection Node","Variable Proxy Navigation","Visual Processing Network"]},
+{a:"RSVP",full:"Répondez S'il Vous Plaît",fakes:["Reply Sent Via Post","Respond Soon Very Promptly","Request Special Venue Placement"]},
+{a:"RADAR",full:"Radio Detection And Ranging",fakes:["Remote Area Distance And Recognition","Rapid Aerial Detection Array","Radio Amplified Distance Analysis Relay"]},
+{a:"GIF",full:"Graphics Interchange Format",fakes:["General Image File","Graphic Interface Framework","Generated Image Format"]},
+{a:"AWOL",full:"Absent Without Official Leave",fakes:["Away Without Legitimate Order","Absent Without Legal Order","Away Without Outlined Leave"]},
+{a:"ETA",full:"Estimated Time of Arrival",fakes:["Expected Transit Alert","Exact Travel Approximation","Early Tracking Assessment"]},
+{a:"SWAT",full:"Special Weapons And Tactics",fakes:["Strategic Warfare And Training","Specialized War Action Team","Swift Weapons Attack Team"]},
+{a:"FIFA",full:"Fédération Internationale de Football Association",fakes:["Federal International Football Authority","Free International Federation of Athletics","Forum for International Football Administration"]},
+{a:"DIY",full:"Do It Yourself",fakes:["Design It Yourself","Develop Independently Yearly","Draft In Yellow"]},
+{a:"CAPTCHA",full:"Completely Automated Public Turing test to tell Computers and Humans Apart",fakes:["Computer Aided Program To Catch Hacking Attempts","Centralized Authentication Protocol To Counter Human Automation","Code And Password Test for Computer-Human Authentication"]},
+{a:"JPEG",full:"Joint Photographic Experts Group",fakes:["Java Photo Encoding Gateway","Just Picture Enhancement Graphics","Joined Pixel Export Generator"]}
+];
+let round,score,highScore=0,used,current;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function startGame(){
+  round=0;score=0;used=[];
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  nextRound();
+}
+function nextRound(){
+  if(round>=20){endGame();return}
+  round++;
+  document.getElementById('round').textContent=round;
+  document.getElementById('score').textContent=score;
+  document.getElementById('feedback').textContent='';
+  let pool=ACRONYMS.filter((_,i)=>!used.includes(i));
+  if(pool.length===0){used=[];pool=[...ACRONYMS]}
+  const idx=ACRONYMS.indexOf(pool[Math.floor(Math.random()*pool.length)]);
+  used.push(idx);
+  current=ACRONYMS[idx];
+  document.getElementById('acronym-display').textContent=current.a;
+  const options=shuffle([current.full,...current.fakes]);
+  const c=document.getElementById('choices');
+  c.innerHTML='';
+  options.forEach(o=>{
+    const b=document.createElement('button');
+    b.className='choice-btn';
+    b.textContent=o;
+    b.onclick=()=>choose(b,o);
+    c.appendChild(b);
+  });
+}
+function choose(btn,answer){
+  const btns=document.querySelectorAll('.choice-btn');
+  btns.forEach(b=>b.onclick=null);
+  if(answer===current.full){
+    btn.classList.add('correct');
+    score++;
+    document.getElementById('feedback').textContent='Correct!';
+    document.getElementById('feedback').style.color='#22c55e';
+  }else{
+    btn.classList.add('wrong');
+    btns.forEach(b=>{if(b.textContent===current.full)b.classList.add('correct')});
+    document.getElementById('feedback').textContent='Wrong! It was: '+current.full;
+    document.getElementById('feedback').style.color='#ef4444';
+  }
+  document.getElementById('score').textContent=score;
+  setTimeout(nextRound,1500);
+}
+function endGame(){
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Score: '+score+'/20';
+  document.getElementById('high-score-display').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'acronym-game',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='acronym-game'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>River Rafting</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>River Rafting</h1>
+<div id="hud"><span id="hud-dist">Dist: 0</span><span id="hud-speed">Speed: 1x</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="320" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>River Rafting</h2>
+<p>Navigate the rapids!</p>
+<p>Dodge rocks, collect coins.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Crashed!</h2>
+<p id="final-dist"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" ontouchstart="paddleLeft=true" ontouchend="paddleLeft=false" onmousedown="paddleLeft=true" onmouseup="paddleLeft=false">◀ Left</button>
+<button class="ctrl-btn" ontouchstart="paddleRight=true" ontouchend="paddleRight=false" onmousedown="paddleRight=true" onmouseup="paddleRight=false">Right ▶</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let raft,rocks,coins,dist,highScore=0,running=false,paused=false,speed,lastTime;
+let paddleLeft=false,paddleRight=false;
+const RIVER_L=40,RIVER_R=280;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='river-rafting'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  raft={x:160,y:380,w:30,h:40};rocks=[];coins=[];dist=0;speed=2;running=true;paused=false;
+  lastTime=performance.now();
+  for(let i=0;i<8;i++)spawnRock(-i*120);
+  requestAnimationFrame(loop);
+}
+
+function spawnRock(startY){
+  const y=startY||-(20+Math.random()*60);
+  rocks.push({x:RIVER_L+20+Math.random()*(RIVER_R-RIVER_L-40),y,r:10+Math.random()*15});
+  if(Math.random()<0.3)coins.push({x:RIVER_L+20+Math.random()*(RIVER_R-RIVER_L-40),y:y-40,r:8,collected:false});
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}}
+
+function loop(ts){
+  if(!running||paused)return;
+  const dt=(ts-lastTime)/16;lastTime=ts;
+  speed=2+dist/500;
+  dist+=speed*0.1;
+  // paddle
+  if(paddleLeft)raft.x-=3*dt;
+  if(paddleRight)raft.x+=3*dt;
+  raft.x=Math.max(RIVER_L+5,Math.min(RIVER_R-raft.w-5,raft.x));
+  // move rocks & coins down
+  rocks.forEach(r=>r.y+=speed*dt);
+  coins.forEach(c=>c.y+=speed*dt);
+  // spawn new
+  rocks=rocks.filter(r=>r.y<520);
+  coins=coins.filter(c=>c.y<520);
+  if(rocks.length<8)spawnRock();
+  // collisions
+  let dead=false;
+  rocks.forEach(r=>{
+    const cx=raft.x+raft.w/2,cy=raft.y+raft.h/2;
+    const dx=cx-r.x,dy=cy-r.y;
+    if(Math.sqrt(dx*dx+dy*dy)<r.r+15)dead=true;
+  });
+  // bank collision
+  if(raft.x<RIVER_L||raft.x+raft.w>RIVER_R)dead=true;
+  coins.forEach(c=>{
+    if(!c.collected){
+      const dx=raft.x+raft.w/2-c.x,dy=raft.y+raft.h/2-c.y;
+      if(Math.sqrt(dx*dx+dy*dy)<c.r+15){c.collected=true;dist+=50}
+    }
+  });
+  if(dead){endGame();return}
+  draw();
+  document.getElementById('hud-dist').textContent='Dist: '+Math.floor(dist);
+  document.getElementById('hud-speed').textContent='Speed: '+speed.toFixed(1)+'x';
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,320,480);
+  // river banks
+  ctx.fillStyle='#365314';ctx.fillRect(0,0,RIVER_L,480);ctx.fillRect(RIVER_R,0,40,480);
+  // river
+  ctx.fillStyle='#1e40af';ctx.fillRect(RIVER_L,0,RIVER_R-RIVER_L,480);
+  // water ripples
+  ctx.strokeStyle='rgba(59,130,246,0.3)';ctx.lineWidth=1;
+  const off=(Date.now()/100*speed)%40;
+  for(let y=-40+off;y<500;y+=40){
+    ctx.beginPath();ctx.moveTo(RIVER_L,y);
+    for(let x=RIVER_L;x<RIVER_R;x+=20)ctx.lineTo(x,y+Math.sin(x*0.1)*5);
+    ctx.stroke();
+  }
+  // trees on banks
+  ctx.fillStyle='#15803d';
+  for(let y=0;y<500;y+=60){
+    ctx.beginPath();ctx.arc(15,y+((dist*2)%60),12,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(RIVER_R+20,y+30+((dist*2)%60),12,0,Math.PI*2);ctx.fill();
+  }
+  // rocks
+  rocks.forEach(r=>{
+    ctx.fillStyle='#64748b';ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#475569';ctx.beginPath();ctx.arc(r.x-2,r.y-2,r.r*0.7,0,Math.PI*2);ctx.fill();
+  });
+  // coins
+  coins.forEach(c=>{
+    if(!c.collected){ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(c.x,c.y,c.r,0,Math.PI*2);ctx.fill()}
+  });
+  // raft
+  ctx.fillStyle='#92400e';ctx.fillRect(raft.x,raft.y,raft.w,raft.h);
+  ctx.fillStyle='#a16207';ctx.fillRect(raft.x+2,raft.y+2,raft.w-4,raft.h-4);
+  // paddle indicator
+  ctx.fillStyle='#e2e8f0';
+  if(paddleLeft)ctx.fillRect(raft.x-8,raft.y+10,6,20);
+  if(paddleRight)ctx.fillRect(raft.x+raft.w+2,raft.y+10,6,20);
+}
+
+function endGame(){
+  running=false;
+  const score=Math.floor(dist);
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'river-rafting',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-dist').textContent='Distance: '+score;
+  document.getElementById('final-hi').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')paddleLeft=true;
+  if(e.key==='ArrowRight'||e.key==='d')paddleRight=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')paddleLeft=false;
+  if(e.key==='ArrowRight'||e.key==='d')paddleRight=false;
+});
+</script>
+</body>
+</html>

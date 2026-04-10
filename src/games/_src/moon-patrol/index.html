@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moon Patrol</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Moon Patrol</h1>
+<div id="hud"><span id="hud-score">Score: 0</span><span id="hud-dist">Dist: 0m</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="320"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Moon Patrol</h2>
+<p>Jump over craters, shoot obstacles!</p>
+<p>Arrow keys or buttons below.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Crashed!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="jump()">Jump ▲</button>
+<button class="ctrl-btn" onclick="shoot()">Shoot ●</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let buggy,obstacles,bullets,score,dist,highScore=0,running=false,paused=false,scrollSpeed,groundY=260,lastTime;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='moon-patrol'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  buggy={x:80,y:groundY,w:40,h:20,vy:0,onGround:true};
+  obstacles=[];bullets=[];score=0;dist=0;scrollSpeed=2;running=true;paused=false;
+  lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function jump(){if(running&&!paused&&buggy.onGround){buggy.vy=-8;buggy.onGround=false}}
+function shoot(){if(running&&!paused){bullets.push({x:buggy.x+buggy.w,y:buggy.y+5,vx:6})}}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}}
+
+function spawnObstacle(){
+  const r=Math.random();
+  if(r<0.4){obstacles.push({type:'crater',x:500,y:groundY+10,w:40+Math.random()*30,h:15})}
+  else if(r<0.7){obstacles.push({type:'rock',x:500,y:groundY-15,w:20,h:25})}
+  else{obstacles.push({type:'ufo',x:500,y:80+Math.random()*100,w:30,h:15})}
+}
+
+let spawnTimer=0;
+function loop(ts){
+  if(!running||paused)return;
+  const dt=ts-lastTime;lastTime=ts;
+  spawnTimer+=dt;
+  if(spawnTimer>1200-dist*0.5){spawnTimer=0;spawnObstacle()}
+  scrollSpeed=2+dist/500;
+  dist+=scrollSpeed*0.1;score=Math.floor(dist*10);
+  // buggy physics
+  if(!buggy.onGround){buggy.vy+=0.4;buggy.y+=buggy.vy;if(buggy.y>=groundY){buggy.y=groundY;buggy.vy=0;buggy.onGround=true}}
+  // move obstacles
+  obstacles.forEach(o=>{o.x-=scrollSpeed*(o.type==='ufo'?1.5:1)});
+  bullets.forEach(b=>b.x+=b.vx);
+  bullets=bullets.filter(b=>b.x<500);
+  // collisions
+  let dead=false;
+  obstacles=obstacles.filter(o=>{
+    if(o.x+o.w<-10)return false;
+    // bullet hit
+    let hit=false;
+    bullets=bullets.filter(b=>{
+      if(o.type!=='crater'&&b.x>o.x&&b.x<o.x+o.w&&b.y>o.y&&b.y<o.y+o.h){hit=true;score+=50;return false}
+      return true;
+    });
+    if(hit)return false;
+    // buggy collision
+    if(o.type==='crater'){
+      if(buggy.onGround&&buggy.x+buggy.w>o.x+5&&buggy.x<o.x+o.w-5&&buggy.y+buggy.h>o.y)dead=true;
+    }else{
+      if(buggy.x+buggy.w>o.x&&buggy.x<o.x+o.w&&buggy.y+buggy.h>o.y&&buggy.y<o.y+o.h)dead=true;
+    }
+    return true;
+  });
+  if(dead){endGame();return}
+  draw();
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-dist').textContent='Dist: '+Math.floor(dist)+'m';
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,320);
+  // stars
+  ctx.fillStyle='#475569';for(let i=0;i<30;i++){ctx.fillRect((i*73+Math.floor(dist*0.2))%480,(i*37)%200,1,1)}
+  // mountains
+  ctx.fillStyle='#1e293b';
+  ctx.beginPath();ctx.moveTo(0,280);
+  for(let x=0;x<500;x+=60){ctx.lineTo(x,200+Math.sin((x+dist*0.3)*0.02)*40)}
+  ctx.lineTo(480,280);ctx.fill();
+  // ground
+  ctx.fillStyle='#334155';ctx.fillRect(0,groundY+20,480,100);
+  ctx.strokeStyle='#475569';ctx.lineWidth=1;
+  for(let x=(-dist*scrollSpeed)%40;x<480;x+=40){ctx.beginPath();ctx.moveTo(x,groundY+20);ctx.lineTo(x,320);ctx.stroke()}
+  // obstacles
+  obstacles.forEach(o=>{
+    if(o.type==='crater'){ctx.fillStyle='#1e293b';ctx.beginPath();ctx.ellipse(o.x+o.w/2,o.y+5,o.w/2,o.h/2,0,0,Math.PI*2);ctx.fill()}
+    else if(o.type==='rock'){ctx.fillStyle='#64748b';ctx.beginPath();ctx.moveTo(o.x,o.y+o.h);ctx.lineTo(o.x+o.w/2,o.y);ctx.lineTo(o.x+o.w,o.y+o.h);ctx.fill()}
+    else{ctx.fillStyle='#ef4444';ctx.beginPath();ctx.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#facc15';ctx.fillRect(o.x+o.w/2-3,o.y-5,6,5)}
+  });
+  // bullets
+  ctx.fillStyle='#facc15';bullets.forEach(b=>{ctx.fillRect(b.x,b.y,6,2)});
+  // buggy
+  ctx.fillStyle='#3b82f6';ctx.fillRect(buggy.x,buggy.y,buggy.w,buggy.h);
+  ctx.fillStyle='#6366f1';ctx.fillRect(buggy.x+5,buggy.y-8,20,10);
+  // wheels
+  ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(buggy.x+8,buggy.y+buggy.h,5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(buggy.x+buggy.w-8,buggy.y+buggy.h,5,0,Math.PI*2);ctx.fill();
+}
+
+function endGame(){
+  running=false;
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'moon-patrol',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key===' ')jump();
+  if(e.key==='ArrowRight'||e.key==='x')shoot();
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkers</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:400px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;cursor:pointer}
+#info{text-align:center;margin:0.5rem;font-size:0.85rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Checkers</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Checkers</h2>
+    <p>You are red. Beat the AI!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2 id="end-title">Game Over</h2>
+    <p id="end-msg"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="info">Click a piece, then click where to move</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,SZ,board,selected,playerTurn,highScore=0,mustJump,jumpPiece;
+const EMPTY=0,RED=1,BLACK=2,RED_K=3,BLACK_K=4;
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  W=r.width;SZ=W/8;canvas.width=W;canvas.height=W;
+}
+resize();window.addEventListener('resize',()=>{resize();draw()});
+
+function startGame(){
+  board=Array(8).fill(null).map(()=>Array(8).fill(EMPTY));
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    if((r+c)%2===1){
+      if(r<3)board[r][c]=BLACK;
+      if(r>4)board[r][c]=RED;
+    }
+  }
+  selected=null;playerTurn=true;mustJump=false;jumpPiece=null;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  draw();
+}
+function isPlayer(p){return p===RED||p===RED_K}
+function isAI(p){return p===BLACK||p===BLACK_K}
+function isKing(p){return p===RED_K||p===BLACK_K}
+function getMoves(board,r,c,jumpOnly){
+  const p=board[r][c];if(p===EMPTY)return[];
+  const dirs=[];
+  if(p===RED||p===RED_K)dirs.push([-1,-1],[-1,1]);
+  if(p===BLACK||p===BLACK_K)dirs.push([1,-1],[1,1]);
+  const moves=[];
+  // Jumps
+  for(const[dr,dc]of dirs){
+    const mr=r+dr,mc=c+dc,jr=r+2*dr,jc=c+2*dc;
+    if(jr>=0&&jr<8&&jc>=0&&jc<8&&board[jr][jc]===EMPTY){
+      const mid=board[mr][mc];
+      if(mid!==EMPTY&&((isPlayer(p)&&isAI(mid))||(isAI(p)&&isPlayer(mid)))){
+        moves.push({r:jr,c:jc,jump:true,mr,mc});
+      }
+    }
+  }
+  if(jumpOnly||moves.length>0)return moves;
+  // Regular
+  for(const[dr,dc]of dirs){
+    const nr=r+dr,nc=c+dc;
+    if(nr>=0&&nr<8&&nc>=0&&nc<8&&board[nr][nc]===EMPTY){
+      moves.push({r:nr,c:nc,jump:false});
+    }
+  }
+  return moves;
+}
+function hasJumps(board,isP){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=board[r][c];
+    if((isP&&isPlayer(p))||(!isP&&isAI(p))){
+      if(getMoves(board,r,c,true).length>0)return true;
+    }
+  }
+  return false;
+}
+function doMove(board,fr,fc,m){
+  board[m.r][m.c]=board[fr][fc];board[fr][fc]=EMPTY;
+  if(m.jump)board[m.mr][m.mc]=EMPTY;
+  // King
+  if(m.r===0&&board[m.r][m.c]===RED)board[m.r][m.c]=RED_K;
+  if(m.r===7&&board[m.r][m.c]===BLACK)board[m.r][m.c]=BLACK_K;
+}
+canvas.addEventListener('click',e=>{
+  if(!playerTurn)return;
+  const r=canvas.getBoundingClientRect();
+  const col=Math.floor((e.clientX-r.left)/r.width*8);
+  const row=Math.floor((e.clientY-r.top)/r.height*8);
+  handleClick(row,col);
+});
+function handleClick(row,col){
+  if(mustJump&&jumpPiece){
+    // Must continue jumping with same piece
+    const moves=getMoves(board,jumpPiece.r,jumpPiece.c,true);
+    const m=moves.find(m=>m.r===row&&m.c===col);
+    if(m){
+      doMove(board,jumpPiece.r,jumpPiece.c,m);
+      jumpPiece={r:m.r,c:m.c};
+      const more=getMoves(board,m.r,m.c,true);
+      if(more.length===0){mustJump=false;jumpPiece=null;selected=null;endTurn()}
+      draw();
+    }
+    return;
+  }
+  const p=board[row][col];
+  if(selected){
+    const forceJump=hasJumps(board,true);
+    let moves=getMoves(board,selected.r,selected.c,forceJump);
+    const m=moves.find(m=>m.r===row&&m.c===col);
+    if(m){
+      doMove(board,selected.r,selected.c,m);
+      if(m.jump){
+        const more=getMoves(board,m.r,m.c,true);
+        if(more.length>0){mustJump=true;jumpPiece={r:m.r,c:m.c};selected=jumpPiece;draw();return}
+      }
+      selected=null;endTurn();
+    }else if(isPlayer(p)){selected={r:row,c:col}}
+    else{selected=null}
+  }else if(isPlayer(p)){selected={r:row,c:col}}
+  draw();
+}
+function endTurn(){
+  draw();
+  if(checkWin())return;
+  playerTurn=false;
+  setTimeout(aiMove,400);
+}
+function aiMove(){
+  // Simple minimax depth 3
+  const best=minimax(board,3,false,-Infinity,Infinity);
+  if(best.move){
+    let{fr,fc,m}=best.move;
+    doMove(board,fr,fc,m);
+    // Multi-jump
+    if(m.jump){
+      let more=getMoves(board,m.r,m.c,true);
+      while(more.length>0){
+        const nm=more[Math.floor(Math.random()*more.length)];
+        doMove(board,m.r,m.c,nm);
+        m=nm;
+        more=getMoves(board,m.r,m.c,true);
+      }
+    }
+  }
+  playerTurn=true;
+  if(checkWin())return;
+  draw();
+}
+function evaluate(b){
+  let s=0;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    if(b[r][c]===RED)s+=3;if(b[r][c]===RED_K)s+=5;
+    if(b[r][c]===BLACK)s-=3;if(b[r][c]===BLACK_K)s-=5;
+  }
+  return s;
+}
+function minimax(b,depth,maxing,alpha,beta){
+  if(depth===0)return{score:evaluate(b)};
+  const isP=maxing;
+  let bestScore=maxing?-Infinity:Infinity,bestMove=null;
+  const fj=hasJumps(b,isP);
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const p=b[r][c];
+    if((isP&&isPlayer(p))||(!isP&&isAI(p))){
+      const moves=getMoves(b,r,c,fj);
+      for(const m of moves){
+        const nb=b.map(r=>[...r]);
+        doMove(nb,r,c,m);
+        const res=minimax(nb,depth-1,!maxing,alpha,beta);
+        if(maxing){if(res.score>bestScore){bestScore=res.score;bestMove={fr:r,fc:c,m}}alpha=Math.max(alpha,bestScore)}
+        else{if(res.score<bestScore){bestScore=res.score;bestMove={fr:r,fc:c,m}}beta=Math.min(beta,bestScore)}
+        if(beta<=alpha)break;
+      }
+    }
+    if(beta<=alpha)break;
+  }
+  if(bestMove===null)bestScore=maxing?-1000:1000;
+  return{score:bestScore,move:bestMove};
+}
+function checkWin(){
+  let rCount=0,bCount=0;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){if(isPlayer(board[r][c]))rCount++;if(isAI(board[r][c]))bCount++}
+  if(rCount===0){showEnd('You Lose!','AI wins');return true}
+  if(bCount===0){highScore++;saveScore();showEnd('You Win!','Congratulations!');return true}
+  return false;
+}
+function showEnd(t,m){
+  document.getElementById('end-title').textContent=t;
+  document.getElementById('end-msg').textContent=m;
+  document.getElementById('hs').textContent='Wins: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function draw(){
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    ctx.fillStyle=(r+c)%2===0?'#1e293b':'#334155';
+    ctx.fillRect(c*SZ,r*SZ,SZ,SZ);
+    if(selected&&selected.r===r&&selected.c===c){ctx.fillStyle='rgba(99,102,241,0.4)';ctx.fillRect(c*SZ,r*SZ,SZ,SZ)}
+    const p=board[r][c];
+    if(p!==EMPTY){
+      ctx.beginPath();ctx.arc(c*SZ+SZ/2,r*SZ+SZ/2,SZ*0.38,0,Math.PI*2);
+      ctx.fillStyle=isPlayer(p)?'#ef4444':'#1a1a2e';ctx.fill();
+      ctx.strokeStyle=isPlayer(p)?'#fca5a5':'#64748b';ctx.lineWidth=2;ctx.stroke();
+      if(isKing(p)){ctx.fillStyle='#facc15';ctx.font=`${SZ*0.35}px system-ui`;ctx.textAlign='center';ctx.fillText('K',c*SZ+SZ/2,r*SZ+SZ/2+SZ*0.12)}
+    }
+  }
+  // Show valid moves
+  if(selected&&playerTurn){
+    const fj=hasJumps(board,true);
+    const moves=getMoves(board,selected.r,selected.c,fj);
+    moves.forEach(m=>{
+      ctx.fillStyle='rgba(34,197,94,0.35)';ctx.beginPath();ctx.arc(m.c*SZ+SZ/2,m.r*SZ+SZ/2,SZ*0.2,0,Math.PI*2);ctx.fill();
+    });
+  }
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'checkers-ai',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='checkers-ai'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

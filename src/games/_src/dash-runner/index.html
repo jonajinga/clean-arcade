@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dash Runner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:400px;border:2px solid #6366f1;background:#0f172a;overflow:hidden}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem;justify-content:center}
+.ctrl-btn{padding:0.75rem 2rem;font-size:1rem}
+#switch-btn{background:#3b82f6}
+#pause-btn{background:#334155;padding:0.5rem 1.5rem}
+</style>
+</head>
+<body>
+<h1>Dash Runner</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Dash Runner</h2>
+    <p>Two lanes, auto-run. Tap to switch!</p>
+    <p style="color:#94a3b8">Dodge obstacles. Score = distance</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <button class="ctrl-btn" id="switch-btn" onclick="switchLane()" ontouchstart="switchLane();event.preventDefault()">Switch Lane</button>
+  <button id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,lane,obstacles,score,highScore=0,speed,gameOver,paused,dist;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+const LANE_H=80;
+function getLaneY(l){return H/2-LANE_H+(l*LANE_H)}
+function startGame(){
+  lane=0;obstacles=[];score=0;speed=4;dist=0;gameOver=false;paused=false;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  document.getElementById('pause-btn').textContent='⏸';
+  loop();
+}
+function switchLane(){if(!gameOver)lane=lane===0?1:0}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop()}
+function loop(){
+  if(paused||gameOver)return;
+  update();draw();requestAnimationFrame(loop);
+}
+function update(){
+  dist++;score=Math.floor(dist/10);
+  speed=4+dist*0.002;
+  // Spawn obstacles
+  if(dist%Math.max(30,80-Math.floor(dist/100))===0){
+    const l=Math.random()>0.5?0:1;
+    obstacles.push({x:W+20,lane:l,w:30+Math.random()*30,h:30});
+  }
+  obstacles.forEach(o=>o.x-=speed);
+  obstacles=obstacles.filter(o=>o.x>-50);
+  // Collision
+  const px=60,pw=25,ph=25;
+  const py=getLaneY(lane)+LANE_H/2-ph/2;
+  for(const o of obstacles){
+    const oy=getLaneY(o.lane)+LANE_H/2-o.h/2;
+    if(px+pw>o.x&&px<o.x+o.w&&py+ph>oy&&py<oy+o.h){die();return}
+  }
+}
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,H);
+  // Lanes
+  for(let l=0;l<2;l++){
+    const y=getLaneY(l);
+    ctx.fillStyle=l===0?'#1e293b':'#1a2332';
+    ctx.fillRect(0,y,W,LANE_H);
+    ctx.strokeStyle='#334155';ctx.setLineDash([10,10]);
+    ctx.beginPath();ctx.moveTo(0,y+LANE_H);ctx.lineTo(W,y+LANE_H);ctx.stroke();
+    ctx.setLineDash([]);
+    // Road lines moving
+    ctx.strokeStyle='#475569';
+    for(let i=0;i<W+40;i+=40){
+      const x=(i-dist*speed%40+40)%(W+40)-20;
+      ctx.beginPath();ctx.moveTo(x,y+LANE_H/2);ctx.lineTo(x+15,y+LANE_H/2);ctx.stroke();
+    }
+  }
+  // Lane divider
+  const midY=getLaneY(0)+LANE_H;
+  ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,midY);ctx.lineTo(W,midY);ctx.stroke();ctx.lineWidth=1;
+  // Obstacles
+  obstacles.forEach(o=>{
+    const oy=getLaneY(o.lane)+LANE_H/2-o.h/2;
+    ctx.fillStyle='#ef4444';ctx.fillRect(o.x,oy,o.w,o.h);
+    ctx.strokeStyle='#fca5a5';ctx.strokeRect(o.x,oy,o.w,o.h);
+  });
+  // Player
+  const py=getLaneY(lane)+LANE_H/2-12;
+  ctx.fillStyle='#3b82f6';
+  ctx.beginPath();ctx.moveTo(85,py+12);ctx.lineTo(60,py);ctx.lineTo(60,py+24);ctx.fill();
+  ctx.fillStyle='#93c5fd';
+  ctx.beginPath();ctx.moveTo(80,py+12);ctx.lineTo(65,py+4);ctx.lineTo(65,py+20);ctx.fill();
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+  ctx.fillText('Score: '+score,10,25);
+  ctx.fillText('Best: '+highScore,W-100,25);
+}
+function die(){
+  gameOver=true;
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Distance: '+score;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='ArrowUp'||e.code==='ArrowDown'){e.preventDefault();switchLane()}
+  if(e.code==='KeyP')togglePause();
+});
+canvas.addEventListener('click',()=>switchLane());
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'dash-runner',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='dash-runner'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

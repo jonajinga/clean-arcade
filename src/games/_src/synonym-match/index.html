@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synonym Match</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;min-height:420px;border:2px solid #6366f1;padding:1rem;display:flex;flex-direction:column;align-items:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#columns{display:flex;gap:1rem;width:100%;justify-content:center}
+.col{display:flex;flex-direction:column;gap:0.4rem;min-width:140px}
+.col h3{font-size:0.85rem;text-align:center;color:#94a3b8;margin-bottom:0.3rem}
+.word-btn{background:#1e293b;border:2px solid #475569;color:#e2e8f0;padding:0.5rem 0.8rem;font-size:0.95rem;cursor:pointer;border-radius:0;text-align:center}
+.word-btn:hover{border-color:#6366f1}
+.word-btn.selected{border-color:#facc15;background:#334155}
+.word-btn.matched{background:#22c55e;border-color:#22c55e;color:#fff;pointer-events:none}
+.word-btn.wrong{background:#ef4444;border-color:#ef4444;color:#fff}
+#feedback{margin-top:0.8rem;font-size:1rem;min-height:1.5rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Synonym Match</h1>
+<div id="hud"><span id="hud-round">Round: 1/10</span><span id="hud-score">Score: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="columns">
+<div class="col"><h3>Words</h3><div id="left-col"></div></div>
+<div class="col"><h3>Synonyms</h3><div id="right-col"></div></div>
+</div>
+<div id="feedback"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Synonym Match</h2>
+<p>Match words to their synonyms!</p>
+<p>4 pairs per round, 10 rounds.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Complete!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const allPairs=[
+  ['happy','joyful'],['sad','unhappy'],['big','large'],['small','tiny'],['fast','quick'],
+  ['slow','sluggish'],['smart','intelligent'],['brave','courageous'],['angry','furious'],['calm','peaceful'],
+  ['beautiful','gorgeous'],['ugly','hideous'],['old','ancient'],['new','novel'],['strong','powerful'],
+  ['weak','feeble'],['rich','wealthy'],['poor','destitute'],['cold','frigid'],['hot','scorching'],
+  ['bright','luminous'],['dark','gloomy'],['loud','deafening'],['quiet','silent'],['clean','pristine'],
+  ['dirty','filthy'],['easy','simple'],['hard','difficult'],['kind','benevolent'],['mean','cruel'],
+  ['tall','towering'],['short','brief'],['wide','broad'],['narrow','slim'],['deep','profound'],
+  ['shallow','superficial'],['thick','dense'],['thin','slender'],['wet','damp'],['dry','arid'],
+  ['begin','commence'],['end','conclude'],['help','assist'],['hurt','harm'],['love','adore'],
+  ['hate','detest'],['run','sprint'],['walk','stroll'],['eat','consume'],['drink','sip']
+];
+
+let score=0,highScore=0,round=0,selected=null,matched=0,currentPairs=[];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='synonym-match'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;round=0;nextRound();
+}
+
+function nextRound(){
+  if(round>=10){endGame();return}
+  selected=null;matched=0;
+  document.getElementById('feedback').textContent='';
+  document.getElementById('hud-round').textContent='Round: '+(round+1)+'/10';
+  document.getElementById('hud-score').textContent='Score: '+score;
+  currentPairs=shuffle(allPairs).slice(0,4);
+  const leftWords=shuffle(currentPairs.map(p=>p[0]));
+  const rightWords=shuffle(currentPairs.map(p=>p[1]));
+  const leftCol=document.getElementById('left-col');
+  const rightCol=document.getElementById('right-col');
+  leftCol.innerHTML='';rightCol.innerHTML='';
+  leftWords.forEach(w=>{
+    const btn=document.createElement('button');btn.className='word-btn';btn.textContent=w;btn.dataset.side='left';btn.dataset.word=w;
+    btn.onclick=()=>selectWord(btn);leftCol.appendChild(btn);
+  });
+  rightWords.forEach(w=>{
+    const btn=document.createElement('button');btn.className='word-btn';btn.textContent=w;btn.dataset.side='right';btn.dataset.word=w;
+    btn.onclick=()=>selectWord(btn);rightCol.appendChild(btn);
+  });
+}
+
+function selectWord(btn){
+  if(btn.classList.contains('matched'))return;
+  if(!selected){
+    document.querySelectorAll('.word-btn').forEach(b=>b.classList.remove('selected'));
+    selected=btn;btn.classList.add('selected');return;
+  }
+  if(selected.dataset.side===btn.dataset.side){
+    selected.classList.remove('selected');selected=btn;btn.classList.add('selected');return;
+  }
+  const w1=selected.dataset.side==='left'?selected.dataset.word:btn.dataset.word;
+  const w2=selected.dataset.side==='right'?selected.dataset.word:btn.dataset.word;
+  const isMatch=currentPairs.some(p=>p[0]===w1&&p[1]===w2);
+  if(isMatch){
+    selected.classList.remove('selected');selected.classList.add('matched');btn.classList.add('matched');
+    score+=10;matched++;
+    document.getElementById('feedback').textContent='Matched!';
+    document.getElementById('feedback').style.color='#22c55e';
+    if(matched>=4){round++;setTimeout(nextRound,800)}
+  }else{
+    selected.classList.add('wrong');btn.classList.add('wrong');
+    document.getElementById('feedback').textContent='Not a match!';
+    document.getElementById('feedback').style.color='#ef4444';
+    const s=selected;
+    setTimeout(()=>{s.classList.remove('wrong','selected');btn.classList.remove('wrong')},600);
+  }
+  selected=null;
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'synonym-match',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score+'/400';
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

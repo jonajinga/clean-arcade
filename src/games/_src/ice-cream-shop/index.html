@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ice Cream Shop</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;min-height:460px;border:2px solid #6366f1;background:#1e293b;padding:0.75rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+#hud{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:0.5rem}
+#order-area{display:flex;gap:1rem;justify-content:center;margin:0.5rem 0;flex-wrap:wrap}
+.order-display,.build-display{background:#0f172a;padding:0.5rem;min-width:100px;text-align:center}
+.order-display h3,.build-display h3{font-size:0.8rem;color:#94a3b8;margin-bottom:0.25rem}
+.scoop{width:40px;height:30px;margin:2px auto;border-radius:50%}
+.cone{width:0;height:0;border-left:20px solid transparent;border-right:20px solid transparent;border-top:35px solid #d97706;margin:0 auto}
+.flavors{display:flex;gap:0.3rem;flex-wrap:wrap;justify-content:center;margin:0.5rem 0}
+.flavor-btn{padding:0.5rem;width:55px;height:55px;font-size:0.7rem;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid transparent}
+.flavor-btn:hover{border-color:#facc15}
+.flavor-dot{width:20px;height:15px;border-radius:50%}
+#serve-btn{background:#22c55e;width:100%;padding:0.6rem;margin-top:0.25rem}
+#clear-btn{background:#ef4444;width:100%;padding:0.4rem;margin-top:0.25rem;font-size:0.85rem}
+#feedback{text-align:center;height:1.5rem;font-size:0.9rem;margin-top:0.25rem}
+</style>
+</head>
+<body>
+<h1>Ice Cream Shop</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Ice Cream Shop</h2>
+    <p>Stack scoops to match customer orders!</p>
+    <p style="color:#94a3b8">Tips for accuracy. 3-minute shift.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Shift Over!</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="hud">
+    <span>Tips: $<span id="tips">0</span></span>
+    <span>Time: <span id="timer">180</span>s</span>
+    <span>Served: <span id="served">0</span></span>
+  </div>
+  <div id="order-area">
+    <div class="order-display"><h3>Order</h3><div id="order-scoops"></div><div class="cone"></div></div>
+    <div class="build-display"><h3>Your Build</h3><div id="build-scoops"></div><div class="cone"></div></div>
+  </div>
+  <div class="flavors" id="flavors"></div>
+  <button id="serve-btn" onclick="serve()">Serve!</button>
+  <button id="clear-btn" onclick="clearBuild()">Clear</button>
+  <div id="feedback"></div>
+</div>
+<script>
+const FLAVORS=[
+  {name:'Vanilla',color:'#fef3c7'},
+  {name:'Chocolate',color:'#78350f'},
+  {name:'Strawberry',color:'#f472b6'},
+  {name:'Mint',color:'#6ee7b7'},
+  {name:'Blueberry',color:'#6366f1'},
+  {name:'Mango',color:'#f97316'},
+  {name:'Lemon',color:'#facc15'},
+  {name:'Cherry',color:'#ef4444'}
+];
+let order,build,tips,served,timeLeft,highScore=0,timerInterval;
+function startGame(){
+  tips=0;served=0;timeLeft=180;build=[];
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  renderFlavors();
+  newOrder();
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(tick,1000);
+}
+function renderFlavors(){
+  const el=document.getElementById('flavors');el.innerHTML='';
+  FLAVORS.forEach((f,i)=>{
+    const b=document.createElement('button');
+    b.className='flavor-btn';
+    b.style.background='#334155';
+    b.innerHTML=`<div class="flavor-dot" style="background:${f.color}"></div>${f.name}`;
+    b.onclick=()=>addScoop(i);
+    el.appendChild(b);
+  });
+}
+function newOrder(){
+  const numScoops=2+Math.floor(Math.random()*3);
+  order=[];
+  for(let i=0;i<numScoops;i++)order.push(Math.floor(Math.random()*FLAVORS.length));
+  build=[];
+  renderOrder();renderBuild();
+  document.getElementById('feedback').textContent='';
+}
+function addScoop(flavorIdx){
+  if(build.length>=5)return;
+  build.push(flavorIdx);
+  renderBuild();
+}
+function clearBuild(){build=[];renderBuild()}
+function renderOrder(){
+  const el=document.getElementById('order-scoops');el.innerHTML='';
+  [...order].reverse().forEach(f=>{
+    const d=document.createElement('div');d.className='scoop';
+    d.style.background=FLAVORS[f].color;el.appendChild(d);
+  });
+}
+function renderBuild(){
+  const el=document.getElementById('build-scoops');el.innerHTML='';
+  [...build].reverse().forEach(f=>{
+    const d=document.createElement('div');d.className='scoop';
+    d.style.background=FLAVORS[f].color;el.appendChild(d);
+  });
+}
+function serve(){
+  if(build.length===0)return;
+  const fb=document.getElementById('feedback');
+  if(build.length===order.length&&build.every((s,i)=>s===order[i])){
+    // Perfect match
+    const tip=order.length*2;
+    tips+=tip;served++;
+    fb.textContent=`Perfect! +$${tip} tip`;fb.style.color='#22c55e';
+  }else if(build.length===order.length){
+    // Partial match
+    let correct=build.filter((s,i)=>s===order[i]).length;
+    const tip=correct;
+    tips+=tip;served++;
+    fb.textContent=`${correct}/${order.length} correct. +$${tip} tip`;fb.style.color='#facc15';
+  }else{
+    fb.textContent='Wrong number of scoops!';fb.style.color='#ef4444';
+    served++;
+  }
+  document.getElementById('tips').textContent=tips;
+  document.getElementById('served').textContent=served;
+  setTimeout(newOrder,800);
+}
+function tick(){
+  timeLeft--;
+  document.getElementById('timer').textContent=timeLeft;
+  if(timeLeft<=0){clearInterval(timerInterval);endGame()}
+}
+function endGame(){
+  if(tips>highScore){highScore=tips;saveScore()}
+  document.getElementById('final-score').textContent=`Served: ${served} | Tips: $${tips}`;
+  document.getElementById('hs').textContent='Best Tips: $'+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'ice-cream-shop',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='ice-cream-shop'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

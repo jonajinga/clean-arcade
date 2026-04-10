@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Category Sort</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;min-height:500px;border:2px solid #6366f1;background:#1e293b;padding:0.75rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+#hud{display:flex;justify-content:space-between;margin-bottom:0.5rem;font-size:0.85rem;color:#94a3b8}
+#current-word{text-align:center;font-size:1.5rem;color:#facc15;padding:1rem;margin:0.5rem 0;background:#0f172a}
+.categories{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem}
+.cat-btn{background:#334155;padding:0.75rem;font-size:0.85rem;text-align:center;border:2px solid transparent;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.cat-btn:hover{border-color:#6366f1}
+.cat-btn .count{font-size:0.7rem;color:#94a3b8;margin-top:0.25rem}
+.cat-btn.correct{background:#22c55e;color:#0f172a}
+.cat-btn.wrong{background:#ef4444}
+#feedback{text-align:center;height:1.5rem;margin-top:0.5rem;font-size:0.85rem}
+#timer-bar{height:6px;background:#334155;margin-top:0.5rem}
+#timer-fill{height:100%;background:#3b82f6;transition:width 0.3s}
+</style>
+</head>
+<body>
+<h1>Category Sort</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Category Sort</h2>
+    <p>Sort words into the correct category!</p>
+    <p style="color:#94a3b8">60 seconds</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Time's Up!</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="hud"><span>Score: <span id="score">0</span></span><span>Time: <span id="timer">60</span>s</span></div>
+  <div id="timer-bar"><div id="timer-fill" style="width:100%"></div></div>
+  <div id="current-word">-</div>
+  <div class="categories" id="cats"></div>
+  <div id="feedback"></div>
+</div>
+<script>
+const SETS=[
+  {cats:["Fruit","Vegetable","Meat","Grain"],words:{Fruit:["Apple","Banana","Grape","Mango","Peach","Cherry"],Vegetable:["Carrot","Broccoli","Spinach","Pepper","Onion","Celery"],Meat:["Chicken","Beef","Pork","Salmon","Turkey","Lamb"],Grain:["Rice","Wheat","Oats","Barley","Corn","Rye"]}},
+  {cats:["Planet","Star","Galaxy","Moon"],words:{Planet:["Mars","Venus","Jupiter","Saturn","Neptune","Mercury"],Star:["Sirius","Polaris","Vega","Rigel","Betelgeuse","Altair"],Galaxy:["Andromeda","Milky Way","Sombrero","Pinwheel","Whirlpool","Cartwheel"],Moon:["Europa","Titan","Ganymede","Callisto","Io","Triton"]}},
+  {cats:["Color","Shape","Number","Letter"],words:{Color:["Crimson","Teal","Amber","Ivory","Maroon","Cyan"],Shape:["Triangle","Hexagon","Oval","Pentagon","Rhombus","Trapezoid"],Number:["Dozen","Score","Gross","Century","Billion","Myriad"],Letter:["Alpha","Delta","Sigma","Omega","Lambda","Theta"]}},
+  {cats:["Ocean","River","Mountain","Desert"],words:{Ocean:["Pacific","Atlantic","Indian","Arctic","Southern","Caribbean"],River:["Amazon","Nile","Danube","Thames","Ganges","Rhine"],Mountain:["Everest","Kilimanjaro","Denali","Fuji","Elbrus","Matterhorn"],Desert:["Sahara","Gobi","Mojave","Kalahari","Atacama","Arabian"]}}
+];
+let score,highScore=0,timeLeft,currentSet,wordQueue,timerInterval;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function startGame(){
+  score=0;timeLeft=60;
+  currentSet=SETS[Math.floor(Math.random()*SETS.length)];
+  wordQueue=[];
+  Object.entries(currentSet.words).forEach(([cat,words])=>{words.forEach(w=>wordQueue.push({word:w,cat}))});
+  shuffle(wordQueue);
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  document.getElementById('score').textContent='0';
+  renderCats();
+  nextWord();
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(tick,1000);
+}
+function renderCats(){
+  const c=document.getElementById('cats');c.innerHTML='';
+  currentSet.cats.forEach(cat=>{
+    const b=document.createElement('button');
+    b.className='cat-btn';
+    b.innerHTML=cat+'<span class="count">0</span>';
+    b.onclick=()=>choose(cat,b);
+    b.dataset.cat=cat;b.dataset.count=0;
+    c.appendChild(b);
+  });
+}
+function nextWord(){
+  if(wordQueue.length===0){
+    // Reshuffle
+    Object.entries(currentSet.words).forEach(([cat,words])=>{words.forEach(w=>wordQueue.push({word:w,cat}))});
+    shuffle(wordQueue);
+  }
+  const w=wordQueue.pop();
+  document.getElementById('current-word').textContent=w.word;
+  document.getElementById('current-word').dataset.cat=w.cat;
+}
+function choose(cat,btn){
+  if(timeLeft<=0)return;
+  const correct=document.getElementById('current-word').dataset.cat;
+  const btns=document.querySelectorAll('.cat-btn');
+  if(cat===correct){
+    score++;btn.classList.add('correct');
+    document.getElementById('feedback').textContent='Correct!';
+    document.getElementById('feedback').style.color='#22c55e';
+    btn.dataset.count=parseInt(btn.dataset.count)+1;
+    btn.querySelector('.count').textContent=btn.dataset.count;
+  }else{
+    btn.classList.add('wrong');
+    btns.forEach(b=>{if(b.dataset.cat===correct)b.classList.add('correct')});
+    document.getElementById('feedback').textContent='Wrong! It was '+correct;
+    document.getElementById('feedback').style.color='#ef4444';
+  }
+  document.getElementById('score').textContent=score;
+  setTimeout(()=>{btns.forEach(b=>{b.classList.remove('correct','wrong')});nextWord()},600);
+}
+function tick(){
+  timeLeft--;
+  document.getElementById('timer').textContent=timeLeft;
+  document.getElementById('timer-fill').style.width=(timeLeft/60*100)+'%';
+  if(timeLeft<=0){clearInterval(timerInterval);endGame()}
+}
+function endGame(){
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'category-sort',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='category-sort'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

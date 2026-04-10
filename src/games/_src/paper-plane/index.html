@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paper Plane</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+input[type=range]{width:120px;accent-color:#6366f1}
+.ctrl-group{display:flex;flex-direction:column;align-items:center;font-size:0.75rem;gap:2px}
+</style>
+</head>
+<body>
+<h1>Paper Plane</h1>
+<div id="hud"><span id="hud-dist">Dist: 0m</span><span id="hud-wind">Wind: 0</span><span id="hud-hi">Hi: 0m</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="320"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Paper Plane</h2>
+<p>Adjust angle and power, then throw!</p>
+<p>Wind affects your flight.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Landed!</h2>
+<p id="final-dist"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<div class="ctrl-group"><label>Angle</label><input type="range" id="angle-slider" min="10" max="80" value="45"><span id="angle-val">45°</span></div>
+<div class="ctrl-group"><label>Power</label><input type="range" id="power-slider" min="10" max="100" value="70"><span id="power-val">70%</span></div>
+<button class="ctrl-btn" onclick="throwPlane()">Throw!</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let plane,flying=false,highScore=0,wind=0,distance=0,camX=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='paper-plane'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore+'m'}});
+
+document.getElementById('angle-slider').addEventListener('input',e=>{document.getElementById('angle-val').textContent=e.target.value+'°'});
+document.getElementById('power-slider').addEventListener('input',e=>{document.getElementById('power-val').textContent=e.target.value+'%'});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  wind=(Math.random()-0.5)*4;
+  document.getElementById('hud-wind').textContent='Wind: '+(wind>0?'+':'')+wind.toFixed(1);
+  flying=false;camX=0;distance=0;
+  plane={x:40,y:250,vx:0,vy:0,angle:0};
+  draw();
+}
+
+function throwPlane(){
+  if(flying)return;
+  const angle=parseInt(document.getElementById('angle-slider').value)*Math.PI/180;
+  const power=parseInt(document.getElementById('power-slider').value)/10;
+  plane.vx=Math.cos(angle)*power;
+  plane.vy=-Math.sin(angle)*power;
+  plane.angle=-angle;
+  flying=true;
+  requestAnimationFrame(loop);
+}
+
+function loop(){
+  if(!flying)return;
+  // physics
+  plane.vy+=0.04; // gravity
+  plane.vx+=wind*0.002; // wind
+  // lift based on speed and angle
+  const speed=Math.sqrt(plane.vx*plane.vx+plane.vy*plane.vy);
+  plane.vy-=0.01*speed*Math.max(0,Math.cos(plane.angle));
+  // drag
+  plane.vx*=0.999;plane.vy*=0.999;
+  plane.x+=plane.vx;plane.y+=plane.vy;
+  plane.angle=Math.atan2(plane.vy,plane.vx);
+  // camera follow
+  camX=Math.max(0,plane.x-120);
+  distance=Math.max(distance,Math.floor((plane.x-40)/5));
+  document.getElementById('hud-dist').textContent='Dist: '+distance+'m';
+  if(plane.y>=270){
+    plane.y=270;flying=false;endGame();
+  }
+  draw();
+  if(flying)requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,320);
+  // sky gradient
+  const grad=ctx.createLinearGradient(0,0,0,280);
+  grad.addColorStop(0,'#1e293b');grad.addColorStop(1,'#334155');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,480,280);
+  // clouds
+  ctx.fillStyle='rgba(148,163,184,0.3)';
+  for(let i=0;i<8;i++){
+    const cx=(i*200+50-camX*0.3)%600-60;
+    ctx.beginPath();ctx.ellipse(cx,40+i*25,40,15,0,0,Math.PI*2);ctx.fill();
+  }
+  // ground
+  ctx.fillStyle='#22c55e';ctx.fillRect(0,280,480,40);
+  ctx.fillStyle='#16a34a';
+  for(let x=-camX%30;x<490;x+=30){ctx.fillRect(x,280,15,3)}
+  // distance markers
+  ctx.fillStyle='#facc15';ctx.font='10px system-ui';
+  for(let m=0;m<2000;m+=100){
+    const sx=40+m*5-camX;
+    if(sx>-10&&sx<490){ctx.fillRect(sx,275,2,10);ctx.fillText(m+'m',sx-10,272)}
+  }
+  // wind arrow
+  ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(420,20);ctx.lineTo(420+wind*15,20);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(420+wind*15,20);ctx.lineTo(420+wind*15-Math.sign(wind)*6,15);ctx.lineTo(420+wind*15-Math.sign(wind)*6,25);ctx.fill();
+  // plane
+  ctx.save();ctx.translate(plane.x-camX,plane.y);ctx.rotate(plane.angle);
+  ctx.fillStyle='#e2e8f0';
+  ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-10,-6);ctx.lineTo(-5,0);ctx.lineTo(-10,6);ctx.closePath();ctx.fill();
+  ctx.restore();
+  // trail
+  if(flying){
+    ctx.fillStyle='rgba(99,102,241,0.3)';
+    ctx.beginPath();ctx.arc(plane.x-camX-plane.vx*2,plane.y-plane.vy*2,3,0,Math.PI*2);ctx.fill();
+  }
+}
+
+function endGame(){
+  if(distance>highScore){highScore=distance;parent.postMessage({type:'ca-save',slug:'paper-plane',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore+'m';
+  document.getElementById('final-dist').textContent='Distance: '+distance+'m';
+  document.getElementById('final-hi').textContent='Best: '+highScore+'m';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

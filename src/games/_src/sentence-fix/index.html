@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentence Fix</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;min-height:380px;border:2px solid #6366f1;padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#sentence{font-size:1.1rem;line-height:1.6;margin-bottom:1rem;text-align:center;color:#e2e8f0;max-width:400px}
+.error-word{color:#ef4444;text-decoration:underline;font-weight:bold}
+.choice-btn{background:#1e293b;border:2px solid #475569;color:#e2e8f0;padding:0.6rem 1.2rem;margin:0.3rem;font-size:0.95rem;cursor:pointer;border-radius:0;width:90%;max-width:350px;text-align:left}
+.choice-btn:hover{border-color:#6366f1;background:#334155}
+.choice-btn.correct{background:#22c55e;border-color:#22c55e;color:#fff}
+.choice-btn.wrong{background:#ef4444;border-color:#ef4444;color:#fff}
+#feedback{margin-top:0.5rem;font-size:0.9rem;min-height:1.5rem}
+</style>
+</head>
+<body>
+<h1>Sentence Fix</h1>
+<div id="hud"><span id="hud-round">1/20</span><span id="hud-score">Score: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="sentence"></div>
+<div id="choices"></div>
+<div id="feedback"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Sentence Fix</h2>
+<p>Find the grammar error!</p>
+<p>Pick the correct fix from 3 choices.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Complete!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const questions=[
+  {s:'She <span class="error-word">don\'t</span> like coffee.',correct:'doesn\'t',choices:['doesn\'t','don\'t','didn\'t']},
+  {s:'The team <span class="error-word">are</span> winning the game.',correct:'is',choices:['is','are','were']},
+  {s:'Him and <span class="error-word">me</span> went to the store.',correct:'He and I',choices:['He and I','Him and I','Me and him']},
+  {s:'I should <span class="error-word">of</span> studied harder.',correct:'have',choices:['have','of','had']},
+  {s:'<span class="error-word">Their</span> going to the park.',correct:'They\'re',choices:['They\'re','Their','There']},
+  {s:'The dog wagged <span class="error-word">it\'s</span> tail.',correct:'its',choices:['its','it\'s','its\'']},
+  {s:'She runs <span class="error-word">more faster</span> than him.',correct:'faster',choices:['faster','more faster','most fast']},
+  {s:'Everyone should bring <span class="error-word">their</span> own lunch.',correct:'his or her',choices:['his or her','their','its']},
+  {s:'I feel <span class="error-word">good</span> about the test.',correct:'well',choices:['well','good','goodly']},
+  {s:'Between you and <span class="error-word">I</span>, it\'s a secret.',correct:'me',choices:['me','I','myself']},
+  {s:'The data <span class="error-word">shows</span> a clear trend.',correct:'show',choices:['show','shows','showed']},
+  {s:'She is one of those who <span class="error-word">believes</span> in fate.',correct:'believe',choices:['believe','believes','believing']},
+  {s:'Each of the students <span class="error-word">have</span> a book.',correct:'has',choices:['has','have','had']},
+  {s:'Neither the cat nor the dogs <span class="error-word">is</span> outside.',correct:'are',choices:['are','is','was']},
+  {s:'I <span class="error-word">seen</span> that movie yesterday.',correct:'saw',choices:['saw','seen','see']},
+  {s:'She <span class="error-word">layed</span> the book on the table.',correct:'laid',choices:['laid','layed','lay']},
+  {s:'He did <span class="error-word">good</span> on the exam.',correct:'well',choices:['well','good','great']},
+  {s:'<span class="error-word">Who</span> did you give it to?',correct:'Whom',choices:['Whom','Who','Whose']},
+  {s:'The cake tastes <span class="error-word">deliciously</span>.',correct:'delicious',choices:['delicious','deliciously','deliciouser']},
+  {s:'She <span class="error-word">could care less</span> about it.',correct:'couldn\'t care less',choices:['couldn\'t care less','could care less','could not care']},
+  {s:'Me and <span class="error-word">him</span> are friends.',correct:'He and I',choices:['He and I','Him and me','Me and he']},
+  {s:'The children <span class="error-word">was</span> playing outside.',correct:'were',choices:['were','was','is']},
+  {s:'I\'m doing <span class="error-word">alright</span> today.',correct:'all right',choices:['all right','alright','allright']},
+  {s:'She <span class="error-word">literally</span> died laughing.',correct:'figuratively',choices:['figuratively','literally','actually']}
+];
+
+let score=0,highScore=0,round=0,shuffled=[],answered=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='sentence-fix'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;round=0;shuffled=shuffle(questions).slice(0,20);
+  nextRound();
+}
+
+function nextRound(){
+  if(round>=20){endGame();return}
+  answered=false;
+  const q=shuffled[round];
+  document.getElementById('sentence').innerHTML=q.s;
+  document.getElementById('feedback').textContent='';
+  document.getElementById('hud-round').textContent=(round+1)+'/20';
+  document.getElementById('hud-score').textContent='Score: '+score;
+  const choices=shuffle(q.choices);
+  const container=document.getElementById('choices');
+  container.innerHTML='';
+  choices.forEach(ch=>{
+    const btn=document.createElement('button');
+    btn.className='choice-btn';btn.textContent=ch;
+    btn.onclick=()=>answer(ch,q.correct,btn);
+    container.appendChild(btn);
+  });
+}
+
+function answer(choice,correct,btn){
+  if(answered)return;answered=true;
+  const buttons=document.querySelectorAll('.choice-btn');
+  if(choice===correct){
+    score+=10;btn.classList.add('correct');
+    document.getElementById('feedback').textContent='Correct!';
+  }else{
+    btn.classList.add('wrong');
+    buttons.forEach(b=>{if(b.textContent===correct)b.classList.add('correct')});
+    document.getElementById('feedback').textContent='The correct answer is: '+correct;
+  }
+  round++;
+  setTimeout(nextRound,1500);
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'sentence-fix',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score+'/200';
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

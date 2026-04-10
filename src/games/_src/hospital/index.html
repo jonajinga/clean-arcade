@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hospital</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;min-height:480px;border:2px solid #6366f1;background:#1e293b;padding:0.75rem;overflow-y:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+#hud{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:0.5rem}
+.patient-card{background:#0f172a;padding:0.75rem;margin-bottom:0.5rem;border-left:3px solid #6366f1}
+.patient-card h3{color:#3b82f6;font-size:0.95rem;margin-bottom:0.25rem}
+.symptoms{color:#94a3b8;font-size:0.8rem;margin-bottom:0.5rem}
+.actions{display:flex;gap:0.3rem;flex-wrap:wrap}
+.action-btn{background:#334155;padding:0.4rem 0.6rem;font-size:0.78rem}
+.action-btn:hover{background:#475569}
+.action-btn.correct{background:#22c55e;color:#0f172a}
+.action-btn.wrong{background:#ef4444}
+.discharged{opacity:0.4;border-left-color:#22c55e}
+.patient-card.critical{border-left-color:#ef4444}
+#pause-btn{background:#334155;padding:0.5rem 1rem;font-size:0.9rem;margin-top:0.5rem}
+</style>
+</head>
+<body>
+<h1>Hospital</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Hospital</h2>
+    <p>Diagnose and treat patients!</p>
+    <p style="color:#94a3b8">Match symptoms to treatments. 3 minutes.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Shift Over!</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="hud">
+    <span>Cured: <span id="cured">0</span></span>
+    <span>Time: <span id="timer">180</span>s</span>
+    <span>Best: <span id="best">0</span></span>
+  </div>
+  <div id="patients"></div>
+</div>
+<button id="pause-btn" onclick="togglePause()">⏸</button>
+<script>
+const CONDITIONS=[
+  {name:"Common Cold",symptoms:["Runny nose","Sneezing","Mild cough"],treatment:"Rest & Fluids",wrong:["Antibiotics","Surgery","X-Ray"]},
+  {name:"Broken Arm",symptoms:["Arm pain","Swelling","Can't move arm"],treatment:"Cast & Splint",wrong:["Antibiotics","Cough Syrup","Eye Drops"]},
+  {name:"Food Poisoning",symptoms:["Nausea","Vomiting","Stomach cramps"],treatment:"IV Fluids & Anti-nausea",wrong:["Cast & Splint","Inhaler","Eye Drops"]},
+  {name:"Migraine",symptoms:["Severe headache","Light sensitivity","Nausea"],treatment:"Pain Relief & Dark Room",wrong:["Cast & Splint","Antibiotics","Surgery"]},
+  {name:"Allergic Reaction",symptoms:["Rash","Itching","Swelling"],treatment:"Antihistamine",wrong:["Cast & Splint","Cough Syrup","IV Fluids & Anti-nausea"]},
+  {name:"Asthma Attack",symptoms:["Wheezing","Shortness of breath","Chest tightness"],treatment:"Inhaler & Oxygen",wrong:["Cast & Splint","Antibiotics","Eye Drops"]},
+  {name:"Sprained Ankle",symptoms:["Ankle pain","Bruising","Difficulty walking"],treatment:"Ice & Compression",wrong:["Antibiotics","Inhaler & Oxygen","Cough Syrup"]},
+  {name:"Eye Infection",symptoms:["Red eyes","Discharge","Itchy eyes"],treatment:"Eye Drops & Antibiotics",wrong:["Cast & Splint","Inhaler & Oxygen","Ice & Compression"]},
+  {name:"Flu",symptoms:["High fever","Body aches","Fatigue"],treatment:"Antiviral & Rest",wrong:["Cast & Splint","Eye Drops","Surgery"]},
+  {name:"Dehydration",symptoms:["Dizziness","Dry mouth","Dark urine"],treatment:"Oral Rehydration",wrong:["Cast & Splint","Inhaler & Oxygen","Antibiotics"]},
+  {name:"Ear Infection",symptoms:["Ear pain","Fever","Hearing loss"],treatment:"Ear Drops & Antibiotics",wrong:["Inhaler & Oxygen","Ice & Compression","Eye Drops"]},
+  {name:"Burns",symptoms:["Red skin","Blisters","Pain"],treatment:"Cool Water & Bandage",wrong:["Antibiotics","Cough Syrup","Inhaler & Oxygen"]}
+];
+const NAMES=["Alex","Jordan","Sam","Taylor","Morgan","Casey","Riley","Quinn","Avery","Jamie","Drew","Charlie","Pat","Robin","Lee","Kim"];
+let cured,timeLeft,highScore=0,paused,gameOver,timerInterval,patients,nextId;
+function startGame(){
+  cured=0;timeLeft=180;paused=false;gameOver=false;patients=[];nextId=0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  document.getElementById('best').textContent=highScore;
+  addPatient();addPatient();addPatient();
+  render();
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(tick,1000);
+}
+function addPatient(){
+  const c=CONDITIONS[Math.floor(Math.random()*CONDITIONS.length)];
+  const name=NAMES[Math.floor(Math.random()*NAMES.length)];
+  const id=nextId++;
+  const shuffledSymptoms=[...c.symptoms].sort(()=>Math.random()-0.5);
+  patients.push({id,name,condition:c,symptoms:shuffledSymptoms,treated:false,correct:false,timer:30+Math.random()*20});
+}
+function treat(patientId,treatment){
+  const p=patients.find(pt=>pt.id===patientId);
+  if(!p||p.treated)return;
+  p.treated=true;
+  if(treatment===p.condition.treatment){
+    p.correct=true;cured++;
+    document.getElementById('cured').textContent=cured;
+  }
+  render();
+  setTimeout(()=>{
+    patients=patients.filter(pt=>pt.id!==patientId);
+    if(patients.length<3&&!gameOver)addPatient();
+    render();
+  },1000);
+}
+function tick(){
+  if(paused)return;
+  timeLeft--;
+  document.getElementById('timer').textContent=timeLeft;
+  // Critical patients
+  patients.forEach(p=>{if(!p.treated){p.timer-=1;if(p.timer<=0){p.treated=true;patients=patients.filter(pt=>pt.id!==p.id);if(patients.length<3&&!gameOver)addPatient();render()}}});
+  if(timeLeft<=0){gameOver=true;clearInterval(timerInterval);endGame()}
+  // Add new patient periodically
+  if(timeLeft%15===0&&patients.length<5&&!gameOver){addPatient();render()}
+}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function render(){
+  const el=document.getElementById('patients');el.innerHTML='';
+  patients.forEach(p=>{
+    const card=document.createElement('div');
+    card.className='patient-card'+(p.treated?' discharged':'')+(p.timer<10?' critical':'');
+    let html=`<h3>${p.name} ${p.timer<10?'⚠️':''}</h3><div class="symptoms">${p.symptoms.join(' • ')}</div>`;
+    if(!p.treated){
+      html+='<div class="actions">';
+      const options=shuffle([p.condition.treatment,...p.condition.wrong]);
+      options.forEach(o=>{
+        html+=`<button class="action-btn" onclick="treat(${p.id},'${o.replace(/'/g,"\\'")}')">${o}</button>`;
+      });
+      html+='</div>';
+    }else{
+      html+=`<div style="color:${p.correct?'#22c55e':'#ef4444'}">${p.correct?'Cured!':'Wrong treatment'}</div>`;
+    }
+    card.innerHTML=html;
+    el.appendChild(card);
+  });
+}
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
+function endGame(){
+  if(cured>highScore){highScore=cured;saveScore()}
+  document.getElementById('final-score').textContent='Patients Cured: '+cured;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{if(e.code==='KeyP')togglePause()});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'hospital',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='hospital'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

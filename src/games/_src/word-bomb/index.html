@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Bomb</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;min-height:380px;border:2px solid #6366f1;padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#bomb{font-size:3rem;margin:0.5rem 0}
+#letters{font-size:2.5rem;color:#ef4444;font-weight:bold;letter-spacing:0.2rem;margin-bottom:0.5rem}
+#timer-bar{width:80%;max-width:300px;height:12px;background:#334155;margin:0.5rem 0}
+#timer-fill{height:100%;background:#ef4444;transition:width 0.1s linear}
+#input-box{background:#1e293b;border:2px solid #6366f1;color:#e2e8f0;font-size:1.3rem;padding:0.5rem 1rem;text-align:center;width:80%;max-width:300px;border-radius:0;outline:none}
+#input-box:focus{border-color:#facc15}
+#feedback{margin-top:0.5rem;font-size:1rem;min-height:1.5rem}
+.correct{color:#22c55e}
+.wrong{color:#ef4444}
+</style>
+</head>
+<body>
+<h1>Word Bomb</h1>
+<div id="hud"><span id="hud-score">Score: 0</span><span id="hud-lives">Lives: 3</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="bomb">💣</div>
+<div id="letters"></div>
+<div id="timer-bar"><div id="timer-fill" style="width:100%"></div></div>
+<input id="input-box" type="text" autocomplete="off" autocapitalize="off" placeholder="Type a word...">
+<div id="feedback"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Word Bomb</h2>
+<p>Given 2-3 letters, type a word containing them!</p>
+<p>5-second fuse - be quick!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>BOOM!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const fragments=['th','st','ch','sh','tr','pl','gr','cr','bl','pr','fl','dr','br','cl','fr',
+  'an','en','in','on','un','at','et','it','ot','ut','ar','er','ir','or','ur',
+  'ing','tion','ment','ness','able','ight','ough','ound','ance','ence',
+  'ea','ou','ai','oo','ee','oa','ie','ei','au','ow',
+  'str','spr','scr','thr','squ','ck','nd','ng','mp','nt','nk','ct','ft','pt','lt'];
+
+// Valid word list (simplified - common English words)
+const validWords=new Set([
+  'the','that','this','than','them','then','they','their','there','these','those','though','through','think','thing','three',
+  'stand','start','state','stay','still','stone','stop','store','story','street','strong','student','study','stuff','style',
+  'change','chance','check','child','choice','church','class','clean','clear','close','coach','chain','chair','chalk','champ',
+  'share','shape','shake','shall','shame','sharp','shine','ship','shirt','shock','shoe','shoot','shop','shore','short','show',
+  'train','trade','track','trail','travel','treat','tree','trial','trick','trip','trouble','trust','truth','try','trash',
+  'place','plan','plant','plate','play','please','plenty','plot','plug','plus','pluck','plumb','plump','plunge',
+  'great','green','ground','group','grow','growth','grab','grace','grade','grain','grand','grant','graph','grasp','grass','grave',
+  'create','cream','credit','crew','crime','crisis','cross','crowd','crown','crush','cry','crank','crash','crate','crawl',
+  'black','blade','blame','blank','blast','blaze','bleed','blend','bless','blind','block','blood','blow','blue','bluff','blur',
+  'price','print','prior','private','problem','process','produce','program','project','promise','protect','prove','provide','practice',
+  'plant','plane','planet','plan','plate','platform','player','plenty','flight','floor','flow','flower','fly','flag','flame','flash','flat','float',
+  'dream','dress','drink','drive','drop','drug','drum','dry','draw','draft','drag','drain','drama',
+  'break','bread','breath','breed','brick','bridge','brief','bright','bring','broad','brother','brown','brush','brand',
+  'clean','clear','climb','clock','close','cloth','cloud','club','claim','clamp','clap','clash','class','claw','clay','click','cliff','cling','clip','clone','clue',
+  'friend','free','fresh','front','frame','frank','fraud','french','frequent','friday','fridge','fright','fringe','frog','from','frost','frozen','fruit','frustrate',
+  'anger','angle','animal','answer','ancient','ankle','annual','another','antenna','anyone','anything','anywhere','and','ant',
+  'energy','engine','enjoy','enough','enter','entire','entry','end','enemy','engage','english','enhance','enormous','ensure',
+  'inside','interest','into','indeed','include','increase','index','indicate','industry','infant','inform','initial','inner','input','insect','insert','insist',
+  'once','one','only','onto','open','option','opinion','online','ongoing','otherwise','onion',
+  'under','understand','unit','union','unique','united','universe','university','unless','until','unlike','unlock','upon','upper','upset','uncle','undo',
+  'attack','attempt','attend','attention','attract','atmosphere','attach','at','ate','atom','attitude','attribute','atlas',
+  'better','between','beyond','being','believe','below','beneath','benefit','best','beside','bet','best',
+  'item','itself','its','it','itch','italic',
+  'other','often','obtain','obvious','occur','october','offer','office','officer','official','option','otherwise','ought','outer','outside','over','otter','out',
+  'butter','button','but','bus','burn','burst','bury','business','busy','buy','bug','build','bulk','bullet','bunch','burden','busy','butler','buzz','buck','bud','buffalo','buffer',
+  'art','artist','area','around','arrange','arrest','arrive','arrow','argue','arise','arm','army',
+  'earth','early','earn','ear','east','eastern','easy','era','error','escape','especially','essential','establish','estate','estimate','evening','event','ever','every','era',
+  'bird','birth','bitter','bit','bind','billion','bill','bike','big','bid','bible',
+  'order','orange','orbit','organ','orient','origin','original','ornament','orphan',
+  'turn','turkey','turtle','tunnel','tune','tube','tuesday','truly','trump','trust','truth','truck','trunk',
+  'sing','single','since','silver','simple','similar','sight','signal','sign','significant','silence','silly','singing','sink','sister','sit','site','sitting','situation','six','sixteen','sixty','size',
+  'thing','think','third','thirteen','thirty','this','those','thought','thousand','threat','three','throat','throne','through','throw','thus','thick','thin','thief',
+  'king','kind','kitchen','kill','kick','kid','kingdom','kiss','kit','knee','knife','knight','knit','knock','knot','know','knowledge',
+  'ring','right','rich','ride','rice','rise','risk','river','road','rock','role','roll','roof','room','root','rough','round','route','row','rule','run','rush',
+  'sing','song','strong','string','spring','bring','thing','king','ring','wing','young','long','along','among','being','during','morning','evening','nothing','something','anything','everything',
+  'tion','action','addition','attention','collection','condition','connection','construction','conversation','creation','decision','definition','description','direction','discussion','distribution','education','election','emotion','equation','evaluation','exception','expression','fiction','formation','function','generation','illustration','imagination','information','instruction','introduction','investigation','nation','mention','motion','notion','nutrition','obligation','observation','occasion','operation','opinion','option','organization','passion','perfection','permission','petition','pollution','population','position','portion','possession','prediction','preparation','presentation','prevention','production','profession','projection','promotion','proportion','protection','question','reaction','recognition','recreation','reduction','reflection','regulation','relation','reputation','revolution','satisfaction','section','selection','sensation','session','situation','solution','station','suggestion','television','tradition','transition','vacation','variation','version','violation','vision',
+  'ment','agreement','amazement','amusement','announcement','apartment','argument','arrangement','assessment','assignment','attachment','achievement','acknowledgment','advertisement','amazement','amendment','announcement','appointment','assessment','basement','comment','commitment','compartment','complement','component','department','development','document','element','employment','engagement','enjoyment','entertainment','environment','equipment','establishment','excitement','experiment','government','implement','improvement','instrument','investment','involvement','judgment','management','measurement','moment','monument','movement','ornament','parliament','payment','placement','punishment','replacement','requirement','retirement','segment','settlement','statement','supplement','tournament','treatment',
+  'ness','awareness','business','darkness','eagerness','effectiveness','fairness','fitness','forgiveness','goodness','greatness','happiness','hardness','harshness','helpfulness','illness','kindness','laziness','loneliness','madness','nervousness','openness','politeness','quickness','readiness','richness','rudeness','sadness','sharpness','shyness','sickness','softness','stillness','sweetness','thickness','thinness','tiredness','toughness','ugliness','usefulness','vastness','weakness','wellness','wilderness','willingness',
+  'able','available','capable','comfortable','considerable','desirable','enable','enjoyable','favorable','notable','reasonable','reliable','remarkable','suitable','table','unable','valuable','variable','vulnerable','stable','disable','cable',
+  'fight','flight','fright','height','knight','light','might','night','right','sight','slight','tight','blight','bright','delight','flight','highlight','insight','midnight','moonlight','overnight','plight','spotlight','starlight','sunlight','tonight','twilight','upright','wright',
+  'enough','though','thought','through','throughout','thorough','although','bought','brought','cough','dough','fought','ought','rough','sought','tough','drought',
+  'around','bound','compound','found','ground','hound','mound','pound','round','sound','surround','wound','astound','background','bound','compound','confound','expound','foreground','playground','profound','rebound','surround','underground',
+  'dance','advance','balance','chance','distance','entrance','finance','france','glance','instance','lance','performance','rance','romance','stance','substance','tolerance','ambulance','appearance','assistance','attendance','circumstance','clearance','compliance','conference','confidence','consequence','correspondence','defiance','deliverance','disturbance','dominance','elegance','endurance','excellence','existence','fragrance','governance','ignorance','importance','independence','inheritance','insurance','intelligence','maintenance','nuisance','observance','ordinance','patience','perseverance','predominance','preference','prevalence','radiance','reassurance','reconnaissance','redundance','reference','relevance','reliance','reluctance','remembrance','renaissance','resemblance','resistance','resonance','significance','surveillance','sustenance','temperance','utterance','vigilance',
+  'fence','hence','pence','sense','tense','thence','whence','commence','confidence','conference','consequence','defense','difference','diligence','eloquence','evidence','excellence','existence','experience','florence','influence','innocence','intelligence','interference','license','negligence','obedience','occurrence','patience','permanence','persistence','preference','presence','prevalence','prominence','providence','prudence','reference','residence','resilience','reverence','science','sentence','sequence','silence','violence',
+  'beach','each','peach','reach','teach',
+  'choose','cool','food','good','mood','moon','noon','poor','pool','proof','room','root','roof','school','smooth','soon','spoon','stool','tool','too','tooth','troop','wood','wool','zoo','bloom','blood','book','boot','boo','boom','boost','booth','brook','brood','broom',
+  'bee','beef','been','beer','beet','bleed','breed','breeze','cheese','creek','creep','deed','deep','deer','degree','feed','fee','feel','feet','flee','fleet','free','freeze','geek','greed','green','greet','jeep','jeer','keen','keep','knee','kneel','lee','leek','meek','meet','need','needle','peel','peek','peer','queen','reef','reel','seed','see','seek','seem','seen','seep','sheep','sheer','sheet','sleep','sleet','sleeve','sneer','sneeze','speed','spleen','squeeze','steed','steel','steep','steer','street','sweet','sweep','tee','teeth','tree','weed','week','wheel',
+  'boat','coat','float','goat','moat','oat','throat',
+  'die','field','lie','pie','tie','thief','brief','chief','grief','relief','believe','achieve','receive',
+  'ceiling','deceive','perceive','receive','seize','weird',
+  'cause','clause','exhaust','fault','fraud','haul','launch','pause','sauce','vault','because','applause','assault','dinosaur','default',
+  'allow','blow','brow','brown','cow','clown','crown','down','drown','elbow','fellow','flow','follow','glow','grow','hollow','how','know','low','meow','mow','now','owe','own','pillow','plow','pow','power','row','shadow','show','slow','snow','sow','swallow','throw','tower','town','vow','widow','window','wow','yellow'
+]);
+
+let score=0,highScore=0,lives=3,currentFragment='',timerVal=100,timerInterval=null,running=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='word-bomb'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;lives=3;running=true;
+  nextRound();
+}
+
+function nextRound(){
+  if(!running)return;
+  currentFragment=fragments[Math.floor(Math.random()*fragments.length)];
+  document.getElementById('letters').textContent=currentFragment.toUpperCase();
+  document.getElementById('input-box').value='';
+  document.getElementById('feedback').textContent='';
+  document.getElementById('feedback').className='';
+  document.getElementById('input-box').focus();
+  document.getElementById('bomb').textContent='💣';
+  timerVal=100;
+  document.getElementById('timer-fill').style.width='100%';
+  document.getElementById('timer-fill').style.background='#ef4444';
+  clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{
+    timerVal-=2;
+    document.getElementById('timer-fill').style.width=timerVal+'%';
+    if(timerVal<=30)document.getElementById('timer-fill').style.background='#ef4444';
+    if(timerVal<=0){
+      clearInterval(timerInterval);
+      bombExplode();
+    }
+  },100);
+  updateHUD();
+}
+
+function bombExplode(){
+  document.getElementById('bomb').textContent='💥';
+  lives--;
+  document.getElementById('feedback').textContent='BOOM! Too slow!';
+  document.getElementById('feedback').className='wrong';
+  updateHUD();
+  if(lives<=0){setTimeout(endGame,800)}
+  else{setTimeout(nextRound,1000)}
+}
+
+function checkWord(word){
+  const w=word.toLowerCase().trim();
+  if(w.length<3)return{valid:false,reason:'Too short (3+ letters)'};
+  if(!w.includes(currentFragment.toLowerCase()))return{valid:false,reason:'Must contain "'+currentFragment.toUpperCase()+'"'};
+  if(!validWords.has(w))return{valid:false,reason:'Not in word list'};
+  return{valid:true};
+}
+
+document.getElementById('input-box').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&running){
+    const result=checkWord(e.target.value);
+    if(result.valid){
+      clearInterval(timerInterval);
+      score+=10+Math.floor(timerVal/10);
+      document.getElementById('feedback').textContent='Correct! +'+( 10+Math.floor(timerVal/10));
+      document.getElementById('feedback').className='correct';
+      document.getElementById('bomb').textContent='✅';
+      updateHUD();
+      setTimeout(nextRound,800);
+    }else{
+      document.getElementById('feedback').textContent=result.reason;
+      document.getElementById('feedback').className='wrong';
+    }
+  }
+});
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-lives').textContent='Lives: '+lives;
+}
+
+function endGame(){
+  running=false;clearInterval(timerInterval);
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'word-bomb',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

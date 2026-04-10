@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jigsaw 16</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:400px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;cursor:grab}
+#info{text-align:center;margin:0.5rem;font-size:0.85rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Jigsaw 16</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Jigsaw 16</h2>
+    <p>Drag pieces to their correct positions!</p>
+    <p style="color:#94a3b8">4x4 grid puzzle. 5 patterns.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Puzzle Complete!</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="info">Puzzle <span id="puzzle-num">1</span>/5 | Time: <span id="timer">0</span>s</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,SZ,pieces,selected,offsetX,offsetY,puzzleIdx,startTime,totalTime,highScore=Infinity,solved;
+const PATTERNS=[
+  // Each pattern: array of 16 colors in grid order
+  ()=>{const c=[];for(let r=0;r<4;r++)for(let col=0;col<4;col++)c.push(`hsl(${(r*4+col)*22},70%,50%)`);return c},
+  ()=>{const c=[];for(let r=0;r<4;r++)for(let col=0;col<4;col++)c.push(`hsl(${(r+col)*40},60%,${40+r*10}%)`);return c},
+  ()=>{const c=[];for(let r=0;r<4;r++)for(let col=0;col<4;col++){const d=Math.sqrt((r-1.5)**2+(col-1.5)**2);c.push(`hsl(${d*60},70%,${30+d*15}%)`)}return c},
+  ()=>{const c=[];for(let r=0;r<4;r++)for(let col=0;col<4;col++)c.push((r+col)%2===0?`hsl(${r*60},70%,50%)`:`hsl(${col*60+30},70%,40%)`);return c},
+  ()=>{const c=[];for(let r=0;r<4;r++)for(let col=0;col<4;col++)c.push(`hsl(${(r*col)*20+100},65%,${45+Math.abs(r-col)*8}%)`);return c},
+];
+function resize(){const r=canvas.parentElement.getBoundingClientRect();W=r.width;SZ=W/4;canvas.width=W;canvas.height=W}
+resize();window.addEventListener('resize',()=>{resize();draw()});
+
+function startGame(){
+  puzzleIdx=0;totalTime=0;solved=0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  loadPuzzle();
+}
+function loadPuzzle(){
+  const colors=PATTERNS[puzzleIdx%PATTERNS.length]();
+  pieces=[];
+  for(let i=0;i<16;i++){
+    const targetR=Math.floor(i/4),targetC=i%4;
+    pieces.push({id:i,color:colors[i],x:0,y:0,targetX:targetC*SZ,targetY:targetR*SZ,placed:false});
+  }
+  // Shuffle positions
+  const positions=[];
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++)positions.push({x:c*SZ,y:r*SZ});
+  for(let i=positions.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[positions[i],positions[j]]=[positions[j],positions[i]]}
+  pieces.forEach((p,i)=>{p.x=positions[i].x;p.y=positions[i].y});
+  selected=null;startTime=Date.now();
+  document.getElementById('puzzle-num').textContent=puzzleIdx+1;
+  // Draw the target briefly
+  drawTarget();setTimeout(()=>draw(),1500);
+  updateTimer();
+}
+function drawTarget(){
+  const colors=PATTERNS[puzzleIdx%PATTERNS.length]();
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    ctx.fillStyle=colors[r*4+c];
+    ctx.fillRect(c*SZ,r*SZ,SZ-2,SZ-2);
+    ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText(r*4+c+1,c*SZ+SZ/2,r*SZ+SZ/2+4);
+  }
+  ctx.fillStyle='rgba(15,23,42,0.7)';ctx.fillRect(0,W/2-20,W,40);
+  ctx.fillStyle='#facc15';ctx.font='bold 16px system-ui';ctx.textAlign='center';
+  ctx.fillText('MEMORIZE THIS PATTERN',W/2,W/2+5);
+}
+function updateTimer(){
+  if(solved>=5)return;
+  const elapsed=Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('timer').textContent=totalTime+elapsed;
+  requestAnimationFrame(updateTimer);
+}
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,W);
+  // Grid
+  ctx.strokeStyle='#334155';
+  for(let i=0;i<=4;i++){
+    ctx.beginPath();ctx.moveTo(i*SZ,0);ctx.lineTo(i*SZ,W);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*SZ);ctx.lineTo(W,i*SZ);ctx.stroke();
+  }
+  // Pieces (draw selected last)
+  const sorted=[...pieces].sort((a,b)=>(a===selected?1:0)-(b===selected?1:0));
+  sorted.forEach(p=>{
+    ctx.fillStyle=p.color;
+    ctx.fillRect(p.x+2,p.y+2,SZ-4,SZ-4);
+    if(p===selected){ctx.strokeStyle='#facc15';ctx.lineWidth=3;ctx.strokeRect(p.x+1,p.y+1,SZ-2,SZ-2);ctx.lineWidth=1}
+    // Number label
+    ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='bold 14px system-ui';ctx.textAlign='center';
+    ctx.fillText(p.id+1,p.x+SZ/2,p.y+SZ/2+5);
+    // Placed indicator
+    if(p.placed){
+      ctx.strokeStyle='#22c55e';ctx.lineWidth=2;ctx.strokeRect(p.x+3,p.y+3,SZ-6,SZ-6);ctx.lineWidth=1;
+    }
+  });
+}
+// Drag handling
+canvas.addEventListener('mousedown',e=>{startDrag(e.clientX,e.clientY)});
+canvas.addEventListener('mousemove',e=>{moveDrag(e.clientX,e.clientY)});
+canvas.addEventListener('mouseup',()=>endDrag());
+canvas.addEventListener('touchstart',e=>{e.preventDefault();startDrag(e.touches[0].clientX,e.touches[0].clientY)});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();moveDrag(e.touches[0].clientX,e.touches[0].clientY)});
+canvas.addEventListener('touchend',()=>endDrag());
+
+function startDrag(cx,cy){
+  const r=canvas.getBoundingClientRect();
+  const mx=(cx-r.left)*(W/r.width),my=(cy-r.top)*(W/r.height);
+  // Find piece under cursor (reverse order for top piece)
+  for(let i=pieces.length-1;i>=0;i--){
+    const p=pieces[i];
+    if(mx>=p.x&&mx<=p.x+SZ&&my>=p.y&&my<=p.y+SZ){
+      selected=p;offsetX=mx-p.x;offsetY=my-p.y;
+      p.placed=false;break;
+    }
+  }
+}
+function moveDrag(cx,cy){
+  if(!selected)return;
+  const r=canvas.getBoundingClientRect();
+  selected.x=(cx-r.left)*(W/r.width)-offsetX;
+  selected.y=(cy-r.top)*(W/r.height)-offsetY;
+  draw();
+}
+function endDrag(){
+  if(!selected)return;
+  // Snap to grid
+  const col=Math.round(selected.x/SZ);
+  const row=Math.round(selected.y/SZ);
+  selected.x=Math.max(0,Math.min(3,col))*SZ;
+  selected.y=Math.max(0,Math.min(3,row))*SZ;
+  // Check if correctly placed
+  if(Math.abs(selected.x-selected.targetX)<5&&Math.abs(selected.y-selected.targetY)<5){
+    selected.x=selected.targetX;selected.y=selected.targetY;selected.placed=true;
+  }
+  // Swap with piece at same position if needed
+  pieces.forEach(p=>{
+    if(p!==selected&&Math.abs(p.x-selected.x)<5&&Math.abs(p.y-selected.y)<5){
+      // swap
+      const origX=selected.x,origY=selected.y;
+      // Find where selected came from - move other piece there
+      p.placed=false;
+    }
+  });
+  selected=null;draw();
+  // Check complete
+  if(pieces.every(p=>p.placed)){
+    totalTime+=Math.floor((Date.now()-startTime)/1000);
+    solved++;puzzleIdx++;
+    if(puzzleIdx>=5){
+      if(totalTime<highScore){highScore=totalTime;saveScore()}
+      document.getElementById('final-score').textContent='Total Time: '+totalTime+'s';
+      document.getElementById('hs').textContent='Best: '+(highScore===Infinity?'-':highScore+'s');
+      document.getElementById('end-overlay').classList.remove('hidden');
+    }else{
+      setTimeout(loadPuzzle,500);
+    }
+  }
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'jigsaw-16',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='jigsaw-16'&&e.data.state){highScore=e.data.state.highScore||Infinity}});
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bounce Ball</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:450px;border:2px solid #6366f1;background:#1e293b;cursor:crosshair}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem}
+#pause-btn{background:#334155;padding:0.5rem 1.5rem}
+</style>
+</head>
+<body>
+<h1>Bounce Ball</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Bounce Ball</h2>
+    <p>Click to place pads. Keep the ball alive!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls"><button id="pause-btn" onclick="togglePause()">⏸</button></div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,ball,pads,bounces,highScore=0,gameOver,paused,animId;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+function startGame(){
+  ball={x:W/2,y:H/3,vx:2+Math.random()*2,vy:2,r:10};
+  if(Math.random()>0.5)ball.vx*=-1;
+  pads=[];bounces=0;gameOver=false;paused=false;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  loop();
+}
+function addPad(x,y){
+  pads.push({x:x-30,y:y-5,w:60,h:10,life:300});
+}
+canvas.addEventListener('click',e=>{
+  if(gameOver||paused)return;
+  const r=canvas.getBoundingClientRect();
+  addPad((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));
+});
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();if(gameOver||paused)return;
+  const t=e.touches[0],r=canvas.getBoundingClientRect();
+  addPad((t.clientX-r.left)*(W/r.width),(t.clientY-r.top)*(H/r.height));
+});
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop()}
+document.addEventListener('keydown',e=>{if(e.code==='KeyP')togglePause()});
+function loop(){
+  if(paused||gameOver)return;
+  update();draw();animId=requestAnimationFrame(loop);
+}
+function update(){
+  ball.vy+=0.05;// gravity
+  ball.x+=ball.vx;ball.y+=ball.vy;
+  // Walls
+  if(ball.x-ball.r<0){ball.x=ball.r;ball.vx*=-1;bounces++}
+  if(ball.x+ball.r>W){ball.x=W-ball.r;ball.vx*=-1;bounces++}
+  if(ball.y-ball.r<0){ball.y=ball.r;ball.vy*=-1;bounces++}
+  if(ball.y-ball.r>H){die();return}
+  // Pads
+  pads.forEach(p=>{
+    p.life--;
+    if(ball.x+ball.r>p.x&&ball.x-ball.r<p.x+p.w&&ball.y+ball.r>p.y&&ball.y-ball.r<p.y+p.h&&ball.vy>0){
+      ball.vy=-Math.abs(ball.vy)*1.02;
+      ball.y=p.y-ball.r;
+      bounces++;
+      // slight random deflection
+      ball.vx+=Math.random()*0.5-0.25;
+    }
+  });
+  pads=pads.filter(p=>p.life>0);
+  // Speed cap
+  const spd=Math.sqrt(ball.vx*ball.vx+ball.vy*ball.vy);
+  if(spd>10){ball.vx*=10/spd;ball.vy*=10/spd}
+}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Pads
+  pads.forEach(p=>{
+    const a=Math.min(1,p.life/100);
+    ctx.fillStyle=`rgba(99,102,241,${a})`;
+    ctx.fillRect(p.x,p.y,p.w,p.h);
+  });
+  // Ball
+  ctx.fillStyle='#facc15';
+  ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fill();
+  // trail
+  ctx.fillStyle='rgba(250,204,21,0.2)';
+  ctx.beginPath();ctx.arc(ball.x-ball.vx*2,ball.y-ball.vy*2,ball.r*0.7,0,Math.PI*2);ctx.fill();
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+  ctx.fillText('Bounces: '+bounces,10,20);
+  ctx.fillText('Best: '+highScore,W-90,20);
+  ctx.fillText('Pads: '+pads.length,10,40);
+}
+function die(){
+  gameOver=true;
+  if(bounces>highScore){highScore=bounces;saveScore()}
+  document.getElementById('final-score').textContent='Bounces: '+bounces;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'bounce-ball',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='bounce-ball'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

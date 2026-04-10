@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Four in a Row</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:420px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;cursor:pointer}
+#info{text-align:center;margin:0.5rem;font-size:0.85rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Four in a Row</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Four in a Row</h2>
+    <p>Connect 4 on an 8x8 board — need 5 to win!</p>
+    <p style="color:#94a3b8">You are yellow, AI is red</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2 id="end-title">Game Over</h2>
+    <p id="end-msg"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="info">Click a column to drop your piece</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const COLS=8,ROWS=8,WIN=5;
+let W,SZ,board,playerTurn,highScore=0,gameActive;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();W=r.width;SZ=W/COLS;canvas.width=W;canvas.height=SZ*ROWS}
+resize();window.addEventListener('resize',()=>{resize();draw()});
+
+function startGame(){
+  board=Array(ROWS).fill(null).map(()=>Array(COLS).fill(0));
+  playerTurn=true;gameActive=true;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  draw();
+}
+function drop(col,player){
+  for(let r=ROWS-1;r>=0;r--){
+    if(board[r][col]===0){board[r][col]=player;return r}
+  }
+  return -1;
+}
+function checkWin(p){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(board[r][c]!==p)continue;
+    for(const[dr,dc]of dirs){
+      let count=1;
+      for(let i=1;i<WIN;i++){const nr=r+dr*i,nc=c+dc*i;if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]===p)count++;else break}
+      if(count>=WIN)return true;
+    }
+  }
+  return false;
+}
+function isFull(){return board[0].every(c=>c!==0)}
+canvas.addEventListener('click',e=>{
+  if(!playerTurn||!gameActive)return;
+  const r=canvas.getBoundingClientRect();
+  const col=Math.floor((e.clientX-r.left)/r.width*COLS);
+  if(col<0||col>=COLS||board[0][col]!==0)return;
+  drop(col,1);draw();
+  if(checkWin(1)){endGame(true);return}
+  if(isFull()){endGame(false,'Draw!');return}
+  playerTurn=false;
+  setTimeout(aiMove,300);
+});
+function aiMove(){
+  // Check for winning move
+  for(let c=0;c<COLS;c++){
+    if(board[0][c]!==0)continue;
+    const r=drop(c,2);if(r===-1)continue;
+    if(checkWin(2)){draw();endGame(false,'AI wins!');return}
+    board[r][c]=0;
+  }
+  // Check for blocking move
+  for(let c=0;c<COLS;c++){
+    if(board[0][c]!==0)continue;
+    const r=drop(c,1);if(r===-1)continue;
+    if(checkWin(1)){board[r][c]=0;drop(c,2);draw();playerTurn=true;if(checkWin(2)){endGame(false,'AI wins!')}return}
+    board[r][c]=0;
+  }
+  // Evaluate positions
+  let bestScore=-Infinity,bestCol=0;
+  for(let c=0;c<COLS;c++){
+    if(board[0][c]!==0)continue;
+    const r=drop(c,2);if(r===-1)continue;
+    let s=evalBoard(2)-evalBoard(1);
+    // Center preference
+    s+=Math.max(0,4-Math.abs(c-COLS/2))*2;
+    board[r][c]=0;
+    if(s>bestScore){bestScore=s;bestCol=c}
+  }
+  drop(bestCol,2);draw();
+  if(checkWin(2)){endGame(false,'AI wins!');return}
+  if(isFull()){endGame(false,'Draw!');return}
+  playerTurn=true;
+}
+function evalBoard(p){
+  let score=0;
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(board[r][c]!==p)continue;
+    for(const[dr,dc]of dirs){
+      let count=1,open=0;
+      for(let i=1;i<WIN;i++){const nr=r+dr*i,nc=c+dc*i;if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS){if(board[nr][nc]===p)count++;else if(board[nr][nc]===0)open++;else break}else break}
+      if(count>=4)score+=100;
+      else if(count>=3&&open>0)score+=20;
+      else if(count>=2&&open>1)score+=5;
+    }
+  }
+  return score;
+}
+function draw(){
+  // Board background
+  ctx.fillStyle='#1e3a5f';ctx.fillRect(0,0,W,SZ*ROWS);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    ctx.beginPath();ctx.arc(c*SZ+SZ/2,r*SZ+SZ/2,SZ*0.4,0,Math.PI*2);
+    if(board[r][c]===0)ctx.fillStyle='#0f172a';
+    else if(board[r][c]===1)ctx.fillStyle='#facc15';
+    else ctx.fillStyle='#ef4444';
+    ctx.fill();
+    if(board[r][c]!==0){ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.lineWidth=2;ctx.stroke()}
+  }
+}
+function endGame(won,msg){
+  gameActive=false;
+  if(won){highScore++;saveScore()}
+  document.getElementById('end-title').textContent=won?'You Win!':'Game Over';
+  document.getElementById('end-msg').textContent=msg||'';
+  document.getElementById('hs').textContent='Wins: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'four-in-a-row',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='four-in-a-row'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

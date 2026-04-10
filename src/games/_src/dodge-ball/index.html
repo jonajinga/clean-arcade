@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dodge Ball</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:450px;border:2px solid #6366f1;background:#1e293b;overflow:hidden}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:grid;grid-template-columns:repeat(3,1fr);gap:0.3rem;margin-top:0.5rem;max-width:180px}
+.ctrl-btn{background:#334155;padding:0.6rem;font-size:1.2rem;text-align:center}
+#pause-btn{background:#334155;padding:0.5rem 1rem;font-size:0.9rem}
+</style>
+</head>
+<body>
+<h1>Dodge Ball</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Dodge Ball</h2>
+    <p>Avoid the bouncing balls!</p>
+    <p style="color:#94a3b8">More balls added over time. Survive!</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <div></div>
+  <button class="ctrl-btn" onmousedown="keys.up=true" onmouseup="keys.up=false" ontouchstart="keys.up=true;event.preventDefault()" ontouchend="keys.up=false">&#9650;</button>
+  <div></div>
+  <button class="ctrl-btn" onmousedown="keys.left=true" onmouseup="keys.left=false" ontouchstart="keys.left=true;event.preventDefault()" ontouchend="keys.left=false">&#9664;</button>
+  <button id="pause-btn" onclick="togglePause()">⏸</button>
+  <button class="ctrl-btn" onmousedown="keys.right=true" onmouseup="keys.right=false" ontouchstart="keys.right=true;event.preventDefault()" ontouchend="keys.right=false">&#9654;</button>
+  <div></div>
+  <button class="ctrl-btn" onmousedown="keys.down=true" onmouseup="keys.down=false" ontouchstart="keys.down=true;event.preventDefault()" ontouchend="keys.down=false">&#9660;</button>
+  <div></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,player,balls,score,highScore=0,gameOver,paused,frame;
+const keys={up:false,down:false,left:false,right:false};
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+
+function startGame(){
+  player={x:W/2,y:H/2,r:12,speed:4};
+  balls=[];frame=0;score=0;gameOver=false;paused=false;
+  for(let i=0;i<3;i++)addBall();
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  loop();
+}
+function addBall(){
+  const side=Math.floor(Math.random()*4);
+  let x,y;
+  if(side===0){x=0;y=Math.random()*H}
+  else if(side===1){x=W;y=Math.random()*H}
+  else if(side===2){x=Math.random()*W;y=0}
+  else{x=Math.random()*W;y=H}
+  const speed=2+Math.random()*2+score*0.02;
+  const angle=Math.random()*Math.PI*2;
+  balls.push({x,y,r:8+Math.random()*6,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,color:['#ef4444','#f97316','#a855f7','#ec4899'][Math.floor(Math.random()*4)]});
+}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused)loop()}
+function loop(){
+  if(paused||gameOver)return;
+  update();draw();requestAnimationFrame(loop);
+}
+function update(){
+  frame++;score=Math.floor(frame/60);
+  // Add ball every 3 seconds
+  if(frame%180===0)addBall();
+  // Player movement
+  if(keys.up)player.y-=player.speed;
+  if(keys.down)player.y+=player.speed;
+  if(keys.left)player.x-=player.speed;
+  if(keys.right)player.x+=player.speed;
+  player.x=Math.max(player.r,Math.min(W-player.r,player.x));
+  player.y=Math.max(player.r,Math.min(H-player.r,player.y));
+  // Balls
+  balls.forEach(b=>{
+    b.x+=b.vx;b.y+=b.vy;
+    if(b.x-b.r<0){b.x=b.r;b.vx*=-1}
+    if(b.x+b.r>W){b.x=W-b.r;b.vx*=-1}
+    if(b.y-b.r<0){b.y=b.r;b.vy*=-1}
+    if(b.y+b.r>H){b.y=H-b.r;b.vy*=-1}
+    // Collision with player
+    const dx=b.x-player.x,dy=b.y-player.y;
+    if(Math.sqrt(dx*dx+dy*dy)<b.r+player.r)die();
+  });
+}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Grid bg
+  ctx.strokeStyle='#253045';
+  for(let i=0;i<W;i+=30){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke()}
+  for(let i=0;i<H;i+=30){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke()}
+  // Balls
+  balls.forEach(b=>{
+    ctx.fillStyle=b.color;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.stroke();
+  });
+  // Player
+  ctx.fillStyle='#22c55e';ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#86efac';ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+  ctx.fillText('Time: '+score+'s',10,20);
+  ctx.fillText('Balls: '+balls.length,10,38);
+  ctx.fillText('Best: '+highScore+'s',W-100,20);
+}
+function die(){
+  gameOver=true;
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Survived: '+score+'s ('+balls.length+' balls)';
+  document.getElementById('hs').textContent='Best: '+highScore+'s';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{
+  if(e.code==='ArrowUp'||e.code==='KeyW'){e.preventDefault();keys.up=true}
+  if(e.code==='ArrowDown'||e.code==='KeyS'){e.preventDefault();keys.down=true}
+  if(e.code==='ArrowLeft'||e.code==='KeyA')keys.left=true;
+  if(e.code==='ArrowRight'||e.code==='KeyD')keys.right=true;
+  if(e.code==='KeyP')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='ArrowUp'||e.code==='KeyW')keys.up=false;
+  if(e.code==='ArrowDown'||e.code==='KeyS')keys.down=false;
+  if(e.code==='ArrowLeft'||e.code==='KeyA')keys.left=false;
+  if(e.code==='ArrowRight'||e.code==='KeyD')keys.right=false;
+});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'dodge-ball',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='dodge-ball'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

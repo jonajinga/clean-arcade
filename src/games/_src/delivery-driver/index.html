@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delivery Driver</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:450px;height:450px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:grid;grid-template-columns:repeat(3,1fr);gap:0.3rem;margin-top:0.5rem;max-width:200px}
+.ctrl-btn{background:#334155;padding:0.6rem;font-size:1.2rem;text-align:center}
+#pause-btn{background:#334155;padding:0.5rem 1rem;font-size:0.9rem}
+</style>
+</head>
+<body>
+<h1>Delivery Driver</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Delivery Driver</h2>
+    <p>Pick up packages, deliver on time!</p>
+    <p style="color:#94a3b8">Avoid traffic. Arrow keys or buttons.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Time's Up!</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <div></div>
+  <button class="ctrl-btn" onclick="move(0,-1)" ontouchstart="move(0,-1);event.preventDefault()">&#9650;</button>
+  <div></div>
+  <button class="ctrl-btn" onclick="move(-1,0)" ontouchstart="move(-1,0);event.preventDefault()">&#9664;</button>
+  <button id="pause-btn" onclick="togglePause()">⏸</button>
+  <button class="ctrl-btn" onclick="move(1,0)" ontouchstart="move(1,0);event.preventDefault()">&#9654;</button>
+  <div></div>
+  <button class="ctrl-btn" onclick="move(0,1)" ontouchstart="move(0,1);event.preventDefault()">&#9660;</button>
+  <div></div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,GRID,player,packages,deliveries,traffic,timeLeft,score,highScore=0,paused,gameOver,timerInterval,carrying;
+const COLS=15,ROWS=15;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height;GRID=Math.min(W/COLS,H/ROWS)}
+resize();window.addEventListener('resize',()=>{resize();draw()});
+
+// City layout: roads every 3 cells
+function isRoad(c,r){return c%3===0||r%3===0}
+
+function startGame(){
+  player={x:0,y:0};carrying=false;score=0;timeLeft=90;paused=false;gameOver=false;
+  packages=[];deliveries=[];traffic=[];
+  spawnPackage();spawnTraffic();
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(tick,1000);
+  setInterval(moveTraffic,500);
+  draw();
+}
+function spawnPackage(){
+  let x,y;do{x=Math.floor(Math.random()*COLS);y=Math.floor(Math.random()*ROWS)}while(!isRoad(x,y)||(x===player.x&&y===player.y));
+  packages=[{x,y}];
+  // Delivery point
+  let dx,dy;do{dx=Math.floor(Math.random()*COLS);dy=Math.floor(Math.random()*ROWS)}while(!isRoad(dx,dy)||(dx===x&&dy===y));
+  deliveries=[{x:dx,y:dy}];
+}
+function spawnTraffic(){
+  traffic=[];
+  for(let i=0;i<5+score;i++){
+    let x,y;do{x=Math.floor(Math.random()*COLS);y=Math.floor(Math.random()*ROWS)}while(!isRoad(x,y)||(x===0&&y===0));
+    const dir=Math.random()>0.5?{dx:1,dy:0}:{dx:0,dy:1};
+    traffic.push({x,y,...dir});
+  }
+}
+function moveTraffic(){
+  if(paused||gameOver)return;
+  traffic.forEach(t=>{
+    let nx=t.x+t.dx,ny=t.y+t.dy;
+    if(nx<0||nx>=COLS)t.dx*=-1;
+    if(ny<0||ny>=ROWS)t.dy*=-1;
+    nx=t.x+t.dx;ny=t.y+t.dy;
+    if(isRoad(nx,ny)){t.x=nx;t.y=ny}
+    else{t.dx*=-1;t.dy*=-1}
+  });
+  // Check collision
+  if(traffic.some(t=>t.x===player.x&&t.y===player.y)){
+    timeLeft=Math.max(0,timeLeft-10);
+    player.x=0;player.y=0;carrying=false;
+  }
+  draw();
+}
+function move(dx,dy){
+  if(paused||gameOver)return;
+  const nx=player.x+dx,ny=player.y+dy;
+  if(nx<0||nx>=COLS||ny<0||ny>=ROWS)return;
+  if(!isRoad(nx,ny))return;
+  player.x=nx;player.y=ny;
+  // Check pickup
+  if(!carrying&&packages.length>0&&packages[0].x===nx&&packages[0].y===ny){
+    carrying=true;packages=[];
+  }
+  // Check delivery
+  if(carrying&&deliveries.length>0&&deliveries[0].x===nx&&deliveries[0].y===ny){
+    carrying=false;score++;deliveries=[];
+    spawnPackage();
+    if(score%3===0)spawnTraffic();
+  }
+  // Traffic collision
+  if(traffic.some(t=>t.x===player.x&&t.y===player.y)){
+    timeLeft=Math.max(0,timeLeft-10);
+    player.x=0;player.y=0;carrying=false;
+  }
+  draw();
+}
+function tick(){
+  if(paused)return;
+  timeLeft--;
+  if(timeLeft<=0){gameOver=true;clearInterval(timerInterval);endGame()}
+  draw();
+}
+function togglePause(){if(gameOver)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸'}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Grid
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=c*GRID,y=r*GRID;
+    ctx.fillStyle=isRoad(c,r)?'#334155':'#1a2332';
+    ctx.fillRect(x,y,GRID-1,GRID-1);
+  }
+  // Package
+  packages.forEach(p=>{
+    ctx.fillStyle='#facc15';ctx.fillRect(p.x*GRID+2,p.y*GRID+2,GRID-5,GRID-5);
+    ctx.fillStyle='#0f172a';ctx.font=`${GRID*0.5}px system-ui`;ctx.textAlign='center';
+    ctx.fillText('P',p.x*GRID+GRID/2,p.y*GRID+GRID*0.7);
+  });
+  // Delivery
+  deliveries.forEach(d=>{
+    ctx.fillStyle='#22c55e';ctx.fillRect(d.x*GRID+2,d.y*GRID+2,GRID-5,GRID-5);
+    ctx.fillStyle='#0f172a';ctx.font=`${GRID*0.5}px system-ui`;ctx.textAlign='center';
+    ctx.fillText('D',d.x*GRID+GRID/2,d.y*GRID+GRID*0.7);
+  });
+  // Traffic
+  traffic.forEach(t=>{
+    ctx.fillStyle='#ef4444';ctx.fillRect(t.x*GRID+3,t.y*GRID+3,GRID-7,GRID-7);
+  });
+  // Player
+  ctx.fillStyle='#3b82f6';ctx.fillRect(player.x*GRID+1,player.y*GRID+1,GRID-3,GRID-3);
+  if(carrying){ctx.fillStyle='#facc15';ctx.fillRect(player.x*GRID+GRID*0.3,player.y*GRID+1,GRID*0.4,4)}
+  // HUD
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,18);
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='left';
+  ctx.fillText(`Deliveries: ${score} | Time: ${timeLeft}s | Best: ${highScore}`,5,13);
+}
+function endGame(){
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Deliveries: '+score;
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{
+  if(e.code==='ArrowUp'){e.preventDefault();move(0,-1)}
+  if(e.code==='ArrowDown'){e.preventDefault();move(0,1)}
+  if(e.code==='ArrowLeft')move(-1,0);
+  if(e.code==='ArrowRight')move(1,0);
+  if(e.code==='KeyP')togglePause();
+});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'delivery-driver',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='delivery-driver'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Discus Throw</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:400px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem;justify-content:center}
+#action-btn{background:#ef4444;padding:0.75rem 2.5rem;font-size:1rem;font-weight:bold}
+#info{text-align:center;font-size:0.85rem;color:#94a3b8;margin:0.25rem}
+</style>
+</head>
+<body>
+<h1>Discus Throw</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Discus Throw</h2>
+    <p>Tap to build spin momentum, then release!</p>
+    <p style="color:#94a3b8">3 attempts. Best distance wins.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Results</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <button id="action-btn" onclick="action()" ontouchstart="action();event.preventDefault()">TAP!</button>
+</div>
+<div id="info">Tap rapidly to spin, then tap to release at peak!</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,phase,spinSpeed,spinAngle,momentum,released,discusX,discusY,discusVX,discusVY,attempt,distances,highScore=0,animId,bestDist;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+
+function startGame(){
+  attempt=0;distances=[];bestDist=0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  startAttempt();
+}
+function startAttempt(){
+  phase='spin';spinSpeed=0;spinAngle=0;momentum=0;released=false;
+  discusX=80;discusY=H*0.6;discusVX=0;discusVY=0;
+  document.getElementById('action-btn').textContent='TAP to Spin!';
+  document.getElementById('info').textContent=`Attempt ${attempt+1}/3 — Tap rapidly to build spin!`;
+  loop();
+}
+function action(){
+  if(phase==='spin'){
+    momentum+=3;
+    spinSpeed=Math.min(15,spinSpeed+0.8);
+  }else if(phase==='release'){
+    // Already handled
+  }
+}
+function loop(){
+  update();draw();
+  if(phase!=='done')animId=requestAnimationFrame(loop);
+}
+function update(){
+  if(phase==='spin'){
+    spinAngle+=spinSpeed*0.05;
+    spinSpeed*=0.98;// natural decay
+    momentum*=0.99;
+    // Auto-release after peak
+    if(momentum>30&&spinSpeed<2){
+      release();
+    }
+    // Show release prompt at good momentum
+    if(momentum>20){
+      document.getElementById('action-btn').textContent='RELEASE!';
+      document.getElementById('action-btn').onclick=()=>{release()};
+      document.getElementById('info').textContent='Tap RELEASE at peak momentum!';
+      phase='release';
+    }
+  }else if(phase==='flight'){
+    discusVY+=0.15;// gravity
+    discusX+=discusVX;
+    discusY+=discusVY;
+    if(discusY>=H*0.8){
+      discusY=H*0.8;
+      phase='landed';
+      const dist=Math.round((discusX-80)*0.3);
+      distances.push(dist);
+      bestDist=Math.max(bestDist,dist);
+      document.getElementById('info').textContent=`Throw ${attempt}: ${dist}m`;
+      setTimeout(()=>{
+        attempt++;
+        if(attempt>=3)endGame();
+        else startAttempt();
+      },1500);
+    }
+  }
+}
+function release(){
+  phase='flight';
+  const power=Math.min(momentum,100)/100;
+  discusVX=power*12+2;
+  discusVY=-power*8-2;
+  document.getElementById('action-btn').textContent='...';
+  document.getElementById('action-btn').onclick=()=>action();
+  attempt;
+}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Field
+  ctx.fillStyle='#166534';ctx.fillRect(0,H*0.8,W,H*0.2);
+  // Distance markers
+  for(let i=1;i<=6;i++){
+    const x=80+i*60;
+    ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(x,H*0.78);ctx.lineTo(x,H*0.82);ctx.stroke();
+    ctx.fillStyle='#94a3b8';ctx.font='10px system-ui';ctx.textAlign='center';
+    ctx.fillText(Math.round((x-80)*0.3)+'m',x,H*0.77);
+  }
+  // Spin ring
+  if(phase==='spin'||phase==='release'){
+    const cx=80,cy=H*0.6;
+    ctx.strokeStyle=`hsl(${momentum*3},70%,50%)`;ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(cx,cy,25+momentum*0.2,0,Math.PI*2);ctx.stroke();
+    // Discus on ring
+    const dx=cx+Math.cos(spinAngle)*(25+momentum*0.2);
+    const dy=cy+Math.sin(spinAngle)*(25+momentum*0.2);
+    ctx.fillStyle='#facc15';ctx.beginPath();ctx.ellipse(dx,dy,8,5,spinAngle,0,Math.PI*2);ctx.fill();
+    // Momentum bar
+    ctx.fillStyle='#334155';ctx.fillRect(W/2-75,20,150,12);
+    ctx.fillStyle=momentum>60?'#22c55e':momentum>30?'#facc15':'#ef4444';
+    ctx.fillRect(W/2-75,20,Math.min(momentum,100)*1.5,12);
+    ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';ctx.textAlign='center';
+    ctx.fillText('Momentum',W/2,15);
+    ctx.lineWidth=1;
+  }
+  // Flying/landed discus
+  if(phase==='flight'||phase==='landed'){
+    ctx.fillStyle='#facc15';
+    ctx.beginPath();ctx.ellipse(discusX,discusY,8,5,0.3,0,Math.PI*2);ctx.fill();
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.beginPath();ctx.ellipse(discusX,H*0.8,6,3,0,0,Math.PI*2);ctx.fill();
+  }
+  // Previous throws
+  distances.forEach((d,i)=>{
+    ctx.fillStyle='#94a3b8';ctx.font='11px system-ui';ctx.textAlign='left';
+    ctx.fillText(`Throw ${i+1}: ${d}m`,10,H-10-i*15);
+  });
+  // HUD
+  ctx.fillStyle='#e2e8f0';ctx.font='13px system-ui';ctx.textAlign='right';
+  ctx.fillText(`Best: ${highScore}m`,W-10,15);
+}
+function endGame(){
+  phase='done';
+  if(bestDist>highScore){highScore=bestDist;saveScore()}
+  document.getElementById('final-score').textContent=distances.map((d,i)=>`Throw ${i+1}: ${d}m`).join(' | ')+` — Best: ${bestDist}m`;
+  document.getElementById('hs').textContent='Record: '+highScore+'m';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();if(phase==='release')release();else action()}});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'discus-throw',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='discus-throw'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

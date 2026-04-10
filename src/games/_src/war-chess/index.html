@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>War Chess</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:420px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:420px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+#status{text-align:center;font-size:0.85rem;margin:0.3rem 0;color:#facc15}
+</style>
+</head>
+<body>
+<h1>War Chess</h1>
+<div id="hud"><span id="hud-turn">Your Turn</span><span id="hud-wins">Wins: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="420" height="420"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>War Chess</h2>
+<p>Pawns + Kings on 6x6 board!</p>
+<p>Capture the opponent's king to win.</p>
+<p>Blue = You, Red = AI</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2 id="end-title">Game Over</h2>
+<p id="end-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="status">Select a piece to move</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const SIZE=6,CELL=65,PAD=25;
+// Pieces: 0=empty, 1=player pawn, 2=player king, 3=AI pawn, 4=AI king
+let board,selected,validMoves,playerTurn,wins=0,highScore=0,running=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='war-chess'){highScore=e.data.state?.highScore||0;wins=highScore;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  // Player (bottom): pawns on row 5, king on row 4
+  for(let c=0;c<SIZE;c++)board[5][c]=1;
+  board[5][3]=2; // king
+  // AI (top): pawns on row 0, king on row 1
+  for(let c=0;c<SIZE;c++)board[0][c]=3;
+  board[0][2]=4; // king
+  selected=null;validMoves=[];playerTurn=true;running=true;
+  document.getElementById('hud-turn').textContent='Your Turn';
+  document.getElementById('status').textContent='Select a piece to move';
+  draw();
+}
+
+function isPlayer(v){return v===1||v===2}
+function isAI(v){return v===3||v===4}
+function isKing(v){return v===2||v===4}
+
+function getMoves(r,c){
+  const piece=board[r][c];const moves=[];
+  if(piece===1){// player pawn - moves up
+    if(r>0&&board[r-1][c]===0)moves.push({r:r-1,c});
+    if(r>0&&c>0&&isAI(board[r-1][c-1]))moves.push({r:r-1,c:c-1});
+    if(r>0&&c<SIZE-1&&isAI(board[r-1][c+1]))moves.push({r:r-1,c:c+1});
+  }else if(piece===3){// AI pawn - moves down
+    if(r<SIZE-1&&board[r+1][c]===0)moves.push({r:r+1,c});
+    if(r<SIZE-1&&c>0&&isPlayer(board[r+1][c-1]))moves.push({r:r+1,c:c-1});
+    if(r<SIZE-1&&c<SIZE-1&&isPlayer(board[r+1][c+1]))moves.push({r:r+1,c:c+1});
+  }else if(piece===2||piece===4){// king - moves one square any direction
+    const enemy=piece===2?isAI:isPlayer;
+    for(let dr=-1;dr<=1;dr++){for(let dc=-1;dc<=1;dc++){
+      if(dr===0&&dc===0)continue;
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&!((piece===2?isPlayer:isAI)(board[nr][nc])))
+        moves.push({r:nr,c:nc});
+    }}
+  }
+  return moves;
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,420,420);
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const x=PAD+c*CELL,y=PAD+r*CELL;
+      ctx.fillStyle=(r+c)%2===0?'#1e293b':'#334155';
+      // highlight valid moves
+      if(validMoves.some(m=>m.r===r&&m.c===c)){ctx.fillStyle='rgba(250,204,21,0.3)'}
+      ctx.fillRect(x,y,CELL,CELL);
+      if(selected&&selected.r===r&&selected.c===c){
+        ctx.strokeStyle='#facc15';ctx.lineWidth=3;ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+      }
+      const p=board[r][c];
+      if(p>0){
+        ctx.fillStyle=isPlayer(p)?'#3b82f6':'#ef4444';
+        ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-8,0,Math.PI*2);ctx.fill();
+        if(isKing(p)){
+          ctx.fillStyle='#facc15';ctx.font='bold 24px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText('♚',x+CELL/2,y+CELL/2+2);
+        }else{
+          ctx.fillStyle=isPlayer(p)?'#60a5fa':'#fca5a5';ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText('♟',x+CELL/2,y+CELL/2+2);
+        }
+      }
+    }
+  }
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||!playerTurn)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(420/rect.width)-PAD;
+  const my=(e.clientY-rect.top)*(420/rect.height)-PAD;
+  const c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
+  if(r<0||r>=SIZE||c<0||c>=SIZE)return;
+  // check if clicking valid move
+  if(selected&&validMoves.some(m=>m.r===r&&m.c===c)){
+    const captured=board[r][c];
+    board[r][c]=board[selected.r][selected.c];
+    board[selected.r][selected.c]=0;
+    // pawn promotion
+    if(board[r][c]===1&&r===0)board[r][c]=2;
+    selected=null;validMoves=[];
+    if(captured===4){endGame('player');return}
+    playerTurn=false;
+    document.getElementById('hud-turn').textContent='AI Turn';
+    document.getElementById('status').textContent='AI thinking...';
+    draw();setTimeout(aiTurn,500);
+    return;
+  }
+  // select piece
+  if(isPlayer(board[r][c])){
+    selected={r,c};validMoves=getMoves(r,c);
+    document.getElementById('status').textContent=validMoves.length?'Click a highlighted square':'No valid moves for this piece';
+  }else{selected=null;validMoves=[]}
+  draw();
+});
+
+function aiTurn(){
+  if(!running)return;
+  // gather all AI moves
+  let allMoves=[];
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    if(isAI(board[r][c])){
+      const moves=getMoves(r,c);
+      moves.forEach(m=>{
+        let score=0;
+        if(isPlayer(board[m.r][m.c]))score+=isKing(board[m.r][m.c])?1000:10;
+        // prefer advancing
+        score+=m.r;
+        // prefer king safety
+        if(isKing(board[r][c])){
+          // avoid moving into danger
+          for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+            const ar=m.r+dr,ac=m.c+dc;
+            if(ar>=0&&ar<SIZE&&ac>=0&&ac<SIZE&&isPlayer(board[ar][ac]))score-=5;
+          }
+        }
+        allMoves.push({from:{r,c},to:m,score});
+      });
+    }
+  }
+  if(allMoves.length===0){endGame('player');return}
+  allMoves.sort((a,b)=>b.score-a.score);
+  // pick from top moves with some randomness
+  const top=allMoves.filter(m=>m.score>=allMoves[0].score-5);
+  const move=top[Math.floor(Math.random()*top.length)];
+  const captured=board[move.to.r][move.to.c];
+  board[move.to.r][move.to.c]=board[move.from.r][move.from.c];
+  board[move.from.r][move.from.c]=0;
+  // pawn promotion
+  if(board[move.to.r][move.to.c]===3&&move.to.r===SIZE-1)board[move.to.r][move.to.c]=4;
+  if(captured===2){endGame('ai');return}
+  // check if player has moves
+  let playerHasMoves=false;
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){if(isPlayer(board[r][c])&&getMoves(r,c).length>0)playerHasMoves=true}
+  if(!playerHasMoves){endGame('ai');return}
+  playerTurn=true;
+  document.getElementById('hud-turn').textContent='Your Turn';
+  document.getElementById('status').textContent='Select a piece to move';
+  draw();
+}
+
+function endGame(winner){
+  running=false;
+  if(winner==='player'){wins++;if(wins>highScore){highScore=wins;parent.postMessage({type:'ca-save',slug:'war-chess',state:{highScore}},'*')}}
+  document.getElementById('hud-wins').textContent='Wins: '+wins;
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('end-title').textContent=winner==='player'?'You Win!':'AI Wins!';
+  document.getElementById('end-msg').textContent=winner==='player'?'You captured the enemy king!':'Your king was captured!';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  draw();
+}
+</script>
+</body>
+</html>

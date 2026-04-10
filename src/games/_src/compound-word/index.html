@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compound Word</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;min-height:420px;border:2px solid #6366f1;background:#1e293b;padding:1rem;display:flex;flex-direction:column;align-items:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+#hud{width:100%;display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:0.5rem}
+.word-display{display:flex;gap:1rem;margin:1rem 0;align-items:center}
+.word-box{background:#0f172a;padding:1rem 1.5rem;font-size:1.4rem;color:#3b82f6;font-weight:bold}
+.plus{color:#facc15;font-size:1.5rem}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;width:100%;margin-top:0.5rem}
+.choice-btn{background:#334155;padding:0.75rem;text-align:center;border:2px solid transparent;font-size:1rem}
+.choice-btn:hover{border-color:#6366f1}
+.choice-btn.correct{background:#22c55e;color:#0f172a}
+.choice-btn.wrong{background:#ef4444}
+#feedback{margin-top:0.5rem;height:1.5rem;font-size:0.9rem}
+</style>
+</head>
+<body>
+<h1>Compound Word</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Compound Word</h2>
+    <p>Find the compound word from two parts!</p>
+    <p style="color:#94a3b8">30 rounds</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Game Over</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="hud"><span>Round: <span id="round">1</span>/30</span><span>Score: <span id="score">0</span></span></div>
+  <div class="word-display">
+    <div class="word-box" id="word1">-</div>
+    <div class="plus">+</div>
+    <div class="word-box" id="word2">-</div>
+  </div>
+  <div class="choices" id="choices"></div>
+  <div id="feedback"></div>
+</div>
+<script>
+const WORDS=[
+  {p:["Sun","Flower"],a:"Sunflower",f:["Sunlight","Flowerpot","Sunshine"]},
+  {p:["Foot","Ball"],a:"Football",f:["Footprint","Ballroom","Footstep"]},
+  {p:["Rain","Bow"],a:"Rainbow",f:["Rainfall","Bowstring","Raindrop"]},
+  {p:["Book","Shelf"],a:"Bookshelf",f:["Bookmark","Bookend","Bookworm"]},
+  {p:["Fire","Fly"],a:"Firefly",f:["Firework","Butterfly","Firetruck"]},
+  {p:["Star","Fish"],a:"Starfish",f:["Starlight","Goldfish","Starship"]},
+  {p:["Cup","Cake"],a:"Cupcake",f:["Teacup","Pancake","Cupboard"]},
+  {p:["Snow","Man"],a:"Snowman",f:["Snowfall","Snowflake","Mailman"]},
+  {p:["Tooth","Brush"],a:"Toothbrush",f:["Toothpaste","Paintbrush","Toothpick"]},
+  {p:["Air","Port"],a:"Airport",f:["Airplane","Seaport","Airmail"]},
+  {p:["Back","Pack"],a:"Backpack",f:["Backbone","Package","Backdrop"]},
+  {p:["Basket","Ball"],a:"Basketball",f:["Baseball","Ballpark","Handball"]},
+  {p:["Bed","Room"],a:"Bedroom",f:["Bedtime","Bathroom","Bedside"]},
+  {p:["Blue","Berry"],a:"Blueberry",f:["Blueprint","Strawberry","Bluebell"]},
+  {p:["Butter","Fly"],a:"Butterfly",f:["Buttercup","Dragonfly","Buttermilk"]},
+  {p:["Card","Board"],a:"Cardboard",f:["Postcard","Keyboard","Blackboard"]},
+  {p:["Door","Bell"],a:"Doorbell",f:["Doorstep","Cowbell","Doorway"]},
+  {p:["Down","Town"],a:"Downtown",f:["Download","Hometown","Downhill"]},
+  {p:["Eye","Brow"],a:"Eyebrow",f:["Eyelash","Eyeball","Eyelid"]},
+  {p:["Grand","Mother"],a:"Grandmother",f:["Grandfather","Godmother","Grandchild"]},
+  {p:["Head","Band"],a:"Headband",f:["Headline","Husband","Headlight"]},
+  {p:["Key","Board"],a:"Keyboard",f:["Keystone","Skateboard","Keychain"]},
+  {p:["Lamp","Shade"],a:"Lampshade",f:["Lamppost","Sunshade","Lamplight"]},
+  {p:["Moon","Light"],a:"Moonlight",f:["Moonshine","Flashlight","Moonbeam"]},
+  {p:["News","Paper"],a:"Newspaper",f:["Newsletter","Wallpaper","Newsroom"]},
+  {p:["Pan","Cake"],a:"Pancake",f:["Saucepan","Fruitcake","Cupcake"]},
+  {p:["Pop","Corn"],a:"Popcorn",f:["Lollipop","Unicorn","Acorn"]},
+  {p:["Sea","Horse"],a:"Seahorse",f:["Seashell","Horseback","Seaweed"]},
+  {p:["Thunder","Storm"],a:"Thunderstorm",f:["Thunderbolt","Snowstorm","Thunderclap"]},
+  {p:["Water","Fall"],a:"Waterfall",f:["Watermelon","Rainfall","Watercolor"]},
+  {p:["Wind","Mill"],a:"Windmill",f:["Windshield","Sawmill","Windpipe"]},
+  {p:["Sun","Rise"],a:"Sunrise",f:["Sunset","Surprise","Sunburn"]}
+];
+let round,score,highScore=0,used;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function startGame(){
+  round=0;score=0;used=[];
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  nextRound();
+}
+function nextRound(){
+  if(round>=30){endGame();return}
+  round++;
+  document.getElementById('round').textContent=round;
+  document.getElementById('score').textContent=score;
+  document.getElementById('feedback').textContent='';
+  let pool=WORDS.filter((_,i)=>!used.includes(i));
+  if(pool.length===0){used=[];pool=[...WORDS]}
+  const idx=WORDS.indexOf(pool[Math.floor(Math.random()*pool.length)]);
+  used.push(idx);
+  const w=WORDS[idx];
+  document.getElementById('word1').textContent=w.p[0];
+  document.getElementById('word2').textContent=w.p[1];
+  const opts=shuffle([w.a,...w.f.slice(0,3)]);
+  const c=document.getElementById('choices');c.innerHTML='';
+  opts.forEach(o=>{
+    const b=document.createElement('button');b.className='choice-btn';b.textContent=o;
+    b.onclick=()=>choose(b,o,w.a);
+    c.appendChild(b);
+  });
+}
+function choose(btn,answer,correct){
+  document.querySelectorAll('.choice-btn').forEach(b=>b.onclick=null);
+  const fb=document.getElementById('feedback');
+  if(answer===correct){score++;btn.classList.add('correct');fb.textContent='Correct!';fb.style.color='#22c55e'}
+  else{btn.classList.add('wrong');document.querySelectorAll('.choice-btn').forEach(b=>{if(b.textContent===correct)b.classList.add('correct')});fb.textContent=correct;fb.style.color='#ef4444'}
+  document.getElementById('score').textContent=score;
+  setTimeout(nextRound,1200);
+}
+function endGame(){
+  if(score>highScore){highScore=score;saveScore()}
+  document.getElementById('final-score').textContent='Score: '+score+'/30';
+  document.getElementById('hs').textContent='Best: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'compound-word',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='compound-word'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

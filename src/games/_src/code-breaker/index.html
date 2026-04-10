@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code Breaker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:420px;min-height:500px;border:2px solid #6366f1;background:#1e293b;padding:0.75rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+.colors{display:flex;gap:0.4rem;justify-content:center;margin:0.5rem 0}
+.color-pick{width:36px;height:36px;border:2px solid transparent;cursor:pointer}
+.color-pick.active{border-color:#fff}
+.guess-row{display:flex;align-items:center;gap:0.4rem;margin:0.25rem 0;padding:0.25rem;background:#0f172a}
+.guess-slot{width:30px;height:30px;border:1px solid #475569;cursor:pointer}
+.peg-area{display:flex;gap:2px;margin-left:auto}
+.peg{width:12px;height:12px;border:1px solid #475569}
+.peg.black{background:#e2e8f0}
+.peg.white{background:#94a3b8}
+#current-row{display:flex;gap:0.4rem;align-items:center;margin:0.5rem 0;justify-content:center}
+.current-slot{width:36px;height:36px;border:2px solid #6366f1;cursor:pointer}
+#submit-btn{background:#22c55e;padding:0.5rem 1.5rem;font-size:0.9rem}
+#info{text-align:center;font-size:0.8rem;color:#94a3b8;margin:0.25rem 0}
+#guesses{max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<h1>Code Breaker</h1>
+<div id="game-area">
+  <div id="start-overlay" class="overlay">
+    <h2>Code Breaker</h2>
+    <p>Guess the 4-color code in 10 attempts</p>
+    <p style="color:#94a3b8">Black peg = right color, right position<br>White peg = right color, wrong position</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2 id="end-title">Game Over</h2>
+    <p id="end-msg"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+  <div id="info">Attempt <span id="attempt">1</span>/10 | Wins: <span id="wins-display">0</span></div>
+  <div class="colors" id="palette"></div>
+  <div id="current-row"></div>
+  <div style="text-align:center;margin:0.5rem 0"><button id="submit-btn" onclick="submitGuess()">Check</button></div>
+  <div id="guesses"></div>
+</div>
+<script>
+const COLORS=['#ef4444','#3b82f6','#22c55e','#facc15','#a855f7','#f97316'];
+let secret,currentGuess,attempts,highScore=0,gameActive;
+function startGame(){
+  secret=Array(4).fill(0).map(()=>COLORS[Math.floor(Math.random()*COLORS.length)]);
+  currentGuess=[null,null,null,null];
+  attempts=0;gameActive=true;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  document.getElementById('guesses').innerHTML='';
+  document.getElementById('attempt').textContent='1';
+  document.getElementById('wins-display').textContent=highScore;
+  renderPalette();renderCurrent();
+}
+let selectedColor=COLORS[0];
+function renderPalette(){
+  const p=document.getElementById('palette');p.innerHTML='';
+  COLORS.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='color-pick'+(c===selectedColor?' active':'');
+    d.style.background=c;
+    d.onclick=()=>{selectedColor=c;renderPalette()};
+    p.appendChild(d);
+  });
+}
+function renderCurrent(){
+  const r=document.getElementById('current-row');r.innerHTML='';
+  currentGuess.forEach((c,i)=>{
+    const d=document.createElement('div');
+    d.className='current-slot';
+    d.style.background=c||'#0f172a';
+    d.onclick=()=>{currentGuess[i]=selectedColor;renderCurrent()};
+    r.appendChild(d);
+  });
+}
+function submitGuess(){
+  if(!gameActive||currentGuess.includes(null))return;
+  attempts++;
+  document.getElementById('attempt').textContent=Math.min(attempts+1,10);
+  // Calculate pegs
+  const s=[...secret],g=[...currentGuess];
+  let black=0,white=0;
+  const sUsed=Array(4).fill(false),gUsed=Array(4).fill(false);
+  for(let i=0;i<4;i++){if(g[i]===s[i]){black++;sUsed[i]=true;gUsed[i]=true}}
+  for(let i=0;i<4;i++){
+    if(gUsed[i])continue;
+    for(let j=0;j<4;j++){
+      if(sUsed[j])continue;
+      if(g[i]===s[j]){white++;sUsed[j]=true;break}
+    }
+  }
+  // Add to history
+  const row=document.createElement('div');row.className='guess-row';
+  currentGuess.forEach(c=>{const d=document.createElement('div');d.className='guess-slot';d.style.background=c;row.appendChild(d)});
+  const pa=document.createElement('div');pa.className='peg-area';
+  for(let i=0;i<black;i++){const p=document.createElement('div');p.className='peg black';pa.appendChild(p)}
+  for(let i=0;i<white;i++){const p=document.createElement('div');p.className='peg white';pa.appendChild(p)}
+  for(let i=0;i<4-black-white;i++){const p=document.createElement('div');p.className='peg';pa.appendChild(p)}
+  row.appendChild(pa);
+  document.getElementById('guesses').prepend(row);
+  if(black===4){highScore++;saveScore();showEnd('You Win!','Cracked in '+attempts+' attempts!')}
+  else if(attempts>=10){showEnd('Game Over','Code: '+secret.map(c=>'●').join(' '));showSecret()}
+  else{currentGuess=[null,null,null,null];renderCurrent()}
+}
+function showSecret(){
+  const row=document.createElement('div');row.className='guess-row';row.style.background='#334155';
+  secret.forEach(c=>{const d=document.createElement('div');d.className='guess-slot';d.style.background=c;row.appendChild(d)});
+  const lbl=document.createElement('span');lbl.textContent='Answer';lbl.style.cssText='margin-left:auto;font-size:0.8rem;color:#facc15';
+  row.appendChild(lbl);
+  document.getElementById('guesses').prepend(row);
+}
+function showEnd(t,m){
+  gameActive=false;
+  document.getElementById('end-title').textContent=t;
+  document.getElementById('end-msg').textContent=m;
+  document.getElementById('hs').textContent='Wins: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'code-breaker',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='code-breaker'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

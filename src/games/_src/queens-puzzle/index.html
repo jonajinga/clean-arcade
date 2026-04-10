@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Queens Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Queens Puzzle</h1>
+<div id="hud"><span id="hud-queens">Queens: 0/8</span><span id="hud-conflicts">Conflicts: 0</span><span id="hud-best">Best Time: --</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>8 Queens Puzzle</h2>
+<p>Place 8 queens on the board</p>
+<p>so none can attack each other!</p>
+<p>Click to place/remove queens.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Solved!</h2>
+<p id="final-time"></p>
+<p id="final-best"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="clearBoard()">Clear</button>
+<button class="ctrl-btn" onclick="showHint()">Hint</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const SIZE=8,CELL=56,PAD=16;
+let board,running=false,startTime,bestTime=Infinity;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='queens-puzzle'){bestTime=e.data.state?.highScore||Infinity;document.getElementById('hud-best').textContent='Best: '+(bestTime===Infinity?'--':bestTime+'s')}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(false));
+  running=true;startTime=Date.now();
+  draw();
+}
+
+function clearBoard(){if(!running)return;board=Array.from({length:SIZE},()=>Array(SIZE).fill(false));draw()}
+
+function getConflicts(){
+  const queens=[];
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)if(board[r][c])queens.push({r,c});
+  let conflicts=0;
+  const conflictCells=new Set();
+  for(let i=0;i<queens.length;i++){
+    for(let j=i+1;j<queens.length;j++){
+      const a=queens[i],b=queens[j];
+      if(a.r===b.r||a.c===b.c||Math.abs(a.r-b.r)===Math.abs(a.c-b.c)){
+        conflicts++;conflictCells.add(a.r+','+a.c);conflictCells.add(b.r+','+b.c);
+      }
+    }
+  }
+  return{conflicts,conflictCells,count:queens.length};
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,480);
+  const {conflicts,conflictCells,count}=getConflicts();
+  for(let r=0;r<SIZE;r++){
+    for(let c=0;c<SIZE;c++){
+      const x=PAD+c*CELL,y=PAD+r*CELL;
+      ctx.fillStyle=(r+c)%2===0?'#1e293b':'#334155';
+      if(conflictCells.has(r+','+c))ctx.fillStyle='rgba(239,68,68,0.3)';
+      ctx.fillRect(x,y,CELL,CELL);
+      if(board[r][c]){
+        ctx.fillStyle=conflictCells.has(r+','+c)?'#ef4444':'#facc15';
+        ctx.font='bold 32px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText('♛',x+CELL/2,y+CELL/2);
+      }
+    }
+  }
+  // labels
+  ctx.fillStyle='#94a3b8';ctx.font='11px system-ui';ctx.textAlign='center';
+  for(let i=0;i<SIZE;i++){
+    ctx.fillText(String.fromCharCode(65+i),PAD+i*CELL+CELL/2,PAD+SIZE*CELL+14);
+    ctx.fillText(''+(i+1),PAD-10,PAD+i*CELL+CELL/2+4);
+  }
+  document.getElementById('hud-queens').textContent='Queens: '+count+'/8';
+  document.getElementById('hud-conflicts').textContent='Conflicts: '+conflicts;
+  if(count===8&&conflicts===0&&running){
+    running=false;
+    const time=Math.floor((Date.now()-startTime)/1000);
+    if(time<bestTime){bestTime=time;parent.postMessage({type:'ca-save',slug:'queens-puzzle',state:{highScore:bestTime}},'*')}
+    document.getElementById('hud-best').textContent='Best: '+bestTime+'s';
+    document.getElementById('final-time').textContent='Time: '+time+'s';
+    document.getElementById('final-best').textContent='Best: '+bestTime+'s';
+    document.getElementById('end-overlay').classList.remove('hidden');
+  }
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(480/rect.width)-PAD;
+  const my=(e.clientY-rect.top)*(480/rect.height)-PAD;
+  const c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
+  if(r<0||r>=SIZE||c<0||c>=SIZE)return;
+  board[r][c]=!board[r][c];
+  draw();
+});
+
+function showHint(){
+  if(!running)return;
+  // show one valid position
+  const solutions=[[0,4,7,5,2,6,1,3]];
+  const sol=solutions[0];
+  // find first empty correct position
+  for(let r=0;r<SIZE;r++){
+    if(!board[r][sol[r]]){
+      board[r][sol[r]]=true;draw();return;
+    }
+  }
+}
+</script>
+</body>
+</html>

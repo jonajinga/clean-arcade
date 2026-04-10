@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rally Drive</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Rally Drive</h1>
+<div id="hud"><span id="hud-time">Time: 0.0s</span><span id="hud-speed">Speed: 0</span><span id="hud-hi">Best: --</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Rally Drive</h2>
+<p>Top-down rally time trial!</p>
+<p>Stay on the road. Brake for corners.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2 id="end-title">Race Over!</h2>
+<p id="final-time"></p>
+<p id="final-best"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="keys.up=true" ontouchstart="keys.up=true" ontouchend="keys.up=false">▲ Gas</button>
+<button class="ctrl-btn" onclick="keys.left=true;setTimeout(()=>keys.left=false,150)" ontouchstart="keys.left=true" ontouchend="keys.left=false">◀ Left</button>
+<button class="ctrl-btn" onclick="keys.right=true;setTimeout(()=>keys.right=false,150)" ontouchstart="keys.right=true" ontouchend="keys.right=false">Right ▶</button>
+<button class="ctrl-btn" onclick="keys.down=true;setTimeout(()=>keys.down=false,150)" ontouchstart="keys.down=true" ontouchend="keys.down=false">▼ Brake</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let car,track,checkpoints,cpIdx,laps,raceTime,bestTime=Infinity,running=false,paused=false,lastTime;
+const keys={up:false,down:false,left:false,right:false};
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='rally-drive'){bestTime=e.data.state?.highScore||Infinity;document.getElementById('hud-hi').textContent='Best: '+(bestTime===Infinity?'--':bestTime+'s')}});
+
+// Generate track as a series of points forming a loop
+function generateTrack(){
+  const pts=[];const cx=240,cy=240,r=160;
+  for(let i=0;i<24;i++){
+    const a=(i/24)*Math.PI*2;
+    const variation=20+Math.random()*40;
+    pts.push({x:cx+Math.cos(a)*(r+variation),y:cy+Math.sin(a)*(r+variation)});
+  }
+  return pts;
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  track=generateTrack();
+  checkpoints=[];
+  for(let i=0;i<track.length;i+=4)checkpoints.push(i);
+  cpIdx=0;laps=0;raceTime=0;
+  car={x:track[0].x,y:track[0].y-30,angle:-Math.PI/2,speed:0};
+  running=true;paused=false;lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}}
+
+function loop(ts){
+  if(!running||paused)return;
+  const dt=(ts-lastTime)/1000;lastTime=ts;
+  raceTime+=dt;
+  // input
+  if(keys.up)car.speed=Math.min(car.speed+150*dt,250);
+  else if(keys.down)car.speed=Math.max(car.speed-200*dt,0);
+  else car.speed*=0.98;
+  if(keys.left)car.angle-=2.5*dt*(car.speed/250);
+  if(keys.right)car.angle+=2.5*dt*(car.speed/250);
+  car.x+=Math.cos(car.angle)*car.speed*dt;
+  car.y+=Math.sin(car.angle)*car.speed*dt;
+  // check on road
+  let onRoad=false;
+  for(let i=0;i<track.length;i++){
+    const p=track[i],q=track[(i+1)%track.length];
+    const dx=q.x-p.x,dy=q.y-p.y;
+    const t=Math.max(0,Math.min(1,((car.x-p.x)*dx+(car.y-p.y)*dy)/(dx*dx+dy*dy)));
+    const cx=p.x+t*dx,cy=p.y+t*dy;
+    const dist=Math.sqrt((car.x-cx)**2+(car.y-cy)**2);
+    if(dist<40){onRoad=true;break}
+  }
+  if(!onRoad)car.speed*=0.92;
+  // checkpoints
+  if(checkpoints.length>0){
+    const cp=track[checkpoints[cpIdx]];
+    if(Math.sqrt((car.x-cp.x)**2+(car.y-cp.y)**2)<50){
+      cpIdx++;
+      if(cpIdx>=checkpoints.length){cpIdx=0;laps++;if(laps>=2){endGame();return}}
+    }
+  }
+  draw();
+  document.getElementById('hud-time').textContent='Time: '+raceTime.toFixed(1)+'s';
+  document.getElementById('hud-speed').textContent='Speed: '+Math.floor(car.speed);
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,480);
+  // grass
+  ctx.fillStyle='#14532d';ctx.fillRect(0,0,480,480);
+  // road
+  ctx.strokeStyle='#475569';ctx.lineWidth=50;ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(track[0].x,track[0].y);
+  for(let i=1;i<=track.length;i++)ctx.lineTo(track[i%track.length].x,track[i%track.length].y);
+  ctx.stroke();
+  // center line
+  ctx.strokeStyle='#facc15';ctx.lineWidth=1;ctx.setLineDash([10,10]);
+  ctx.beginPath();ctx.moveTo(track[0].x,track[0].y);
+  for(let i=1;i<=track.length;i++)ctx.lineTo(track[i%track.length].x,track[i%track.length].y);
+  ctx.stroke();ctx.setLineDash([]);
+  // checkpoint marker
+  if(checkpoints.length>0){
+    const cp=track[checkpoints[cpIdx]];
+    ctx.fillStyle='rgba(34,197,94,0.5)';ctx.beginPath();ctx.arc(cp.x,cp.y,15,0,Math.PI*2);ctx.fill();
+  }
+  // car
+  ctx.save();ctx.translate(car.x,car.y);ctx.rotate(car.angle);
+  ctx.fillStyle='#3b82f6';ctx.fillRect(-12,-7,24,14);
+  ctx.fillStyle='#ef4444';ctx.fillRect(8,-5,4,10);
+  ctx.fillStyle='#facc15';ctx.fillRect(-12,-5,3,4);ctx.fillRect(-12,1,3,4);
+  ctx.restore();
+  // lap counter
+  ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';ctx.textAlign='left';
+  ctx.fillText('Lap '+(laps+1)+'/2  CP '+(cpIdx+1)+'/'+checkpoints.length,10,20);
+}
+
+function endGame(){
+  running=false;
+  const time=Math.round(raceTime*10)/10;
+  if(time<bestTime){bestTime=time;parent.postMessage({type:'ca-save',slug:'rally-drive',state:{highScore:bestTime}},'*')}
+  document.getElementById('hud-hi').textContent='Best: '+bestTime+'s';
+  document.getElementById('final-time').textContent='Time: '+time+'s';
+  document.getElementById('final-best').textContent='Best: '+bestTime+'s';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=true;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=false;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=false;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=false;
+});
+</script>
+</body>
+</html>

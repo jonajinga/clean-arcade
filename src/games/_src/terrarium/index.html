@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terrarium</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.3rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+.ctrl-btn.active{background:#6366f1}
+</style>
+</head>
+<body>
+<h1>Terrarium</h1>
+<div id="hud"><span id="hud-health">Health: 100%</span><span id="hud-plants">Plants: 0</span><span id="hud-day">Day: 1</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Terrarium</h2>
+<p>Build your own terrarium!</p>
+<p>Add soil, plants, rocks, and water.</p>
+<p>Watch your ecosystem grow!</p>
+<button onclick="startGame()">Play</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn active" id="tool-soil" onclick="setTool('soil')">🟫 Soil</button>
+<button class="ctrl-btn" id="tool-plant" onclick="setTool('plant')">🌱 Plant</button>
+<button class="ctrl-btn" id="tool-rock" onclick="setTool('rock')">🪨 Rock</button>
+<button class="ctrl-btn" id="tool-water" onclick="setTool('water')">💧 Water</button>
+<button class="ctrl-btn" id="tool-moss" onclick="setTool('moss')">🌿 Moss</button>
+<button class="ctrl-btn" id="tool-remove" onclick="setTool('remove')">❌ Remove</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let items=[],tool='soil',day=1,health=100,running=false,dayTimer=0,lastTime;
+const GROUND_Y=320;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='terrarium'&&e.data.state){items=e.data.state.items||[];day=e.data.state.day||1;health=e.data.state.health||100;draw()}});
+
+function setTool(t){
+  tool=t;
+  document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tool-'+t)?.classList.add('active');
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  running=true;lastTime=performance.now();
+  // add initial soil layer
+  for(let x=20;x<460;x+=15){items.push({type:'soil',x,y:GROUND_Y+10+Math.random()*30,w:18,h:12,growth:0})}
+  requestAnimationFrame(loop);
+}
+
+function loop(ts){
+  if(!running)return;
+  const dt=ts-lastTime;lastTime=ts;
+  dayTimer+=dt;
+  if(dayTimer>10000){
+    dayTimer=0;day++;
+    // grow plants
+    items.forEach(item=>{
+      if(item.type==='plant'){item.growth=Math.min(item.growth+0.2,1);item.h=15+item.growth*40}
+      if(item.type==='moss')item.growth=Math.min(item.growth+0.1,1);
+    });
+    // health based on balance
+    const plantCount=items.filter(i=>i.type==='plant').length;
+    const waterCount=items.filter(i=>i.type==='water').length;
+    const soilCount=items.filter(i=>i.type==='soil').length;
+    if(plantCount>0&&waterCount>0&&soilCount>0)health=Math.min(100,health+5);
+    else if(plantCount>0&&waterCount===0)health=Math.max(0,health-10);
+    save();
+  }
+  draw();
+  document.getElementById('hud-health').textContent='Health: '+Math.floor(health)+'%';
+  document.getElementById('hud-plants').textContent='Plants: '+items.filter(i=>i.type==='plant').length;
+  document.getElementById('hud-day').textContent='Day: '+day;
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  // glass container
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,400);
+  // background - sky through glass
+  const grad=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  grad.addColorStop(0,'#1e3a5f');grad.addColorStop(1,'#0f2847');
+  ctx.fillStyle=grad;ctx.fillRect(20,20,440,GROUND_Y);
+  // glass edges
+  ctx.strokeStyle='rgba(99,102,241,0.4)';ctx.lineWidth=3;
+  ctx.strokeRect(20,20,440,360);
+  // glass shine
+  ctx.fillStyle='rgba(255,255,255,0.05)';ctx.fillRect(25,25,80,350);
+  // ground base
+  ctx.fillStyle='#3d2817';ctx.fillRect(20,GROUND_Y,440,80);
+  // items
+  items.forEach(item=>{
+    switch(item.type){
+      case 'soil':
+        ctx.fillStyle='#5c3a1e';ctx.fillRect(item.x,item.y,item.w,item.h);
+        ctx.fillStyle='#4a2e15';ctx.fillRect(item.x+2,item.y+2,4,3);
+        break;
+      case 'plant':
+        // stem
+        ctx.strokeStyle='#15803d';ctx.lineWidth=2+item.growth*2;
+        ctx.beginPath();ctx.moveTo(item.x,item.y);ctx.lineTo(item.x,item.y-item.h);ctx.stroke();
+        // leaves
+        const leaves=Math.floor(1+item.growth*4);
+        for(let i=0;i<leaves;i++){
+          const ly=item.y-item.h*(0.3+i*0.15);
+          const dir=i%2===0?1:-1;
+          ctx.fillStyle=health>50?'#22c55e':'#a3a323';
+          ctx.beginPath();ctx.ellipse(item.x+dir*12*item.growth,ly,8*item.growth+4,4,dir*0.5,0,Math.PI*2);ctx.fill();
+        }
+        // flower at top if fully grown
+        if(item.growth>=0.9){
+          ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(item.x,item.y-item.h-5,5,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(item.x,item.y-item.h-5,2,0,Math.PI*2);ctx.fill();
+        }
+        break;
+      case 'rock':
+        ctx.fillStyle='#64748b';ctx.beginPath();
+        ctx.moveTo(item.x-item.w/2,item.y);ctx.lineTo(item.x-item.w/3,item.y-item.h);
+        ctx.lineTo(item.x+item.w/3,item.y-item.h*0.8);ctx.lineTo(item.x+item.w/2,item.y);ctx.fill();
+        ctx.fillStyle='#94a3b8';ctx.beginPath();ctx.arc(item.x-3,item.y-item.h*0.5,3,0,Math.PI*2);ctx.fill();
+        break;
+      case 'water':
+        ctx.fillStyle='rgba(59,130,246,0.4)';ctx.beginPath();ctx.ellipse(item.x,item.y,item.w,4,0,0,Math.PI*2);ctx.fill();
+        // ripple animation
+        const ripple=Math.sin(Date.now()/500+item.x)*2;
+        ctx.strokeStyle='rgba(96,165,250,0.3)';ctx.lineWidth=1;
+        ctx.beginPath();ctx.ellipse(item.x,item.y+ripple,item.w+3,5,0,0,Math.PI*2);ctx.stroke();
+        break;
+      case 'moss':
+        ctx.fillStyle=`rgba(34,197,94,${0.4+item.growth*0.4})`;
+        for(let i=0;i<3+item.growth*5;i++){
+          ctx.beginPath();ctx.arc(item.x+Math.sin(i*2)*8,item.y-i*2,3+item.growth*2,0,Math.PI*2);ctx.fill();
+        }
+        break;
+    }
+  });
+  // condensation effect
+  if(items.some(i=>i.type==='water')){
+    ctx.fillStyle='rgba(147,197,253,0.08)';
+    for(let i=0;i<10;i++)ctx.fillRect(30+Math.sin(Date.now()/2000+i)*20+i*40,30+i*20,3,5);
+  }
+}
+
+function getCanvasPos(e){
+  const r=canvas.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return{x:(t.clientX-r.left)*(480/r.width),y:(t.clientY-r.top)*(400/r.height)};
+}
+
+function addItem(pos){
+  if(pos.x<25||pos.x>455||pos.y<25)return;
+  if(tool==='remove'){
+    // remove nearest item
+    let nearest=-1,minDist=30;
+    items.forEach((item,idx)=>{
+      const dx=item.x-pos.x,dy=item.y-pos.y;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<minDist){minDist=d;nearest=idx}
+    });
+    if(nearest>=0)items.splice(nearest,1);
+    return;
+  }
+  const y=Math.max(pos.y,GROUND_Y-5);
+  switch(tool){
+    case 'soil':items.push({type:'soil',x:pos.x-8,y,w:16,h:10,growth:0});break;
+    case 'plant':items.push({type:'plant',x:pos.x,y:Math.min(y,GROUND_Y+5),h:15,growth:0});break;
+    case 'rock':items.push({type:'rock',x:pos.x,y:Math.min(y,GROUND_Y+10),w:15+Math.random()*15,h:10+Math.random()*15,growth:0});break;
+    case 'water':items.push({type:'water',x:pos.x,y:Math.min(y,GROUND_Y+5),w:12+Math.random()*8,growth:0});break;
+    case 'moss':items.push({type:'moss',x:pos.x,y:Math.min(y,GROUND_Y),growth:0});break;
+  }
+}
+
+function save(){parent.postMessage({type:'ca-save',slug:'terrarium',state:{items,day,health,highScore:day}},'*')}
+
+canvas.addEventListener('click',e=>{if(running)addItem(getCanvasPos(e))});
+canvas.addEventListener('touchstart',e=>{if(running){e.preventDefault();addItem(getCanvasPos(e))}},{passive:false});
+</script>
+</body>
+</html>

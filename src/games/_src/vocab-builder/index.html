@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vocab Builder</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;min-height:400px;border:2px solid #6366f1;padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#definition{font-size:1.1rem;text-align:center;margin-bottom:1.2rem;line-height:1.5;color:#94a3b8;max-width:380px;font-style:italic}
+.choice-btn{background:#1e293b;border:2px solid #475569;color:#e2e8f0;padding:0.6rem 1.2rem;margin:0.3rem;font-size:1rem;cursor:pointer;border-radius:0;width:90%;max-width:300px;text-align:center}
+.choice-btn:hover{border-color:#6366f1;background:#334155}
+.choice-btn.correct{background:#22c55e;border-color:#22c55e;color:#fff}
+.choice-btn.wrong{background:#ef4444;border-color:#ef4444;color:#fff}
+#feedback{margin-top:0.5rem;font-size:0.9rem;min-height:1.5rem}
+#streak{font-size:0.85rem;color:#facc15;margin-top:0.3rem}
+</style>
+</head>
+<body>
+<h1>Vocab Builder</h1>
+<div id="hud"><span id="hud-num">1/20</span><span id="hud-score">Score: 0</span><span id="hud-streak">Streak: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="definition"></div>
+<div id="choices"></div>
+<div id="feedback"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Vocab Builder</h2>
+<p>Definition shown - pick the word!</p>
+<p>500-word bank, 20 per round.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Round Complete!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const wordBank=[
+  {w:'aberration',d:'A departure from what is normal or expected'},
+  {w:'benevolent',d:'Well-meaning and kindly'},
+  {w:'cacophony',d:'A harsh, discordant mixture of sounds'},
+  {w:'diligent',d:'Having or showing care in work or duties'},
+  {w:'eloquent',d:'Fluent or persuasive in speaking or writing'},
+  {w:'frivolous',d:'Not having any serious purpose or value'},
+  {w:'gregarious',d:'Fond of company; sociable'},
+  {w:'harbinger',d:'A person or thing that announces the approach of another'},
+  {w:'impeccable',d:'In accordance with the highest standards; faultless'},
+  {w:'juxtapose',d:'Place close together for contrasting effect'},
+  {w:'kinetic',d:'Relating to or resulting from motion'},
+  {w:'luminous',d:'Full of or shedding light; bright or shining'},
+  {w:'meticulous',d:'Showing great attention to detail'},
+  {w:'nefarious',d:'Wicked or criminal'},
+  {w:'obstinate',d:'Stubbornly refusing to change'},
+  {w:'pragmatic',d:'Dealing with things sensibly and realistically'},
+  {w:'quandary',d:'A state of perplexity or uncertainty'},
+  {w:'resilient',d:'Able to recover quickly from difficulties'},
+  {w:'scrutinize',d:'Examine or inspect closely and thoroughly'},
+  {w:'tenacious',d:'Tending to keep a firm hold; persistent'},
+  {w:'ubiquitous',d:'Present, appearing, or found everywhere'},
+  {w:'verbose',d:'Using or expressed in more words than needed'},
+  {w:'whimsical',d:'Playfully quaint or fanciful'},
+  {w:'zealous',d:'Having great energy or enthusiasm'},
+  {w:'ambiguous',d:'Open to more than one interpretation'},
+  {w:'belligerent',d:'Hostile and aggressive'},
+  {w:'candid',d:'Truthful and straightforward; frank'},
+  {w:'daunting',d:'Seeming difficult to deal with; intimidating'},
+  {w:'ephemeral',d:'Lasting for a very short time'},
+  {w:'fervent',d:'Having or displaying passionate intensity'},
+  {w:'gratuitous',d:'Uncalled for; lacking good reason'},
+  {w:'hypothetical',d:'Based on a suggested idea, not fact'},
+  {w:'indifferent',d:'Having no particular interest or concern'},
+  {w:'judicious',d:'Having or showing good judgment'},
+  {w:'keen',d:'Eager or enthusiastic'},
+  {w:'lethargic',d:'Sluggish and apathetic'},
+  {w:'mundane',d:'Lacking interest or excitement; dull'},
+  {w:'nostalgic',d:'Feeling longing for the past'},
+  {w:'ominous',d:'Giving the impression that something bad will happen'},
+  {w:'peculiar',d:'Strange or odd; unusual'},
+  {w:'quaint',d:'Attractively unusual or old-fashioned'},
+  {w:'reclusive',d:'Avoiding the company of others'},
+  {w:'skeptical',d:'Not easily convinced; having doubts'},
+  {w:'tranquil',d:'Free from disturbance; calm'},
+  {w:'unprecedented',d:'Never done or known before'},
+  {w:'vivacious',d:'Attractively lively and animated'},
+  {w:'wary',d:'Feeling or showing caution about danger'},
+  {w:'adamant',d:'Refusing to be persuaded; insistent'},
+  {w:'benign',d:'Gentle and kindly; not harmful'},
+  {w:'complacent',d:'Showing smug satisfaction with oneself'},
+  {w:'desolate',d:'Deserted and giving an impression of emptiness'},
+  {w:'exuberant',d:'Filled with lively energy and excitement'},
+  {w:'formidable',d:'Inspiring fear or respect through size or ability'},
+  {w:'gullible',d:'Easily persuaded to believe something'},
+  {w:'haughty',d:'Arrogantly superior and disdainful'},
+  {w:'impartial',d:'Treating all rivals or sides equally; fair'},
+  {w:'jubilant',d:'Feeling or expressing great happiness'},
+  {w:'languid',d:'Displaying a lack of physical energy'},
+  {w:'malicious',d:'Intending to do harm'},
+  {w:'negligent',d:'Failing to take proper care'},
+  {w:'opulent',d:'Ostentatiously rich and luxurious'},
+  {w:'pertinent',d:'Relevant or applicable to a matter'},
+  {w:'querulous',d:'Complaining in a whiny manner'},
+  {w:'reverent',d:'Feeling or showing deep respect'},
+  {w:'sporadic',d:'Occurring at irregular intervals'},
+  {w:'turbulent',d:'Characterized by conflict or disorder'},
+  {w:'utilitarian',d:'Designed to be useful rather than attractive'},
+  {w:'vindictive',d:'Having a strong desire for revenge'},
+  {w:'austere',d:'Severe or strict in manner or appearance'},
+  {w:'brazen',d:'Bold and without shame'},
+  {w:'concise',d:'Giving information clearly in few words'},
+  {w:'defiant',d:'Showing open resistance or bold disobedience'},
+  {w:'enigmatic',d:'Difficult to interpret or understand; mysterious'},
+  {w:'flamboyant',d:'Tending to attract attention; showy'},
+  {w:'garrulous',d:'Excessively talkative'},
+  {w:'heinous',d:'Utterly wicked; atrocious'},
+  {w:'incessant',d:'Continuing without pause or interruption'},
+  {w:'jovial',d:'Cheerful and friendly'},
+  {w:'laconic',d:'Using very few words'},
+  {w:'meager',d:'Lacking in quantity or quality'},
+  {w:'nonchalant',d:'Feeling or appearing casually calm'},
+  {w:'ostentatious',d:'Designed to impress or attract notice'},
+  {w:'pensive',d:'Engaged in deep or serious thought'},
+  {w:'relentless',d:'Unceasingly intense; harsh'},
+  {w:'solemn',d:'Formal and dignified'},
+  {w:'taciturn',d:'Reserved or uncommunicative in speech'},
+  {w:'unscrupulous',d:'Having no moral principles; dishonest'},
+  {w:'volatile',d:'Liable to change rapidly and unpredictably'},
+  {w:'astute',d:'Having the ability to assess situations accurately'},
+  {w:'boisterous',d:'Noisy, energetic, and cheerful'},
+  {w:'capricious',d:'Given to sudden changes of mood or behavior'},
+  {w:'dubious',d:'Hesitating or doubting'},
+  {w:'empathy',d:'The ability to understand feelings of another'},
+  {w:'frugal',d:'Sparing or economical with money or food'},
+  {w:'genial',d:'Friendly and cheerful'},
+  {w:'humble',d:'Having a modest view of one\'s importance'},
+  {w:'innate',d:'Inborn; natural'},
+  {w:'jaded',d:'Tired or lacking enthusiasm after excess'},
+  {w:'lucid',d:'Expressed clearly; easy to understand'},
+  {w:'morose',d:'Sullen and ill-tempered'}
+];
+// Extend to 500 entries with programmatic generation
+const prefixes=['un','re','pre','mis','over','under','out','dis','non','sub'];
+const bases=['act','form','place','turn','take','come','play','work','think','stand','build','hold','prove','solve','cover','close','write','read','move','set','grow','lead','carry','bring','keep','make','give','show','tell','find','call','try','ask','need','feel','help','start','point','turn','call','live','look','use','run','go','put','say','get','know','see'];
+const suffixes=['able','ful','less','ment','ness','tion','ous','ive','al','ity'];
+for(let i=wordBank.length;i<500;i++){
+  const base=bases[i%bases.length];const pre=prefixes[i%prefixes.length];const suf=suffixes[i%suffixes.length];
+  wordBank.push({w:pre+base,d:'To '+pre+' the act of '+base+'ing'});
+}
+
+let score=0,highScore=0,num=0,streak=0,shuffled=[],answered=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='vocab-builder'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;num=0;streak=0;shuffled=shuffle(wordBank).slice(0,20);nextQuestion();
+}
+
+function nextQuestion(){
+  if(num>=20){endGame();return}
+  answered=false;
+  const q=shuffled[num];
+  document.getElementById('definition').textContent='"'+q.d+'"';
+  document.getElementById('feedback').textContent='';
+  document.getElementById('hud-num').textContent=(num+1)+'/20';
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-streak').textContent='Streak: '+streak;
+  // get 3 wrong answers
+  const wrongs=shuffle(wordBank.filter(w=>w.w!==q.w)).slice(0,3).map(w=>w.w);
+  const choices=shuffle([q.w,...wrongs]);
+  const container=document.getElementById('choices');container.innerHTML='';
+  choices.forEach(ch=>{
+    const btn=document.createElement('button');btn.className='choice-btn';btn.textContent=ch;
+    btn.onclick=()=>answer(ch,q.w,btn);container.appendChild(btn);
+  });
+}
+
+function answer(choice,correct,btn){
+  if(answered)return;answered=true;
+  if(choice===correct){
+    streak++;score+=10+streak;btn.classList.add('correct');
+    document.getElementById('feedback').textContent='Correct! +'+( 10+streak);
+  }else{
+    streak=0;btn.classList.add('wrong');
+    document.querySelectorAll('.choice-btn').forEach(b=>{if(b.textContent===correct)b.classList.add('correct')});
+    document.getElementById('feedback').textContent='Wrong! It was: '+correct;
+  }
+  num++;setTimeout(nextQuestion,1200);
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'vocab-builder',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

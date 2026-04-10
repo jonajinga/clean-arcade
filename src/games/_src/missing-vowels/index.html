@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Missing Vowels</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;min-height:360px;border:2px solid #6366f1;padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+.hidden{display:none!important}
+#puzzle{font-size:2rem;letter-spacing:0.3rem;color:#6366f1;margin-bottom:1rem;font-weight:bold}
+#hint{font-size:0.85rem;color:#94a3b8;margin-bottom:1rem}
+#input-box{background:#1e293b;border:2px solid #6366f1;color:#e2e8f0;font-size:1.3rem;padding:0.5rem 1rem;text-align:center;width:80%;max-width:300px;border-radius:0;outline:none}
+#input-box:focus{border-color:#facc15}
+#feedback{margin-top:0.5rem;font-size:1rem;min-height:1.5rem}
+.correct{color:#22c55e}
+.wrong{color:#ef4444}
+</style>
+</head>
+<body>
+<h1>Missing Vowels</h1>
+<div id="hud"><span id="hud-round">1/30</span><span id="hud-score">Score: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<div id="game-area">
+<div id="puzzle"></div>
+<div id="hint"></div>
+<input id="input-box" type="text" autocomplete="off" autocapitalize="off" placeholder="Type the word...">
+<div id="feedback"></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Missing Vowels</h2>
+<p>Words with vowels removed.</p>
+<p>Type the complete word!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Game Over!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<script>
+const words=[
+  {w:'elephant',h:'Large animal with trunk'},{w:'guitar',h:'Musical string instrument'},{w:'mountain',h:'Very tall landform'},
+  {w:'butterfly',h:'Colorful flying insect'},{w:'computer',h:'Electronic device'},{w:'universe',h:'Everything that exists'},
+  {w:'diamond',h:'Precious gemstone'},{w:'volcano',h:'Erupting mountain'},{w:'bicycle',h:'Two-wheeled vehicle'},
+  {w:'penguin',h:'Flightless bird'},{w:'calendar',h:'Shows dates'},{w:'dolphin',h:'Smart marine mammal'},
+  {w:'rainbow',h:'Colorful arc in sky'},{w:'library',h:'Place for books'},{w:'kitchen',h:'Room for cooking'},
+  {w:'treasure',h:'Hidden valuable items'},{w:'skeleton',h:'Body bones'},{w:'umbrella',h:'Rain protection'},
+  {w:'dinosaur',h:'Extinct reptile'},{w:'sandwich',h:'Food between bread'},{w:'champion',h:'Winner'},
+  {w:'hospital',h:'Medical facility'},{w:'chocolate',h:'Sweet treat'},{w:'carnival',h:'Festival with rides'},
+  {w:'football',h:'Team sport with ball'},{w:'alphabet',h:'A to Z'},{w:'magazine',h:'Periodic publication'},
+  {w:'elevator',h:'Goes up and down'},{w:'notebook',h:'For writing'},{w:'paradise',h:'Perfect place'},
+  {w:'blanket',h:'Bed covering'},{w:'monster',h:'Scary creature'},{w:'captain',h:'Ship leader'},
+  {w:'feather',h:'Bird covering'},{w:'journey',h:'Long trip'},{w:'musical',h:'Singing show'},
+  {w:'problem',h:'Needs solving'},{w:'silence',h:'No sound'},{w:'village',h:'Small town'},
+  {w:'weather',h:'Rain or shine'},{w:'picture',h:'Image or photo'},{w:'soldier',h:'Military person'},
+  {w:'curtain',h:'Window covering'},{w:'freedom',h:'Liberty'},{w:'harvest',h:'Crop gathering'},
+  {w:'lantern',h:'Portable light'},{w:'mystery',h:'Unsolved puzzle'},{w:'passage',h:'Narrow way through'},
+  {w:'quarter',h:'One fourth'},{w:'thunder',h:'Storm sound'}
+];
+
+let score=0,highScore=0,round=0,currentWord='',shuffled=[],running=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='missing-vowels'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function removeVowels(w){return w.replace(/[aeiou]/gi,ch=>'_')}
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  score=0;round=0;running=true;
+  shuffled=shuffle(words).slice(0,30);
+  nextRound();
+}
+
+function nextRound(){
+  if(round>=30){endGame();return}
+  const item=shuffled[round];currentWord=item.w;
+  document.getElementById('puzzle').textContent=removeVowels(currentWord);
+  document.getElementById('hint').textContent='Hint: '+item.h;
+  document.getElementById('input-box').value='';
+  document.getElementById('feedback').textContent='';
+  document.getElementById('hud-round').textContent=(round+1)+'/30';
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('input-box').focus();
+}
+
+document.getElementById('input-box').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&running){
+    const guess=e.target.value.trim().toLowerCase();
+    const fb=document.getElementById('feedback');
+    if(guess===currentWord){
+      score+=10;fb.textContent='Correct!';fb.className='correct';
+    }else{
+      fb.textContent='Wrong! It was: '+currentWord;fb.className='wrong';
+    }
+    round++;
+    setTimeout(nextRound,1200);
+  }
+});
+
+function endGame(){
+  running=false;
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'missing-vowels',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score+'/300';
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

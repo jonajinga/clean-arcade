@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Long Jump</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:350px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem;justify-content:center}
+#action-btn{background:#ef4444;padding:0.75rem 2.5rem;font-size:1rem;font-weight:bold}
+#info{text-align:center;font-size:0.85rem;color:#94a3b8;margin:0.25rem}
+</style>
+</head>
+<body>
+<h1>Long Jump</h1>
+<div id="game-area">
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Long Jump</h2>
+    <p>Tap to build speed, tap to plant, tap to jump!</p>
+    <p style="color:#94a3b8">3 attempts. Best distance wins.</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2>Results</h2>
+    <p id="final-score"></p>
+    <p id="hs" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <button id="action-btn" onclick="action()" ontouchstart="action();event.preventDefault()">TAP!</button>
+</div>
+<div id="info">Tap rapidly to run, then tap to plant and jump!</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,phase,runSpeed,runnerX,runnerY,jumpVX,jumpVY,attempt,distances,highScore=0,animId,bestDist,angle,power;
+function resize(){const r=canvas.parentElement.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;W=canvas.width;H=canvas.height}
+resize();window.addEventListener('resize',resize);
+
+const GROUND_Y_RATIO=0.75;
+function groundY(){return H*GROUND_Y_RATIO}
+
+function startGame(){
+  attempt=0;distances=[];bestDist=0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  startAttempt();
+}
+function startAttempt(){
+  phase='run';runSpeed=0;runnerX=30;runnerY=groundY();
+  angle=45;power=0;
+  document.getElementById('action-btn').textContent='TAP to Run!';
+  document.getElementById('info').textContent=`Attempt ${attempt+1}/3 — Tap rapidly to build speed!`;
+  loop();
+}
+function action(){
+  if(phase==='run'){
+    runSpeed=Math.min(100,runSpeed+4);
+  }else if(phase==='plant'){
+    // Set jump angle (oscillating)
+    phase='jump';
+    const rad=(angle*Math.PI/180);
+    const spd=runSpeed*0.08;
+    jumpVX=Math.cos(rad)*spd;
+    jumpVY=-Math.sin(rad)*spd;
+    document.getElementById('action-btn').textContent='Flying...';
+    document.getElementById('info').textContent='Angle: '+Math.round(angle)+'°';
+  }
+}
+function loop(){
+  update();draw();
+  if(phase!=='done')animId=requestAnimationFrame(loop);
+}
+function update(){
+  if(phase==='run'){
+    runSpeed*=0.99;// decay
+    runnerX+=runSpeed*0.03;
+    // Auto-switch to plant phase near the board
+    if(runnerX>=W*0.35){
+      phase='plant';
+      document.getElementById('action-btn').textContent='TAP to Jump!';
+      document.getElementById('info').textContent='Tap at the right angle!';
+    }
+  }else if(phase==='plant'){
+    // Angle oscillates
+    angle=45+30*Math.sin(Date.now()*0.005);
+  }else if(phase==='jump'){
+    jumpVY+=0.15;// gravity
+    runnerX+=jumpVX;
+    runnerY+=jumpVY;
+    if(runnerY>=groundY()){
+      runnerY=groundY();
+      phase='landed';
+      const dist=Math.max(0,Math.round((runnerX-W*0.35)*0.5*10)/10);
+      distances.push(dist);
+      bestDist=Math.max(bestDist,dist);
+      document.getElementById('info').textContent=`Jump ${attempt+1}: ${dist}m`;
+      setTimeout(()=>{
+        attempt++;
+        if(attempt>=3)endGame();
+        else startAttempt();
+      },1500);
+    }
+  }
+}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Sky
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,W,groundY());
+  // Ground
+  ctx.fillStyle='#166534';ctx.fillRect(0,groundY(),W,H-groundY());
+  // Runway
+  ctx.fillStyle='#92400e';ctx.fillRect(0,groundY()-5,W*0.35,5);
+  // Take-off board
+  ctx.fillStyle='#facc15';ctx.fillRect(W*0.35-5,groundY()-8,10,8);
+  // Sand pit
+  ctx.fillStyle='#d4a017';ctx.fillRect(W*0.35,groundY()-3,W*0.55,3);
+  // Distance markers
+  for(let i=1;i<=8;i++){
+    const x=W*0.35+i*W*0.06;
+    ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(x,groundY()-5);ctx.lineTo(x,groundY()+5);ctx.stroke();
+    ctx.fillStyle='#94a3b8';ctx.font='9px system-ui';ctx.textAlign='center';
+    ctx.fillText(Math.round(i*W*0.06*0.5*10)/10+'m',x,groundY()+15);
+  }
+  // Runner (stick figure)
+  const gy=groundY();
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=3;
+  if(phase==='run'||phase==='plant'){
+    // Running animation
+    const legPhase=Date.now()*0.01;
+    ctx.beginPath();ctx.arc(runnerX,gy-30,6,0,Math.PI*2);ctx.stroke();// head
+    ctx.beginPath();ctx.moveTo(runnerX,gy-24);ctx.lineTo(runnerX,gy-10);ctx.stroke();// body
+    ctx.beginPath();ctx.moveTo(runnerX,gy-10);ctx.lineTo(runnerX+Math.sin(legPhase)*8,gy);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runnerX,gy-10);ctx.lineTo(runnerX-Math.sin(legPhase)*8,gy);ctx.stroke();
+    // Arms
+    ctx.beginPath();ctx.moveTo(runnerX,gy-20);ctx.lineTo(runnerX-Math.sin(legPhase)*6,gy-14);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runnerX,gy-20);ctx.lineTo(runnerX+Math.sin(legPhase)*6,gy-14);ctx.stroke();
+  }else{
+    // Jumping/landed
+    ctx.beginPath();ctx.arc(runnerX,runnerY-30,6,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runnerX,runnerY-24);ctx.lineTo(runnerX,runnerY-10);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runnerX,runnerY-10);ctx.lineTo(runnerX+8,runnerY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(runnerX,runnerY-10);ctx.lineTo(runnerX-8,runnerY);ctx.stroke();
+  }
+  ctx.lineWidth=1;
+  // Speed bar
+  if(phase==='run'){
+    ctx.fillStyle='#334155';ctx.fillRect(10,15,120,12);
+    ctx.fillStyle=runSpeed>60?'#22c55e':runSpeed>30?'#facc15':'#ef4444';
+    ctx.fillRect(10,15,runSpeed*1.2,12);
+    ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';ctx.fillText('Speed',10,12);
+  }
+  // Angle indicator
+  if(phase==='plant'){
+    ctx.save();ctx.translate(runnerX,groundY()-10);
+    const rad=angle*Math.PI/180;
+    ctx.strokeStyle='#facc15';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.cos(rad)*30,-Math.sin(rad)*30);ctx.stroke();
+    ctx.fillStyle='#facc15';ctx.font='12px system-ui';ctx.fillText(Math.round(angle)+'°',35,-10);
+    ctx.restore();ctx.lineWidth=1;
+  }
+  // Previous distances
+  ctx.fillStyle='#94a3b8';ctx.font='11px system-ui';ctx.textAlign='left';
+  distances.forEach((d,i)=>{ctx.fillText(`Jump ${i+1}: ${d}m`,W-100,20+i*15)});
+  // Best
+  ctx.fillStyle='#e2e8f0';ctx.font='12px system-ui';ctx.textAlign='right';
+  ctx.fillText('Record: '+highScore+'m',W-10,H-10);
+}
+function endGame(){
+  phase='done';
+  if(bestDist>highScore){highScore=bestDist;saveScore()}
+  document.getElementById('final-score').textContent=distances.map((d,i)=>`Jump ${i+1}: ${d}m`).join(' | ')+` — Best: ${bestDist}m`;
+  document.getElementById('hs').textContent='Record: '+highScore+'m';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();action()}});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'long-jump',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='long-jump'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

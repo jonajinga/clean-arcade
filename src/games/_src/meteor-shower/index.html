@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meteor Shower</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow-x:hidden}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;color:#e2e8f0}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.overlay button:hover,.ctrl-btn:hover{background:#4f46e5}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem;color:#e2e8f0}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Meteor Shower</h1>
+<div id="hud"><span id="hud-score">Score: 0</span><span id="hud-time">Time: 60</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Meteor Shower</h2>
+<p>Defend your space station!</p>
+<p>Click/tap the side where meteors approach to activate shields.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>Time's Up!</h2>
+<p id="final-score"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="activateShield('left')">◀ Left</button>
+<button class="ctrl-btn" onclick="activateShield('top')">▲ Top</button>
+<button class="ctrl-btn" onclick="activateShield('bottom')">▼ Bottom</button>
+<button class="ctrl-btn" onclick="activateShield('right')">Right ▶</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let meteors=[],shields={left:0,right:0,top:0,bottom:0},score=0,highScore=0,timeLeft=60,running=false,paused=false,lastTime=0,spawnTimer=0;
+const STATION_SIZE=60,SHIELD_DUR=300,SPAWN_INT=800;
+const sides=['left','right','top','bottom'];
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='meteor-shower'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function activateShield(side){if(running&&!paused)shields[side]=Date.now()+SHIELD_DUR}
+
+function spawnMeteor(){
+  const side=sides[Math.floor(Math.random()*4)];
+  const speed=2+Math.random()*2+((60-timeLeft)/20);
+  let x,y,vx,vy;
+  const cx=240,cy=240;
+  if(side==='left'){x=-10;y=Math.random()*480;vx=speed;vy=(cy-y)*speed/480}
+  else if(side==='right'){x=490;y=Math.random()*480;vx=-speed;vy=(cy-y)*speed/480}
+  else if(side==='top'){y=-10;x=Math.random()*480;vy=speed;vx=(cx-x)*speed/480}
+  else{y=490;x=Math.random()*480;vy=-speed;vx=(cx-x)*speed/480}
+  meteors.push({x,y,vx,vy,side,r:6+Math.random()*6,alive:true});
+}
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  meteors=[];score=0;timeLeft=60;running=true;paused=false;
+  shields={left:0,right:0,top:0,bottom:0};
+  spawnTimer=0;lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function togglePause(){
+  if(!running)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}
+}
+
+function loop(ts){
+  if(!running||paused)return;
+  const dt=ts-lastTime;lastTime=ts;
+  timeLeft-=dt/1000;
+  if(timeLeft<=0){endGame();return}
+  spawnTimer+=dt;
+  if(spawnTimer>=SPAWN_INT){spawnTimer=0;spawnMeteor()}
+  const now=Date.now();
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,480);
+  // stars
+  ctx.fillStyle='#334155';
+  for(let i=0;i<50;i++){const sx=(i*97)%480,sy=(i*53+i*i)%480;ctx.fillRect(sx,sy,1,1)}
+  // station
+  ctx.fillStyle='#3b82f6';ctx.fillRect(240-STATION_SIZE/2,240-STATION_SIZE/2,STATION_SIZE,STATION_SIZE);
+  ctx.fillStyle='#6366f1';ctx.fillRect(240-20,240-20,40,40);
+  // shields
+  ctx.lineWidth=4;
+  sides.forEach(s=>{
+    if(shields[s]>now){
+      ctx.strokeStyle='#22c55e';ctx.beginPath();
+      if(s==='left'){ctx.moveTo(240-STATION_SIZE/2-8,240-STATION_SIZE/2-10);ctx.lineTo(240-STATION_SIZE/2-8,240+STATION_SIZE/2+10)}
+      else if(s==='right'){ctx.moveTo(240+STATION_SIZE/2+8,240-STATION_SIZE/2-10);ctx.lineTo(240+STATION_SIZE/2+8,240+STATION_SIZE/2+10)}
+      else if(s==='top'){ctx.moveTo(240-STATION_SIZE/2-10,240-STATION_SIZE/2-8);ctx.lineTo(240+STATION_SIZE/2+10,240-STATION_SIZE/2-8)}
+      else{ctx.moveTo(240-STATION_SIZE/2-10,240+STATION_SIZE/2+8);ctx.lineTo(240+STATION_SIZE/2+10,240+STATION_SIZE/2+8)}
+      ctx.stroke();
+    }
+  });
+  // meteors
+  meteors.forEach(m=>{
+    if(!m.alive)return;
+    m.x+=m.vx;m.y+=m.vy;
+    const dx=m.x-240,dy=m.y-240,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<STATION_SIZE/2+m.r){
+      // check shield
+      if(shields[m.side]>now){score+=10;m.alive=false}
+      else{score=Math.max(0,score-5);m.alive=false}
+    }
+    if(m.alive){
+      ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(m.x,m.y,m.r,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(m.x-m.vx*2,m.y-m.vy*2,m.r*0.6,0,Math.PI*2);ctx.fill();
+    }
+  });
+  meteors=meteors.filter(m=>m.alive&&m.x>-20&&m.x<500&&m.y>-20&&m.y<500);
+  document.getElementById('hud-score').textContent='Score: '+score;
+  document.getElementById('hud-time').textContent='Time: '+Math.ceil(timeLeft);
+  requestAnimationFrame(loop);
+}
+
+function endGame(){
+  running=false;
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'meteor-shower',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('final-score').textContent='Score: '+score;
+  document.getElementById('final-hi').textContent='High Score: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')activateShield('left');
+  if(e.key==='ArrowRight'||e.key==='d')activateShield('right');
+  if(e.key==='ArrowUp'||e.key==='w')activateShield('top');
+  if(e.key==='ArrowDown'||e.key==='s')activateShield('bottom');
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=480/rect.width,scaleY=480/rect.height;
+  const x=(e.clientX-rect.left)*scaleX,y=(e.clientY-rect.top)*scaleY;
+  const dx=x-240,dy=y-240;
+  if(Math.abs(dx)>Math.abs(dy)){activateShield(dx<0?'left':'right')}
+  else{activateShield(dy<0?'top':'bottom')}
+});
+</script>
+</body>
+</html>

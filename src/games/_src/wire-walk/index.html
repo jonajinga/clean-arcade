@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wire Walk</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>Wire Walk</h1>
+<div id="hud"><span id="hud-dist">Dist: 0m</span><span id="hud-balance">Balance: OK</span><span id="hud-hi">Hi: 0m</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="400"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Wire Walk</h2>
+<p>Balance on the tightrope!</p>
+<p>Tilt left/right to stay balanced.</p>
+<p>Watch for wind gusts!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2>You Fell!</h2>
+<p id="final-dist"></p>
+<p id="final-hi"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" ontouchstart="tiltDir=-1" ontouchend="tiltDir=0" onmousedown="tiltDir=-1" onmouseup="tiltDir=0">◀ Lean Left</button>
+<button class="ctrl-btn" ontouchstart="tiltDir=1" ontouchend="tiltDir=0" onmousedown="tiltDir=1" onmouseup="tiltDir=0">Lean Right ▶</button>
+<button class="ctrl-btn" id="pause-btn" onclick="togglePause()">⏸</button>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let balance,dist,speed,wind,windTimer,highScore=0,running=false,paused=false,lastTime,tiltDir=0;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='wire-walk'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore+'m'}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  balance=0;dist=0;speed=1;wind=0;windTimer=0;
+  running=true;paused=false;lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function togglePause(){if(!running)return;paused=!paused;document.getElementById('pause-btn').textContent=paused?'▶':'⏸';if(!paused){lastTime=performance.now();requestAnimationFrame(loop)}}
+
+function loop(ts){
+  if(!running||paused)return;
+  const dt=(ts-lastTime)/16;lastTime=ts;
+  speed=1+dist/200;
+  dist+=speed*0.05*dt;
+  // wind gusts
+  windTimer+=dt;
+  if(windTimer>60+Math.random()*60){
+    windTimer=0;
+    wind=(Math.random()-0.5)*0.15*(1+dist/100);
+  }
+  wind*=0.99; // wind decay
+  // natural wobble
+  const wobble=Math.sin(Date.now()/300)*0.02*(1+dist/200);
+  // balance physics
+  balance+=wind*dt+wobble*dt;
+  balance+=tiltDir*-0.06*dt; // player correction
+  // gravity pull (harder to recover from extreme lean)
+  balance+=balance*0.005*dt;
+  const absBalance=Math.abs(balance);
+  if(absBalance>1.5){endGame();return}
+  draw();
+  let status='OK';
+  if(absBalance>1)status='DANGER!';
+  else if(absBalance>0.6)status='Wobbly';
+  document.getElementById('hud-dist').textContent='Dist: '+Math.floor(dist)+'m';
+  document.getElementById('hud-balance').textContent='Balance: '+status;
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,400);
+  // sky
+  const grad=ctx.createLinearGradient(0,0,0,200);
+  grad.addColorStop(0,'#1e3a5f');grad.addColorStop(1,'#0f2847');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,480,250);
+  // clouds
+  ctx.fillStyle='rgba(148,163,184,0.2)';
+  for(let i=0;i<6;i++){
+    const cx=(i*130-dist*20)%600-60;
+    ctx.beginPath();ctx.ellipse(cx,50+i*20,50,18,0,0,Math.PI*2);ctx.fill();
+  }
+  // city skyline
+  ctx.fillStyle='#1e293b';
+  for(let x=0;x<500;x+=40){
+    const h=40+Math.sin(x*0.3)*30+Math.cos(x*0.7)*20;
+    ctx.fillRect(x,250-h,30,h);
+    // windows
+    ctx.fillStyle='rgba(250,204,21,0.3)';
+    for(let wy=250-h+5;wy<248;wy+=10){for(let wx=x+5;wx<x+25;wx+=8)ctx.fillRect(wx,wy,4,5)}
+    ctx.fillStyle='#1e293b';
+  }
+  // wire
+  const wireY=250;
+  ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,wireY);ctx.lineTo(480,wireY);ctx.stroke();
+  // supports
+  ctx.fillStyle='#64748b';ctx.fillRect(30,wireY,8,120);ctx.fillRect(442,wireY,8,120);
+  // walker
+  const walkerX=240;
+  ctx.save();ctx.translate(walkerX,wireY);ctx.rotate(balance);
+  // body
+  ctx.fillStyle='#3b82f6';ctx.fillRect(-6,-40,12,30);
+  // head
+  ctx.fillStyle='#e2e8f0';ctx.beginPath();ctx.arc(0,-46,8,0,Math.PI*2);ctx.fill();
+  // legs
+  ctx.strokeStyle='#3b82f6';ctx.lineWidth=3;
+  const legPhase=Math.sin(dist*2);
+  ctx.beginPath();ctx.moveTo(0,-10);ctx.lineTo(-6+legPhase*4,0);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,-10);ctx.lineTo(6-legPhase*4,0);ctx.stroke();
+  // balance pole
+  ctx.strokeStyle='#facc15';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(-40,-25);ctx.lineTo(40,-25);ctx.stroke();
+  ctx.restore();
+  // balance meter
+  ctx.fillStyle='#334155';ctx.fillRect(140,370,200,15);
+  const meterPos=balance/1.5*100;
+  ctx.fillStyle=Math.abs(balance)>1?'#ef4444':Math.abs(balance)>0.6?'#facc15':'#22c55e';
+  ctx.fillRect(240+meterPos-3,368,6,19);
+  // danger zones
+  ctx.fillStyle='rgba(239,68,68,0.3)';ctx.fillRect(140,370,30,15);ctx.fillRect(310,370,30,15);
+  // wind indicator
+  if(Math.abs(wind)>0.02){
+    ctx.fillStyle='#94a3b8';ctx.font='12px system-ui';ctx.textAlign='center';
+    ctx.fillText('Wind '+(wind>0?'→':'←'),240,365);
+  }
+  // ground
+  ctx.fillStyle='#334155';ctx.fillRect(0,370,480,30);
+}
+
+function endGame(){
+  running=false;
+  const score=Math.floor(dist);
+  if(score>highScore){highScore=score;parent.postMessage({type:'ca-save',slug:'wire-walk',state:{highScore}},'*')}
+  document.getElementById('hud-hi').textContent='Hi: '+highScore+'m';
+  document.getElementById('final-dist').textContent='Distance: '+score+'m';
+  document.getElementById('final-hi').textContent='Best: '+highScore+'m';
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')tiltDir=-1;
+  if(e.key==='ArrowRight'||e.key==='d')tiltDir=1;
+  if(e.key==='p'||e.key==='P')togglePause();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a')tiltDir=0;
+  if(e.key==='ArrowRight'||e.key==='d')tiltDir=0;
+});
+</script>
+</body>
+</html>

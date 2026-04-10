@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Push Fight</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+canvas{display:block;width:100%;border:2px solid #6366f1;max-width:100%}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+#hud{display:flex;justify-content:space-between;width:100%;max-width:480px;padding:0.2rem 0.5rem;font-size:0.85rem}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+.hidden{display:none!important}
+#status{text-align:center;font-size:0.85rem;margin:0.3rem 0;color:#facc15}
+</style>
+</head>
+<body>
+<h1>Push Fight</h1>
+<div id="hud"><span id="hud-turn">Your Turn</span><span id="hud-wins">Wins: 0</span><span id="hud-hi">Hi: 0</span></div>
+<div id="game-wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="start-overlay">
+<h2>Push Fight</h2>
+<p>Push opponent pieces off the grid!</p>
+<p>Click a piece, then click direction to push.</p>
+<p>Blue = You, Red = AI</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="end-overlay">
+<h2 id="end-title">Game Over</h2>
+<p id="end-msg"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" onclick="pushDir(0,-1)">▲</button>
+<button class="ctrl-btn" onclick="pushDir(-1,0)">◀</button>
+<button class="ctrl-btn" onclick="pushDir(1,0)">▶</button>
+<button class="ctrl-btn" onclick="pushDir(0,1)">▼</button>
+</div>
+<div id="status">Select a piece to push</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const COLS=6,ROWS=6,CELL=70,PAD=30;
+let board,selected,playerTurn,wins=0,highScore=0,running=false;
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='push-fight'){highScore=e.data.state?.highScore||0;document.getElementById('hud-hi').textContent='Hi: '+highScore}});
+
+function startGame(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  // place pieces: 1=player, 2=AI
+  for(let c=0;c<COLS;c++){board[ROWS-1][c]=1;board[0][c]=2}
+  selected=null;playerTurn=true;running=true;
+  document.getElementById('hud-turn').textContent='Your Turn';
+  document.getElementById('status').textContent='Select a piece to push';
+  draw();
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,480,480);
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const x=PAD+c*CELL,y=PAD+r*CELL;
+      ctx.fillStyle=(r+c)%2===0?'#1e293b':'#334155';
+      ctx.fillRect(x,y,CELL,CELL);
+      if(selected&&selected.r===r&&selected.c===c){
+        ctx.strokeStyle='#facc15';ctx.lineWidth=3;ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+      }
+      if(board[r][c]===1){
+        ctx.fillStyle='#3b82f6';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-8,0,Math.PI*2);ctx.fill();
+      }else if(board[r][c]===2){
+        ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(x+CELL/2,y+CELL/2,CELL/2-8,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+  // edge markers
+  ctx.fillStyle='#facc15';ctx.font='11px system-ui';ctx.textAlign='center';
+  for(let i=0;i<COLS;i++){ctx.fillText('☠',PAD+i*CELL+CELL/2,PAD-8);ctx.fillText('☠',PAD+i*CELL+CELL/2,PAD+ROWS*CELL+15)}
+  for(let i=0;i<ROWS;i++){ctx.fillText('☠',PAD-15,PAD+i*CELL+CELL/2+4);ctx.fillText('☠',PAD+COLS*CELL+15,PAD+i*CELL+CELL/2+4)}
+}
+
+canvas.addEventListener('click',e=>{
+  if(!running||!playerTurn)return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(480/rect.width)-PAD;
+  const my=(e.clientY-rect.top)*(480/rect.height)-PAD;
+  const c=Math.floor(mx/CELL),r=Math.floor(my/CELL);
+  if(r<0||r>=ROWS||c<0||c>=COLS)return;
+  if(board[r][c]===1){selected={r,c};document.getElementById('status').textContent='Now pick direction';draw()}
+});
+
+function pushDir(dc,dr){
+  if(!running||!playerTurn||!selected)return;
+  const s=selected;
+  if(board[s.r][s.c]!==1)return;
+  if(!tryPush(s.r,s.c,dr,dc))return;
+  selected=null;
+  const result=checkWin();
+  if(result){endGame(result);return}
+  playerTurn=false;
+  document.getElementById('hud-turn').textContent='AI Turn';
+  document.getElementById('status').textContent='AI thinking...';
+  draw();
+  setTimeout(aiTurn,600);
+}
+
+function tryPush(r,c,dr,dc){
+  const nr=r+dr,nc=c+dc;
+  // pushing off edge
+  if(nr<0||nr>=ROWS||nc<0||nc>=COLS){return false} // can't push yourself off
+  if(board[nr][nc]===0){board[nr][nc]=board[r][c];board[r][c]=0;return true}
+  // chain push
+  const chain=[];let cr=nr,cc=nc;
+  while(cr>=0&&cr<ROWS&&cc>=0&&cc<COLS&&board[cr][cc]!==0){chain.push({r:cr,c:cc,v:board[cr][cc]});cr+=dr;cc+=dc}
+  // last in chain goes to cr,cc
+  if(cr<0||cr>=ROWS||cc<0||cc>=COLS){
+    // pushed off! Remove last piece
+    for(let i=chain.length-1;i>=0;i--){
+      const next_r=chain[i].r+dr,next_c=chain[i].c+dc;
+      if(next_r<0||next_r>=ROWS||next_c<0||next_c>=COLS){board[chain[i].r][chain[i].c]=0}
+      else{board[next_r][next_c]=chain[i].v}
+    }
+    board[nr][nc]=board[r][c];board[r][c]=0;
+    return true;
+  }
+  // move chain
+  board[cr][cc]=chain[chain.length-1].v;
+  for(let i=chain.length-1;i>0;i--){board[chain[i].r][chain[i].c]=chain[i-1].v}
+  board[nr][nc]=board[r][c];board[r][c]=0;
+  return true;
+}
+
+function checkWin(){
+  let p1=0,p2=0;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){if(board[r][c]===1)p1++;if(board[r][c]===2)p2++}
+  if(p2<COLS)return'player';
+  if(p1<COLS)return'ai';
+  return null;
+}
+
+function aiTurn(){
+  if(!running)return;
+  // find AI pieces and try to push toward player
+  const pieces=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){if(board[r][c]===2)pieces.push({r,c})}
+  const dirs=[{dr:1,dc:0},{dr:0,dc:1},{dr:0,dc:-1},{dr:-1,dc:0}];
+  // try to push toward edges first
+  let moved=false;
+  for(const p of pieces){
+    for(const d of dirs){
+      const nr=p.r+d.dr,nc=p.c+d.dc;
+      if(nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&board[nr][nc]===1){
+        // check if push would send player off
+        let cr=nr+d.dr,cc=nc+d.dc;
+        if(cr<0||cr>=ROWS||cc<0||cc>=COLS){
+          const saved=JSON.parse(JSON.stringify(board));
+          if(tryPush(p.r,p.c,d.dr,d.dc)){moved=true;break}
+          else board=saved;
+        }
+      }
+    }
+    if(moved)break;
+  }
+  if(!moved){
+    // random valid move
+    const shuffled=[...pieces].sort(()=>Math.random()-0.5);
+    for(const p of shuffled){
+      const sd=[...dirs].sort(()=>Math.random()-0.5);
+      for(const d of sd){
+        const saved=JSON.parse(JSON.stringify(board));
+        if(tryPush(p.r,p.c,d.dr,d.dc)){moved=true;break}
+        else board=saved;
+      }
+      if(moved)break;
+    }
+  }
+  const result=checkWin();
+  if(result){endGame(result);return}
+  playerTurn=true;
+  document.getElementById('hud-turn').textContent='Your Turn';
+  document.getElementById('status').textContent='Select a piece to push';
+  draw();
+}
+
+function endGame(winner){
+  running=false;
+  if(winner==='player'){wins++;if(wins>highScore){highScore=wins;parent.postMessage({type:'ca-save',slug:'push-fight',state:{highScore}},'*')}}
+  document.getElementById('hud-wins').textContent='Wins: '+wins;
+  document.getElementById('hud-hi').textContent='Hi: '+highScore;
+  document.getElementById('end-title').textContent=winner==='player'?'You Win!':'AI Wins!';
+  document.getElementById('end-msg').textContent=winner==='player'?'You pushed the AI off!':'The AI pushed you off!';
+  document.getElementById('end-overlay').classList.remove('hidden');
+  draw();
+}
+</script>
+</body>
+</html>

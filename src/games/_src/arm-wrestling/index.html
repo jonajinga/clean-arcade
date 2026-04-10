@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arm Wrestling</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-area{position:relative;width:90vw;max-width:500px;height:450px;border:2px solid #6366f1;background:#1e293b}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;gap:1rem}
+.overlay h2{color:#facc15;font-size:1.5rem}
+.overlay p{color:#e2e8f0}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:0.75rem 2rem;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.hidden{display:none!important}
+canvas{display:block;width:100%;height:100%}
+#controls{display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center}
+#tap-btn{background:#ef4444;padding:1rem 3rem;font-size:1.2rem;font-weight:bold}
+#hud{position:absolute;top:5px;left:0;width:100%;display:flex;justify-content:space-around;color:#facc15;font-size:0.85rem;z-index:5;padding:0 0.5rem}
+</style>
+</head>
+<body>
+<h1>Arm Wrestling</h1>
+<div id="game-area">
+  <div id="hud">
+    <span id="p-score">You: 0</span>
+    <span id="round-info">Best of 3</span>
+    <span id="ai-score">CPU: 0</span>
+  </div>
+  <canvas id="c"></canvas>
+  <div id="start-overlay" class="overlay">
+    <h2>Arm Wrestling</h2>
+    <p>Tap rapidly to overpower your opponent!</p>
+    <p style="color:#94a3b8">Best of 3 rounds</p>
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="end-overlay" class="overlay hidden">
+    <h2 id="end-title">Game Over</h2>
+    <p id="end-msg"></p>
+    <p id="hs-display" style="color:#facc15"></p>
+    <button onclick="startGame()">Play Again</button>
+  </div>
+</div>
+<div id="controls">
+  <button id="tap-btn" onclick="tap()" ontouchstart="tap();event.preventDefault()">TAP!</button>
+</div>
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let W,H,position,playerStamina,aiStamina,playerScore,aiScore,highScore=0,gameActive,roundActive,aiInterval,animId;
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  canvas.width=r.width;canvas.height=r.height;
+  W=canvas.width;H=canvas.height;
+}
+resize();window.addEventListener('resize',resize);
+
+function startGame(){
+  playerScore=0;aiScore=0;
+  document.getElementById('start-overlay').classList.add('hidden');
+  document.getElementById('end-overlay').classList.add('hidden');
+  gameActive=true;
+  startRound();
+}
+function startRound(){
+  position=0;playerStamina=100;aiStamina=100;roundActive=true;
+  updateHud();
+  if(aiInterval)clearInterval(aiInterval);
+  aiInterval=setInterval(aiTap,200+Math.random()*300);
+  if(!animId)animId=requestAnimationFrame(draw);
+}
+function tap(){
+  if(!roundActive)return;
+  if(playerStamina>0){
+    position-=3;
+    playerStamina=Math.max(0,playerStamina-1.5);
+  }
+}
+function aiTap(){
+  if(!roundActive)return;
+  if(aiStamina>0){
+    const force=1.5+Math.random()*2;
+    position+=force;
+    aiStamina=Math.max(0,aiStamina-1.2);
+  }
+}
+function updateHud(){
+  document.getElementById('p-score').textContent='You: '+playerScore;
+  document.getElementById('ai-score').textContent='CPU: '+aiScore;
+  document.getElementById('round-info').textContent='Best of 3';
+}
+function draw(){
+  ctx.fillStyle='#1e293b';ctx.fillRect(0,0,W,H);
+  // Table
+  const tableY=H*0.55;
+  ctx.fillStyle='#78350f';ctx.fillRect(0,tableY,W,H*0.1);
+  // Arms
+  const cx=W/2;const armY=tableY;
+  const angle=position*Math.PI/180;
+  const armLen=H*0.3;
+  // Player arm (left)
+  ctx.save();ctx.translate(cx,armY);ctx.rotate(-Math.PI/2+angle);
+  ctx.fillStyle='#f59e0b';ctx.fillRect(-8,0,16,-armLen);
+  // Fist
+  ctx.beginPath();ctx.arc(0,-armLen,12,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+  // Stamina bars
+  ctx.fillStyle='#334155';ctx.fillRect(10,H-30,W/2-20,15);ctx.fillRect(W/2+10,H-30,W/2-20,15);
+  ctx.fillStyle='#22c55e';ctx.fillRect(10,H-30,(W/2-20)*playerStamina/100,15);
+  ctx.fillStyle='#ef4444';ctx.fillRect(W/2+10,H-30,(W/2-20)*aiStamina/100,15);
+  ctx.fillStyle='#e2e8f0';ctx.font='10px system-ui';
+  ctx.fillText('YOU',15,H-33);ctx.fillText('CPU',W/2+15,H-33);
+  // Position indicator
+  const indX=cx+position*2;
+  ctx.fillStyle='#facc15';ctx.fillRect(indX-2,tableY+2,4,H*0.1-4);
+  // Win zones
+  ctx.fillStyle='rgba(34,197,94,0.3)';ctx.fillRect(0,tableY,30,H*0.1);
+  ctx.fillStyle='rgba(239,68,68,0.3)';ctx.fillRect(W-30,tableY,30,H*0.1);
+  // Regen stamina slowly
+  playerStamina=Math.min(100,playerStamina+0.15);
+  aiStamina=Math.min(100,aiStamina+0.12);
+  // Check win
+  if(roundActive){
+    if(position<=-45){roundWin('player')}
+    else if(position>=45){roundWin('ai')}
+  }
+  animId=requestAnimationFrame(draw);
+}
+function roundWin(who){
+  roundActive=false;clearInterval(aiInterval);
+  if(who==='player')playerScore++;else aiScore++;
+  updateHud();
+  if(playerScore>=2||aiScore>=2){
+    setTimeout(endGame,500);
+  }else{
+    setTimeout(startRound,1000);
+  }
+}
+function endGame(){
+  gameActive=false;
+  cancelAnimationFrame(animId);animId=null;
+  const won=playerScore>=2;
+  if(won){highScore++;saveScore()}
+  document.getElementById('end-title').textContent=won?'You Win!':'You Lose!';
+  document.getElementById('end-msg').textContent='Score: '+playerScore+' - '+aiScore;
+  document.getElementById('hs-display').textContent='Wins: '+highScore;
+  document.getElementById('end-overlay').classList.remove('hidden');
+}
+document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();tap()}});
+function saveScore(){try{parent.postMessage({type:'ca-save',slug:'arm-wrestling',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='arm-wrestling'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

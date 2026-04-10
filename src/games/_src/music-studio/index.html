@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Music Studio</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+#game-wrap{position:relative;width:100%;max-width:480px}
+#game-area{width:100%;border:2px solid #6366f1;padding:0.5rem}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.5rem;margin-bottom:0.5rem;color:#facc15}
+.overlay p{margin:0.3rem 0;font-size:0.95rem}
+.overlay button,.ctrl-btn{background:#6366f1;color:#fff;border:none;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;border-radius:0;margin-top:0.5rem}
+.ctrl-btn{background:#334155;margin:0.3rem;font-size:0.9rem;padding:0.4rem 1rem}
+.hidden{display:none!important}
+.track{display:flex;align-items:center;margin:0.3rem 0}
+.track-label{width:55px;font-size:0.75rem;color:#facc15;text-align:right;padding-right:0.3rem;flex-shrink:0}
+.step{width:22px;height:22px;border:1px solid #475569;margin:1px;cursor:pointer;background:#1e293b;flex-shrink:0}
+.step.active{background:#6366f1}
+.step.playing{box-shadow:0 0 4px #facc15}
+.step.beat-marker{border-bottom:2px solid #334155}
+#controls{display:flex;justify-content:center;gap:0.5rem;margin-top:0.3rem;flex-wrap:wrap}
+#tempo-display{font-size:0.85rem;margin:0.3rem 0;text-align:center}
+.track-controls{display:flex;align-items:center;gap:2px}
+.vol-btn{width:20px;height:20px;background:#334155;border:none;color:#e2e8f0;cursor:pointer;font-size:0.65rem;border-radius:0}
+</style>
+</head>
+<body>
+<h1>Music Studio</h1>
+<div id="game-wrap">
+<div id="game-area">
+<div id="grid"></div>
+<div id="tempo-display">BPM: <span id="bpm-val">120</span></div>
+</div>
+<div class="overlay" id="start-overlay">
+<h2>Music Studio</h2>
+<p>4-track x 16-step beat sequencer</p>
+<p>Toggle cells to create beats!</p>
+<button onclick="startStudio()">Play</button>
+</div>
+</div>
+<div id="controls">
+<button class="ctrl-btn" id="play-btn" onclick="togglePlay()">▶ Play</button>
+<button class="ctrl-btn" onclick="clearAll()">Clear</button>
+<button class="ctrl-btn" onclick="changeTempo(-10)">BPM -</button>
+<button class="ctrl-btn" onclick="changeTempo(10)">BPM +</button>
+<button class="ctrl-btn" onclick="randomize()">Random</button>
+</div>
+<script>
+const trackNames=['Kick','Snare','HiHat','Perc'];
+const trackFreqs=[80,200,800,400];
+const trackTypes=['sine','triangle','square','sawtooth'];
+let grid=Array.from({length:4},()=>Array(16).fill(false));
+let playing=false,currentStep=-1,bpm=120,intervalId=null;
+let audioCtx=null;
+
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)()}
+
+function playSound(trackIdx){
+  if(!audioCtx)return;
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.type=trackTypes[trackIdx];
+  osc.frequency.value=trackFreqs[trackIdx];
+  gain.gain.setValueAtTime(0.3,audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.15);
+  osc.connect(gain);gain.connect(audioCtx.destination);
+  osc.start();osc.stop(audioCtx.currentTime+0.15);
+}
+
+function buildGrid(){
+  const container=document.getElementById('grid');
+  container.innerHTML='';
+  for(let t=0;t<4;t++){
+    const row=document.createElement('div');row.className='track';
+    const label=document.createElement('span');label.className='track-label';label.textContent=trackNames[t];
+    row.appendChild(label);
+    for(let s=0;s<16;s++){
+      const cell=document.createElement('div');
+      cell.className='step'+(grid[t][s]?' active':'')+(s%4===0?' beat-marker':'');
+      cell.dataset.t=t;cell.dataset.s=s;
+      cell.addEventListener('click',()=>{
+        grid[t][s]=!grid[t][s];
+        cell.classList.toggle('active');
+      });
+      row.appendChild(cell);
+    }
+    container.appendChild(row);
+  }
+}
+
+function startStudio(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  initAudio();buildGrid();
+}
+
+function togglePlay(){
+  playing=!playing;
+  document.getElementById('play-btn').textContent=playing?'⏹ Stop':'▶ Play';
+  if(playing){initAudio();currentStep=-1;stepLoop()}
+  else{clearInterval(intervalId);intervalId=null;clearHighlights()}
+}
+
+function stepLoop(){
+  if(!playing)return;
+  currentStep=(currentStep+1)%16;
+  clearHighlights();
+  const cells=document.querySelectorAll('.step');
+  for(let t=0;t<4;t++){
+    const idx=t*16+currentStep;
+    cells[idx].classList.add('playing');
+    if(grid[t][currentStep])playSound(t);
+  }
+  intervalId=setTimeout(stepLoop,60000/bpm/4);
+}
+
+function clearHighlights(){document.querySelectorAll('.step.playing').forEach(c=>c.classList.remove('playing'))}
+
+function changeTempo(d){bpm=Math.max(60,Math.min(200,bpm+d));document.getElementById('bpm-val').textContent=bpm}
+
+function clearAll(){grid=Array.from({length:4},()=>Array(16).fill(false));buildGrid()}
+
+function randomize(){
+  grid=Array.from({length:4},()=>Array.from({length:16},()=>Math.random()<0.3));
+  buildGrid();
+}
+
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='music-studio'&&e.data.state?.grid){grid=e.data.state.grid;buildGrid()}});
+
+// save on visibility change
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){parent.postMessage({type:'ca-save',slug:'music-studio',state:{grid,highScore:0}},'*')}
+});
+</script>
+</body>
+</html>
