@@ -1,7 +1,7 @@
 {
   "name": "Clean Arcade",
   "short_name": "Clean Arcade",
-  "description": "200 free browser games — no ads, no tracking, just play.",
+  "description": "Free browser games — no ads, no tracking, just play.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

@@ -1,0 +1,17 @@
+# Game source files — rarely change, cache aggressively
+/games/_src/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Static assets with build hash
+/assets/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/js/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/img/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML pages — short cache, revalidate
+/*
+  Cache-Control: public, max-age=3600, must-revalidate

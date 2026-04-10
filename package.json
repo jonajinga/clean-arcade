@@ -1,7 +1,7 @@
 {
   "name": "clean-arcade",
   "version": "1.0.0",
-  "description": "200 free browser games — no ads, no tracking, just play",
+  "description": "Free browser games — no ads, no tracking, just play",
   "type": "module",
   "scripts": {
     "start": "npx @11ty/eleventy --serve --port=8080",

@@ -58,3 +58,6 @@
     grid-template-columns: 1fr 1fr 1fr;
   }
 }
+
+/* Performance: skip rendering off-screen cards */
+.game-card { content-visibility: auto; contain-intrinsic-size: auto 38px; }
