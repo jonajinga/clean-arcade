@@ -10,29 +10,36 @@ body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe
 h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 .stats{display:flex;gap:1.5rem;margin:.75rem 0;font-size:1rem;color:#94a3b8}
 .stats span{color:#e2e8f0;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;max-width:420px;width:100%;margin:0 auto}
+.grid{display:grid;gap:.5rem;max-width:480px;width:100%;margin:0 auto}
+.grid.cols-3{grid-template-columns:repeat(3,1fr)}
+.grid.cols-4{grid-template-columns:repeat(4,1fr)}
+.grid.cols-5{grid-template-columns:repeat(5,1fr)}
+.grid.cols-6{grid-template-columns:repeat(6,1fr)}
 .card{aspect-ratio:1;perspective:600px;cursor:pointer}
 .card-inner{position:relative;width:100%;height:100%;transition:transform .4s;transform-style:preserve-3d}
 .card.flipped .card-inner,.card.matched .card-inner{transform:rotateY(180deg)}
-.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700}
+.card-front,.card-back{position:absolute;inset:0;backface-visibility:hidden;border-radius:0;display:flex;align-items:center;justify-content:center;font-weight:700}
 .card-back{background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;font-size:2rem}
 .card-back::after{content:'?';opacity:.6}
 .card-front{transform:rotateY(180deg);background:#1e293b;border:2px solid #6366f1;color:#e2e8f0}
+.card-front.small-text{font-size:1rem !important}
 .card.matched .card-front{border-color:#22c55e;background:#14532d33;color:#22c55e}
 .overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:100}
 .overlay.hidden{display:none}
-.overlay-box{background:#1e293b;border:2px solid #6366f1;border-radius:12px;padding:2rem;text-align:center;max-width:360px;width:90%}
-.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:1rem}
+.overlay-box{background:#1e293b;border:2px solid #6366f1;border-radius:12px;padding:2rem;text-align:center;max-width:400px;width:90%;max-height:90vh;overflow-y:auto}
+.overlay-box h2{font-size:1.6rem;color:#facc15;margin-bottom:.75rem}
 .overlay-box p{margin:.5rem 0;color:#94a3b8}
 .overlay-box p span{color:#e2e8f0;font-weight:600}
 .btn{display:inline-block;padding:.7rem 1.8rem;border:none;border-radius:0;font-size:1.1rem;font-weight:600;cursor:pointer;margin:.4rem;color:#0f172a}
 .btn-play{background:#22c55e}
 .btn-play:hover{background:#16a34a}
-.mode-btns{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}
-.mode-btn{padding:.6rem 1rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1rem;cursor:pointer;transition:background .2s}
-.mode-btn:hover,.mode-btn.active{background:#6366f1;color:#fff}
+.opt-label{color:#94a3b8;font-size:.85rem;margin:1rem 0 .4rem;text-align:left}
+.opt-group{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center}
+.opt-btn{padding:.5rem .85rem;border:2px solid #475569;background:#334155;color:#e2e8f0;border-radius:0;font-size:.85rem;cursor:pointer;transition:background .2s,border-color .2s}
+.opt-btn:hover{border-color:#6366f1}
+.opt-btn.active{background:#6366f1;border-color:#6366f1;color:#fff}
 .pause-wrap{text-align:center;margin-top:.75rem}
-.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1.3rem;cursor:pointer}
+.pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:#334155;color:#e2e8f0;border-radius:0;font-size:1.3rem;cursor:pointer}
 .pause-btn:hover{background:#6366f1}
 </style>
 </head>
@@ -42,10 +49,20 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 <div class="overlay-box">
 <h2>Alphabet Match</h2>
 <p>Find matching letter pairs!</p>
-<div class="mode-btns">
-<button class="mode-btn active" data-mode="lower" onclick="selectMode('lower',this)">Lowercase (a - a)</button>
-<button class="mode-btn" data-mode="upper" onclick="selectMode('upper',this)">Uppercase (A - A)</button>
-<button class="mode-btn" data-mode="mixed" onclick="selectMode('mixed',this)">Mixed (a - A)</button>
+<div class="opt-label">Grid Size</div>
+<div class="opt-group" id="sizeGroup">
+<button class="opt-btn" data-size="3x2" onclick="selectSize('3x2',this)">3x2 (3)</button>
+<button class="opt-btn active" data-size="4x4" onclick="selectSize('4x4',this)">4x4 (8)</button>
+<button class="opt-btn" data-size="5x4" onclick="selectSize('5x4',this)">5x4 (10)</button>
+<button class="opt-btn" data-size="6x6" onclick="selectSize('6x6',this)">6x6 (18)</button>
+</div>
+<div class="opt-label">Mode</div>
+<div class="opt-group" id="modeGroup">
+<button class="opt-btn active" data-mode="lower" onclick="selectMode('lower',this)">Lowercase</button>
+<button class="opt-btn" data-mode="upper" onclick="selectMode('upper',this)">Uppercase</button>
+<button class="opt-btn" data-mode="mixed" onclick="selectMode('mixed',this)">Mixed (a-A)</button>
+<button class="opt-btn" data-mode="number" onclick="selectMode('number',this)">Number-Letter</button>
+<button class="opt-btn" data-mode="phonics" onclick="selectMode('phonics',this)">Phonics</button>
 </div>
 <button class="btn btn-play" onclick="startGame()">Play</button>
 </div>
@@ -64,68 +81,119 @@ h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
 <h1>Alphabet Match</h1>
 <div class="stats">
 <div>Moves: <span id="moves">0</span></div>
-<div>Pairs: <span id="pairs">0</span>/8</div>
+<div>Pairs: <span id="pairs">0</span>/<span id="totalPairs">8</span></div>
 <div>Time: <span id="time">0s</span></div>
 </div>
-<div class="grid" id="grid"></div>
+<div class="grid cols-4" id="grid"></div>
 <div class="pause-wrap">
 <button class="pause-btn" id="pauseBtn" onclick="togglePause()">⏸</button>
 </div>
 
 <script>
-const SLUG='alphabet-match';
-let mode='lower',moves=0,pairsFound=0,firstCard=null,secondCard=null,locked=false,timerInterval=null,seconds=0,paused=false,highScore=Infinity,gameStarted=false;
+var SLUG='alphabet-match';
+var ALPHA='abcdefghijklmnopqrstuvwxyz';
+var PHONICS_WORDS=['Apple','Ball','Cat','Dog','Egg','Fish','Girl','Hat','Ice','Jar','Key','Lamp','Map','Net','Owl','Pen','Queen','Ring','Sun','Tree','Umbrella','Van','Web','Box','Yarn','Zoo'];
 
-function selectMode(m,btn){
-  mode=m;
-  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+var SIZES={
+  '3x2':{cols:3,rows:2,pairs:3},
+  '4x4':{cols:4,rows:4,pairs:8},
+  '5x4':{cols:5,rows:4,pairs:10},
+  '6x6':{cols:6,rows:6,pairs:18}
+};
+
+var gridSize='4x4',mode='lower';
+var moves=0,pairsFound=0,totalPairsCount=8,firstCard=null,secondCard=null,locked=false;
+var timerInterval=null,seconds=0,paused=false,highScores={},gameStarted=false;
+
+function selectSize(s,btn){
+  gridSize=s;
+  document.querySelectorAll('#sizeGroup .opt-btn').forEach(function(b){b.classList.remove('active');});
   btn.classList.add('active');
 }
 
-function generateLetters(){
-  const alpha='abcdefghijklmnopqrstuvwxyz';
-  const picked=[];
-  const used=new Set();
-  while(picked.length<8){
-    const i=Math.floor(Math.random()*26);
-    if(!used.has(i)){used.add(i);picked.push(alpha[i]);}
-  }
-  let cards=[];
-  if(mode==='lower'){
-    picked.forEach(l=>{cards.push(l,l);});
-  }else if(mode==='upper'){
-    picked.forEach(l=>{const u=l.toUpperCase();cards.push(u,u);});
-  }else{
-    picked.forEach(l=>{cards.push(l,l.toUpperCase());});
-  }
-  return shuffle(cards);
+function selectMode(m,btn){
+  mode=m;
+  document.querySelectorAll('#modeGroup .opt-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
 }
 
 function shuffle(a){
-  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;}
   return a;
+}
+
+function generateCards(){
+  var cfg=SIZES[gridSize];
+  var count=cfg.pairs;
+  var indices=[];
+  var used={};
+  while(indices.length<count){
+    var idx=Math.floor(Math.random()*26);
+    if(!used[idx]){used[idx]=true;indices.push(idx);}
+  }
+  var cards=[];
+  if(mode==='lower'){
+    indices.forEach(function(i){
+      var l=ALPHA[i];
+      cards.push({display:l,match:l},{display:l,match:l});
+    });
+  }else if(mode==='upper'){
+    indices.forEach(function(i){
+      var u=ALPHA[i].toUpperCase();
+      cards.push({display:u,match:u},{display:u,match:u});
+    });
+  }else if(mode==='mixed'){
+    indices.forEach(function(i){
+      var l=ALPHA[i],u=l.toUpperCase();
+      cards.push({display:l,match:l},{display:u,match:l});
+    });
+  }else if(mode==='number'){
+    indices.forEach(function(i){
+      var letter=ALPHA[i].toUpperCase();
+      var num=String(i+1);
+      cards.push({display:num,match:letter},{display:letter,match:letter});
+    });
+  }else if(mode==='phonics'){
+    indices.forEach(function(i){
+      var letter=ALPHA[i].toUpperCase();
+      var word=PHONICS_WORDS[i];
+      cards.push({display:letter,match:letter},{display:word,match:letter,isWord:true});
+    });
+  }
+  return shuffle(cards);
 }
 
 function startGame(){
   document.getElementById('startOverlay').classList.add('hidden');
   document.getElementById('endOverlay').classList.add('hidden');
+  var cfg=SIZES[gridSize];
+  totalPairsCount=cfg.pairs;
   moves=0;pairsFound=0;seconds=0;firstCard=null;secondCard=null;locked=false;paused=false;gameStarted=true;
   document.getElementById('moves').textContent='0';
   document.getElementById('pairs').textContent='0';
+  document.getElementById('totalPairs').textContent=totalPairsCount;
   document.getElementById('time').textContent='0s';
   document.getElementById('pauseBtn').textContent='⏸';
   clearInterval(timerInterval);
-  timerInterval=setInterval(()=>{if(!paused){seconds++;document.getElementById('time').textContent=seconds+'s';}},1000);
-  const letters=generateLetters();
-  const grid=document.getElementById('grid');
+  timerInterval=setInterval(function(){if(!paused){seconds++;document.getElementById('time').textContent=seconds+'s';}},1000);
+
+  var cards=generateCards();
+  var grid=document.getElementById('grid');
   grid.innerHTML='';
-  letters.forEach((letter,i)=>{
-    const card=document.createElement('div');
+  grid.className='grid cols-'+cfg.cols;
+
+  var needsSmall=(mode==='phonics');
+  var baseFontSize=cfg.cols>=6?'1.5rem':cfg.cols>=5?'1.8rem':'2.5rem';
+
+  cards.forEach(function(c){
+    var card=document.createElement('div');
     card.className='card';
-    card.dataset.letter=letter.toLowerCase();
-    card.dataset.display=letter;
-    card.innerHTML=`<div class="card-inner"><div class="card-back"></div><div class="card-front">${letter}</div></div>`;
-    card.addEventListener('click',()=>flipCard(card));
+    card.dataset.match=c.match;
+    var frontClass='card-front';
+    var fontSize=baseFontSize;
+    if(c.isWord){frontClass+=' small-text';fontSize=cfg.cols>=5?'0.7rem':'0.85rem';}
+    card.innerHTML='<div class="card-inner"><div class="card-back"></div><div class="'+frontClass+'" style="font-size:'+fontSize+'">'+c.display+'</div></div>';
+    card.addEventListener('click',function(){flipCard(card);});
     grid.appendChild(card);
   });
 }
@@ -134,21 +202,16 @@ function flipCard(card){
   if(locked||paused||card.classList.contains('flipped')||card.classList.contains('matched'))return;
   card.classList.add('flipped');
   if(!firstCard){firstCard=card;return;}
-  secondCard=card;
-  locked=true;
-  moves++;
+  secondCard=card;locked=true;moves++;
   document.getElementById('moves').textContent=moves;
-  if(firstCard.dataset.letter===secondCard.dataset.letter){
-    firstCard.classList.add('matched');
-    secondCard.classList.add('matched');
-    pairsFound++;
-    document.getElementById('pairs').textContent=pairsFound;
+  if(firstCard.dataset.match===secondCard.dataset.match&&firstCard!==secondCard){
+    firstCard.classList.add('matched');secondCard.classList.add('matched');
+    pairsFound++;document.getElementById('pairs').textContent=pairsFound;
     firstCard=null;secondCard=null;locked=false;
-    if(pairsFound===8)endGame();
+    if(pairsFound===totalPairsCount)endGame();
   }else{
-    setTimeout(()=>{
-      firstCard.classList.remove('flipped');
-      secondCard.classList.remove('flipped');
+    setTimeout(function(){
+      firstCard.classList.remove('flipped');secondCard.classList.remove('flipped');
       firstCard=null;secondCard=null;locked=false;
     },800);
   }
@@ -157,10 +220,11 @@ function flipCard(card){
 function endGame(){
   clearInterval(timerInterval);
   gameStarted=false;
-  if(moves<highScore)highScore=moves;
+  var key=mode+'-'+gridSize;
+  if(!highScores[key]||moves<highScores[key])highScores[key]=moves;
   document.getElementById('endMoves').textContent=moves;
   document.getElementById('endTime').textContent=seconds+'s';
-  document.getElementById('endHigh').textContent=highScore===Infinity?moves:highScore;
+  document.getElementById('endHigh').textContent=highScores[key];
   document.getElementById('endOverlay').classList.remove('hidden');
   saveState();
 }
@@ -173,17 +237,17 @@ function togglePause(){
 }
 
 function saveState(){
-  const state={highScore:highScore===Infinity?null:highScore};
-  try{window.parent.postMessage({type:'ca-save',slug:SLUG,state},'*');}catch(e){}
+  var state={highScores:highScores};
+  try{window.parent.postMessage({type:'ca-save',slug:SLUG,state:state},'*');}catch(e){}
 }
 
-window.addEventListener('message',e=>{
+window.addEventListener('message',function(e){
   if(e.data&&e.data.type==='ca-load'&&e.data.state){
-    if(e.data.state.highScore!=null)highScore=e.data.state.highScore;
+    if(e.data.state.highScores)highScores=e.data.state.highScores;
   }
 });
 
-document.addEventListener('keydown',e=>{
+document.addEventListener('keydown',function(e){
   if(e.key==='p'||e.key==='P')togglePause();
 });
 </script>
