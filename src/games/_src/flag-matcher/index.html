@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flag Matcher</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:380px;padding:16px;position:relative;min-height:420px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.score-bar{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:10px}
+.flag{text-align:center;font-size:5rem;margin:16px 0;line-height:1.2}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.choice{background:#1e293b;border:2px solid #334155;padding:12px;cursor:pointer;text-align:center;font-size:0.9rem;color:#e2e8f0;font-family:inherit}
+.choice:hover{background:#334155}
+.choice.correct{background:#22c55e;border-color:#22c55e;color:#0f172a}
+.choice.wrong{background:#ef4444;border-color:#ef4444}
+.feedback{text-align:center;margin-top:10px;font-size:0.9rem;min-height:22px}
+</style>
+</head>
+<body>
+<h1>Flag Matcher</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Flag Matcher</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Match the flag to the correct country!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Quiz Complete!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="score-bar"><span>Round: <b id="round">1</b>/20</span><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="flag" id="flag"></div>
+<div class="choices" id="choices"></div>
+<div class="feedback" id="feedback"></div>
+</div>
+<script>
+const FLAGS=[
+  {emoji:'\u{1F1FA}\u{1F1F8}',name:'United States'},
+  {emoji:'\u{1F1EC}\u{1F1E7}',name:'United Kingdom'},
+  {emoji:'\u{1F1EB}\u{1F1F7}',name:'France'},
+  {emoji:'\u{1F1E9}\u{1F1EA}',name:'Germany'},
+  {emoji:'\u{1F1EF}\u{1F1F5}',name:'Japan'},
+  {emoji:'\u{1F1E8}\u{1F1E6}',name:'Canada'},
+  {emoji:'\u{1F1E6}\u{1F1FA}',name:'Australia'},
+  {emoji:'\u{1F1E7}\u{1F1F7}',name:'Brazil'},
+  {emoji:'\u{1F1EE}\u{1F1F3}',name:'India'},
+  {emoji:'\u{1F1EE}\u{1F1F9}',name:'Italy'},
+  {emoji:'\u{1F1F2}\u{1F1FD}',name:'Mexico'},
+  {emoji:'\u{1F1F0}\u{1F1F7}',name:'South Korea'},
+  {emoji:'\u{1F1EA}\u{1F1F8}',name:'Spain'},
+  {emoji:'\u{1F1F7}\u{1F1FA}',name:'Russia'},
+  {emoji:'\u{1F1E8}\u{1F1F3}',name:'China'},
+  {emoji:'\u{1F1F3}\u{1F1F4}',name:'Norway'},
+  {emoji:'\u{1F1F8}\u{1F1EA}',name:'Sweden'},
+  {emoji:'\u{1F1E8}\u{1F1ED}',name:'Switzerland'},
+  {emoji:'\u{1F1F9}\u{1F1F7}',name:'Turkey'},
+  {emoji:'\u{1F1F5}\u{1F1F9}',name:'Portugal'},
+  {emoji:'\u{1F1E6}\u{1F1F7}',name:'Argentina'},
+  {emoji:'\u{1F1EC}\u{1F1F7}',name:'Greece'},
+  {emoji:'\u{1F1F3}\u{1F1F1}',name:'Netherlands'},
+  {emoji:'\u{1F1F5}\u{1F1F1}',name:'Poland'},
+  {emoji:'\u{1F1EE}\u{1F1EA}',name:'Ireland'},
+  {emoji:'\u{1F1FF}\u{1F1E6}',name:'South Africa'},
+  {emoji:'\u{1F1EA}\u{1F1EC}',name:'Egypt'},
+  {emoji:'\u{1F1F9}\u{1F1ED}',name:'Thailand'},
+  {emoji:'\u{1F1F3}\u{1F1FF}',name:'New Zealand'},
+  {emoji:'\u{1F1E8}\u{1F1F4}',name:'Colombia'},
+];
+let currentRound=0,score=0,highScore=0,answered=false,rounds=[];
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function setupRound(){
+  if(currentRound>=20){endGame();return}
+  answered=false;
+  const flag=rounds[currentRound];
+  document.getElementById('flag').textContent=flag.emoji;
+  document.getElementById('round').textContent=currentRound+1;
+  document.getElementById('feedback').textContent='';
+  let opts=[flag.name];
+  const names=FLAGS.map(f=>f.name);
+  while(opts.length<4){const n=names[Math.floor(Math.random()*names.length)];if(!opts.includes(n))opts.push(n)}
+  shuffle(opts);
+  const c=document.getElementById('choices');c.innerHTML='';
+  opts.forEach(name=>{
+    const d=document.createElement('div');d.className='choice';d.textContent=name;
+    d.onclick=()=>answer(d,name,flag.name);c.appendChild(d);
+  });
+}
+
+function answer(el,picked,correct){
+  if(answered)return;answered=true;
+  if(picked===correct){score++;document.getElementById('score').textContent=score;el.classList.add('correct');document.getElementById('feedback').textContent='Correct!';document.getElementById('feedback').style.color='#22c55e'}
+  else{el.classList.add('wrong');document.getElementById('feedback').textContent='It was '+correct;document.getElementById('feedback').style.color='#ef4444';document.querySelectorAll('.choice').forEach(c=>{if(c.textContent===correct)c.classList.add('correct')})}
+  currentRound++;setTimeout(setupRound,1200);
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score+'/20';
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  score=0;currentRound=0;
+  document.getElementById('score').textContent=0;
+  document.getElementById('best').textContent=highScore;
+  rounds=shuffle([...FLAGS]).slice(0,20);
+  setupRound();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'flag-matcher',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='flag-matcher'&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('best').textContent=highScore}});
+</script>
+</body>
+</html>

@@ -59,6 +59,9 @@
   .game-controls{display:flex;gap:4px;justify-content:center;margin:6px auto;flex-wrap:wrap}
   .game-controls button{width:48px;height:40px;font-size:1.1rem;background:#334155;color:#e2e8f0;border:none;cursor:pointer}
   .game-controls button:active{background:#475569}
+  .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+  .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+  .diff-btn.active{background:#6366f1;border-color:#6366f1}
   .pause-wrap { display: none; text-align: center; padding: 6px 0; }
   #pauseBtn {
     width: 40px; height: 40px;
@@ -88,6 +91,11 @@
 <div id="overlay">
   <h1 id="overlayTitle">Breakout</h1>
   <p class="final-score hidden" id="finalScore"></p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+  </div>
   <p id="overlayMsg">Click or Tap to Start</p>
 </div>
 
@@ -103,6 +111,12 @@
   var overlayTitle = document.getElementById("overlayTitle");
   var overlayMsg = document.getElementById("overlayMsg");
   var finalScoreEl = document.getElementById("finalScore");
+
+  var difficulty = 'medium';
+  window.setDiff = function(d) {
+    difficulty = d;
+    document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+  };
 
   var BG = "#0f172a";
   var BRICK_ROWS = 6, BRICK_COLS = 10;
@@ -170,7 +184,8 @@
     canvas.height = H;
     brickW = (W - BRICK_PAD * (BRICK_COLS + 1)) / BRICK_COLS;
     brickH = Math.max(16, H * 0.03);
-    paddleW = Math.max(60, W * 0.16);
+    var paddleMult = difficulty === 'easy' ? 1.4 : difficulty === 'hard' ? 0.7 : 1;
+    paddleW = Math.max(60, W * 0.16 * paddleMult);
     overlay.style.width = canvas.width + "px";
     overlay.style.height = canvas.height + "px";
     overlay.style.left = canvas.offsetLeft + "px";
@@ -218,7 +233,8 @@
 
   function resetBall() {
     paddle = { x: W / 2 - paddleW / 2, y: H - 40, w: paddleW, h: PADDLE_H };
-    ballSpeed = BASE_SPEED + (level - 1) * SPEED_INC;
+    var speedMult = difficulty === 'easy' ? 0.8 : difficulty === 'hard' ? 1.3 : 1;
+    ballSpeed = (BASE_SPEED + (level - 1) * SPEED_INC) * speedMult;
     var angle = (Math.random() * 0.6 + 0.2) * (Math.random() > 0.5 ? 1 : -1);
     ball = {
       x: W / 2,

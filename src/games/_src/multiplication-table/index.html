@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multiplication Table</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:420px;padding:10px;position:relative;min-height:400px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.info{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:8px}
+.cell{background:#1e293b;border:1px solid #334155;padding:6px 2px;text-align:center;font-size:0.8rem;min-height:32px;display:flex;align-items:center;justify-content:center}
+.cell.header{background:#334155;color:#facc15;font-weight:bold}
+.cell.active{border:2px solid #6366f1;background:#1e293b;cursor:pointer}
+.cell.correct{background:#22c55e;color:#0f172a}
+.cell.wrong{background:#ef4444}
+.cell.current{border:2px solid #facc15;background:#1e293b}
+.input-area{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
+.input-area input{background:#1e293b;border:2px solid #334155;color:#e2e8f0;padding:8px;font-size:1.1rem;width:80px;text-align:center;font-family:inherit;border-radius:0}
+.input-area button{padding:8px 16px}
+.feedback{text-align:center;font-size:0.85rem;margin-top:6px;min-height:20px}
+</style>
+</head>
+<body>
+<h1>Multiplication Table</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Multiplication Table</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Fill in the multiplication table!<br>How fast can you go?</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Complete!</p>
+<p style="margin-bottom:4px" id="goScore"></p>
+<p style="margin-bottom:4px" id="goAccuracy"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="info"><span>Time: <b id="timer">0</b>s</span><span>Correct: <b id="correct">0</b></span><span>Best: <b id="best">0</b>s</span></div>
+<div class="grid" id="grid"></div>
+<div class="input-area">
+<input type="number" id="ansInput" placeholder="?" onkeydown="if(event.key==='Enter')submitAnswer()">
+<button onclick="submitAnswer()">OK</button>
+</div>
+<div class="feedback" id="feedback"></div>
+</div>
+<script>
+const SIZE=6;
+let cells=[],order=[],currentIdx=0,correctCount=0,totalAttempts=0,startTime=0,timerInterval,highScore=0,gameRunning=false;
+
+function buildGrid(){
+  const g=document.getElementById('grid');g.innerHTML='';
+  g.style.gridTemplateColumns=`repeat(${SIZE+1},1fr)`;
+  // top-left corner
+  const corner=document.createElement('div');corner.className='cell header';corner.textContent='x';g.appendChild(corner);
+  // header row
+  for(let c=1;c<=SIZE;c++){const d=document.createElement('div');d.className='cell header';d.textContent=c;g.appendChild(d)}
+  cells=[];
+  for(let r=1;r<=SIZE;r++){
+    const rh=document.createElement('div');rh.className='cell header';rh.textContent=r;g.appendChild(rh);
+    for(let c=1;c<=SIZE;c++){
+      const d=document.createElement('div');d.className='cell active';d.dataset.r=r;d.dataset.c=c;d.textContent='';
+      d.onclick=()=>selectCell(r,c);
+      g.appendChild(d);cells.push({el:d,r,c,answered:false});
+    }
+  }
+}
+
+function selectCell(r,c){
+  if(!gameRunning)return;
+  const cell=cells.find(x=>x.r===r&&x.c===c&&!x.answered);
+  if(!cell)return;
+  // set as current
+  const idx=cells.indexOf(cell);
+  currentIdx=idx;highlightCurrent();
+  document.getElementById('ansInput').value='';
+  document.getElementById('ansInput').focus();
+}
+
+function highlightCurrent(){
+  cells.forEach(c=>c.el.classList.remove('current'));
+  if(currentIdx<cells.length&&!cells[currentIdx].answered)cells[currentIdx].el.classList.add('current');
+}
+
+function submitAnswer(){
+  if(!gameRunning||currentIdx>=cells.length)return;
+  const cell=cells[currentIdx];
+  if(cell.answered){moveToNext();return}
+  const val=parseInt(document.getElementById('ansInput').value);
+  const ans=cell.r*cell.c;
+  totalAttempts++;
+  if(val===ans){
+    cell.answered=true;cell.el.textContent=ans;cell.el.classList.remove('active','current');cell.el.classList.add('correct');
+    correctCount++;document.getElementById('correct').textContent=correctCount;
+    document.getElementById('feedback').textContent='Correct!';document.getElementById('feedback').style.color='#22c55e';
+    if(correctCount>=SIZE*SIZE){endGame();return}
+    moveToNext();
+  } else {
+    cell.el.classList.add('wrong');
+    document.getElementById('feedback').textContent=`${cell.r} x ${cell.c} is not ${val}`;document.getElementById('feedback').style.color='#ef4444';
+    setTimeout(()=>cell.el.classList.remove('wrong'),500);
+  }
+  document.getElementById('ansInput').value='';
+  document.getElementById('ansInput').focus();
+}
+
+function moveToNext(){
+  // find next unanswered
+  for(let i=0;i<cells.length;i++){
+    const idx=(currentIdx+1+i)%cells.length;
+    if(!cells[idx].answered){currentIdx=idx;highlightCurrent();return}
+  }
+}
+
+function randomizeOrder(){
+  order=[];for(let i=0;i<cells.length;i++)order.push(i);
+  for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}
+  currentIdx=order[0];
+}
+
+function endGame(){
+  gameRunning=false;clearInterval(timerInterval);
+  const elapsed=Math.round((Date.now()-startTime)/1000);
+  const accuracy=Math.round(correctCount/totalAttempts*100);
+  if(highScore===0||elapsed<highScore){highScore=elapsed;saveState()}
+  document.getElementById('goScore').textContent='Time: '+elapsed+'s';
+  document.getElementById('goAccuracy').textContent='Accuracy: '+accuracy+'%';
+  document.getElementById('goHigh').textContent='Best time: '+highScore+'s';
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  correctCount=0;totalAttempts=0;gameRunning=true;
+  document.getElementById('correct').textContent=0;
+  document.getElementById('best').textContent=highScore||'-';
+  document.getElementById('feedback').textContent='';
+  buildGrid();randomizeOrder();highlightCurrent();
+  startTime=Date.now();
+  timerInterval=setInterval(()=>{document.getElementById('timer').textContent=Math.round((Date.now()-startTime)/1000)},1000);
+  document.getElementById('ansInput').focus();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'multiplication-table',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='multiplication-table'&&e.data.state){highScore=e.data.state.highScore||0}});
+</script>
+</body>
+</html>

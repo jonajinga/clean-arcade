@@ -109,6 +109,9 @@
   #overlay h1 { font-size: 2rem; }
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
+  .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+  .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+  .diff-btn.active{background:#6366f1;border-color:#6366f1}
   .hidden { display: none !important; }
   .pause-wrap { text-align: center; padding: 6px 0; }
   #pauseBtn {
@@ -144,6 +147,11 @@
 <div id="overlay">
   <h1 id="overlayTitle">Sudoku</h1>
   <p class="final-score hidden" id="finalScore"></p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="window._setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="window._setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="window._setDiff('hard')">Hard</button>
+  </div>
   <p id="overlayMsg">Click to Play</p>
   <button class="play-again hidden" id="playAgain" onclick="window._restart()">New Puzzle</button>
 </div>
@@ -159,6 +167,12 @@
   const finalScoreEl = document.getElementById('finalScore');
   const playAgainBtn = document.getElementById('playAgain');
   const pauseBtn = document.getElementById('pauseBtn');
+
+  let difficulty = 'medium';
+  window._setDiff = function(d) {
+    difficulty = d;
+    document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+  };
 
   let solution, puzzle, board, given, selected, errors, gameState, paused, startTime, elapsed, timerInterval;
 
@@ -230,7 +244,8 @@
   function init() {
     clearInterval(timerInterval);
     solution = generateSolution();
-    puzzle = generatePuzzle(solution, 30);
+    const clues = difficulty === 'easy' ? 42 : difficulty === 'hard' ? 22 : 30;
+    puzzle = generatePuzzle(solution, clues);
     board = puzzle.map(r => [...r]);
     given = puzzle.map(r => r.map(v => v !== 0));
     selected = null;

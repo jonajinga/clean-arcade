@@ -26,6 +26,9 @@ canvas{border:2px solid #6366f1;border-radius:0;max-width:100%;touch-action:none
 .pause-wrap{text-align:center;margin-top:.5rem}
 .pause-btn{padding:.5rem 1.2rem;border:2px solid #6366f1;background:transparent;color:#e2e8f0;border-radius:0;font-size:1.3rem;cursor:pointer}
 .pause-btn:hover{background:#6366f1}
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 </style>
 </head>
 <body>
@@ -35,6 +38,11 @@ canvas{border:2px solid #6366f1;border-radius:0;max-width:100%;touch-action:none
 <h2>Pac-Man</h2>
 <p>Eat all the dots! Avoid ghosts!</p>
 <p style="font-size:.85rem">Arrow keys or swipe to move. Power pellets let you eat ghosts!</p>
+<div class="diff-select">
+  <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+  <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+  <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+</div>
 <button class="btn" onclick="startGame()">Play</button>
 </div>
 </div>
@@ -67,6 +75,11 @@ canvas{border:2px solid #6366f1;border-radius:0;max-width:100%;touch-action:none
 </div>
 
 <script>
+var difficulty='medium';
+function setDiff(d){
+  difficulty=d;
+  document.querySelectorAll('.diff-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===d);});
+}
 const SLUG='pac-man';
 const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d');
@@ -128,6 +141,7 @@ function startGame(){
   document.getElementById('lives').textContent='3';
   document.getElementById('level').textContent='1';
   document.getElementById('high').textContent=highScore;
+  GHOST_INTERVAL=difficulty==='easy'?280:difficulty==='hard'?140:200;
   paused=false;gameStarted=true;
   document.getElementById('pauseBtn').textContent='⏸';
   resetMap();
@@ -140,10 +154,13 @@ function startGame(){
 function resetPositions(){
   pac={r:15,c:9,x:9*CELL+CELL/2,y:15*CELL+CELL/2};
   direction={dr:0,dc:0};nextDirection={dr:0,dc:0};
+  var g1type=difficulty==='easy'?'random':'chase';
+  var g2type=difficulty==='hard'?'chase':'random';
+  var g3type=difficulty==='hard'?'chase':'patrol';
   ghosts=[
-    {r:9,c:8,x:8*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[0],type:'chase',dr:0,dc:-1,scared:false},
-    {r:9,c:9,x:9*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[1],type:'random',dr:0,dc:1,scared:false},
-    {r:9,c:10,x:10*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[2],type:'patrol',dr:-1,dc:0,scared:false,patrolDir:1}
+    {r:9,c:8,x:8*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[0],type:g1type,dr:0,dc:-1,scared:false},
+    {r:9,c:9,x:9*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[1],type:g2type,dr:0,dc:1,scared:false},
+    {r:9,c:10,x:10*CELL+CELL/2,y:9*CELL+CELL/2,color:GHOST_COLORS[2],type:g3type,dr:-1,dc:0,scared:false,patrolDir:1}
   ];
 }
 
@@ -156,7 +173,7 @@ function canMove(r,c){
 
 let lastTime=0,moveAccum=0;
 const MOVE_INTERVAL=150; // ms per tile move
-const GHOST_INTERVAL=200;
+var GHOST_INTERVAL=difficulty==='easy'?280:difficulty==='hard'?140:200;
 let ghostAccum=0;
 
 function gameLoop(ts){

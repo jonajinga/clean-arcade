@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beat Maker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;padding:10px;position:relative}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.pause-btn{background:#334155;margin-top:6px}
+.grid{display:grid;grid-template-columns:60px repeat(16,1fr);gap:2px;margin-bottom:8px}
+.track-label{display:flex;align-items:center;font-size:0.7rem;color:#facc15;padding:2px}
+.cell{width:100%;aspect-ratio:1;background:#1e293b;cursor:pointer;border:1px solid #334155}
+.cell.active{background:#6366f1}
+.cell.playing{box-shadow:inset 0 0 0 2px #facc15}
+.controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:4px}
+.controls button{padding:6px 14px;font-size:0.85rem}
+.tempo{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:0.85rem;justify-content:center}
+.tempo input{width:80px}
+.info{font-size:0.75rem;color:#94a3b8;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<h1>Beat Maker</h1>
+<div class="game-area" id="gameArea">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">4-Track Drum Machine</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Toggle beats on the grid, then play!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div id="gridContainer"></div>
+<div class="controls">
+<button id="playBtn" onclick="togglePlay()">▶ Play</button>
+<button onclick="clearAll()" style="background:#ef4444">Clear</button>
+</div>
+<div class="tempo">
+<span>BPM:</span>
+<input type="range" id="bpmSlider" min="60" max="200" value="120">
+<span id="bpmVal">120</span>
+</div>
+<div class="info">Tap cells to toggle beats. High score saves pattern count.</div>
+</div>
+<script>
+const TRACKS=['Kick','Snare','HiHat','Clap'];
+const STEPS=16;
+let grid=Array.from({length:4},()=>Array(16).fill(false));
+let playing=false,currentStep=0,intervalId=null,bpm=120,highScore=0,patternsCreated=0;
+let audioCtx;
+
+function initAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+}
+
+function playSound(track){
+  initAudio();
+  const t=audioCtx.currentTime;
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.connect(gain);gain.connect(audioCtx.destination);
+  if(track===0){osc.frequency.value=60;osc.type='sine';gain.gain.setValueAtTime(1,t);gain.gain.exponentialRampToValueAtTime(0.01,t+0.15);osc.start(t);osc.stop(t+0.15)}
+  else if(track===1){const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.1,audioCtx.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;const n=audioCtx.createBufferSource();n.buffer=buf;const g=audioCtx.createGain();n.connect(g);g.connect(audioCtx.destination);g.gain.setValueAtTime(0.8,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.1);n.start(t);n.stop(t+0.1);return}
+  else if(track===2){osc.frequency.value=800;osc.type='square';gain.gain.setValueAtTime(0.3,t);gain.gain.exponentialRampToValueAtTime(0.01,t+0.05);osc.start(t);osc.stop(t+0.05)}
+  else{osc.frequency.value=400;osc.type='triangle';gain.gain.setValueAtTime(0.6,t);gain.gain.exponentialRampToValueAtTime(0.01,t+0.08);osc.start(t);osc.stop(t+0.08)}
+}
+
+function buildGrid(){
+  const c=document.getElementById('gridContainer');
+  c.innerHTML='';
+  const g=document.createElement('div');g.className='grid';
+  for(let r=0;r<4;r++){
+    const lbl=document.createElement('div');lbl.className='track-label';lbl.textContent=TRACKS[r];g.appendChild(lbl);
+    for(let s=0;s<16;s++){
+      const cell=document.createElement('div');cell.className='cell';cell.dataset.r=r;cell.dataset.s=s;
+      cell.onclick=()=>{grid[r][s]=!grid[r][s];cell.classList.toggle('active');countPatterns()};
+      g.appendChild(cell);
+    }
+  }
+  c.appendChild(g);
+}
+
+function countPatterns(){
+  let c=0;for(let r=0;r<4;r++)for(let s=0;s<16;s++)if(grid[r][s])c++;
+  patternsCreated=Math.max(patternsCreated,c);
+  if(patternsCreated>highScore){highScore=patternsCreated;saveState()}
+}
+
+function updateGridUI(){
+  const cells=document.querySelectorAll('.cell');
+  cells.forEach(c=>{
+    const r=+c.dataset.r,s=+c.dataset.s;
+    c.classList.toggle('active',grid[r][s]);
+    c.classList.toggle('playing',playing&&s===currentStep);
+  });
+}
+
+function step(){
+  currentStep=(currentStep+1)%16;
+  for(let r=0;r<4;r++){if(grid[r][currentStep])playSound(r)}
+  updateGridUI();
+}
+
+function togglePlay(){
+  initAudio();
+  playing=!playing;
+  document.getElementById('playBtn').textContent=playing?'⏸ Stop':'▶ Play';
+  if(playing){currentStep=-1;intervalId=setInterval(step,60000/bpm/4)}
+  else{clearInterval(intervalId);updateGridUI()}
+}
+
+function clearAll(){
+  grid=Array.from({length:4},()=>Array(16).fill(false));
+  updateGridUI();
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  initAudio();
+}
+
+document.getElementById('bpmSlider').oninput=function(){
+  bpm=+this.value;document.getElementById('bpmVal').textContent=bpm;
+  if(playing){clearInterval(intervalId);intervalId=setInterval(step,60000/bpm/4)}
+};
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'beat-maker',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='beat-maker'&&e.data.state){highScore=e.data.state.highScore||0}});
+
+buildGrid();
+</script>
+</body>
+</html>

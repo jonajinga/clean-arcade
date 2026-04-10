@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Math Race</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:400px;position:relative}
+canvas{display:block;width:100%;height:auto}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.controls{padding:10px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.problem{font-size:1.4rem;font-weight:bold;color:#facc15}
+.answers{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%}
+.ans-btn{background:#1e293b;border:2px solid #334155;padding:10px;cursor:pointer;color:#e2e8f0;font-size:1rem;text-align:center;font-family:inherit}
+.ans-btn:hover{background:#334155}
+.ans-btn.correct{background:#22c55e;border-color:#22c55e}
+.ans-btn.wrong{background:#ef4444;border-color:#ef4444}
+.info{display:flex;justify-content:space-between;width:100%;font-size:0.85rem;color:#94a3b8;padding:0 4px}
+</style>
+</head>
+<body>
+<h1>Math Race</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Math Race</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Answer math problems to speed up your car!<br>60 seconds to reach the finish line.</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Race Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<canvas id="c" width="400" height="200"></canvas>
+<div class="controls">
+<div class="info"><span>Time: <b id="timer">60</b>s</span><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="problem" id="problem">?</div>
+<div class="answers" id="answers"></div>
+</div>
+</div>
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let carX=20,speed=0,score=0,highScore=0,timeLeft=60,gameRunning=false,intervalId,timerInterval;
+let currentAnswer=0,streak=0,finishX=380;
+
+function genProblem(){
+  const ops=['+','-','*'];
+  const op=ops[Math.floor(Math.random()*ops.length)];
+  let a,b;
+  if(op==='*'){a=Math.floor(Math.random()*12)+1;b=Math.floor(Math.random()*12)+1}
+  else{a=Math.floor(Math.random()*50)+10;b=Math.floor(Math.random()*30)+1}
+  let ans;
+  if(op==='+')ans=a+b;else if(op==='-')ans=a-b;else ans=a*b;
+  currentAnswer=ans;
+  document.getElementById('problem').textContent=`${a} ${op} ${b} = ?`;
+  const opts=new Set([ans]);
+  while(opts.size<4)opts.add(ans+Math.floor(Math.random()*21)-10||(ans+1));
+  const arr=Array.from(opts);for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}
+  const c=document.getElementById('answers');c.innerHTML='';
+  arr.forEach(v=>{
+    const d=document.createElement('div');d.className='ans-btn';d.textContent=v;
+    d.onclick=()=>checkAnswer(d,v);c.appendChild(d);
+  });
+}
+
+function checkAnswer(el,v){
+  if(!gameRunning)return;
+  if(v===currentAnswer){
+    el.classList.add('correct');score++;streak++;
+    speed=Math.min(3,0.5+streak*0.3);
+    document.getElementById('score').textContent=score;
+    setTimeout(genProblem,300);
+  } else {
+    el.classList.add('wrong');streak=0;speed=0.2;
+    setTimeout(genProblem,500);
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0f172a';ctx.fillRect(0,0,400,200);
+  // road
+  ctx.fillStyle='#334155';ctx.fillRect(0,100,400,60);
+  ctx.strokeStyle='#facc15';ctx.setLineDash([10,10]);ctx.beginPath();ctx.moveTo(0,130);ctx.lineTo(400,130);ctx.stroke();ctx.setLineDash([]);
+  // finish
+  ctx.fillStyle='#22c55e';ctx.fillRect(finishX,80,4,100);
+  ctx.fillStyle='#22c55e';ctx.font='12px sans-serif';ctx.fillText('FINISH',finishX-18,78);
+  // car
+  ctx.fillStyle='#ef4444';ctx.fillRect(carX,112,30,16);
+  ctx.fillStyle='#1e293b';ctx.fillRect(carX+4,108,10,8);ctx.fillRect(carX+18,108,10,8);
+  // wheels
+  ctx.fillStyle='#e2e8f0';ctx.fillRect(carX+2,128,8,4);ctx.fillRect(carX+20,128,8,4);
+  // progress
+  const pct=Math.min(1,(carX-20)/(finishX-20));
+  ctx.fillStyle='#1e293b';ctx.fillRect(20,180,360,10);
+  ctx.fillStyle='#6366f1';ctx.fillRect(20,180,360*pct,10);
+  ctx.fillStyle='#e2e8f0';ctx.font='10px sans-serif';ctx.fillText(Math.round(pct*100)+'%',190,189);
+}
+
+function update(){
+  if(!gameRunning)return;
+  carX+=speed;
+  if(carX>=finishX){win();return}
+  speed=Math.max(0.1,speed*0.995);
+  draw();
+  requestAnimationFrame(update);
+}
+
+function win(){
+  gameRunning=false;clearInterval(timerInterval);
+  score+=timeLeft;
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goTitle').textContent='You Win!';
+  document.getElementById('goScore').textContent='Score: '+score+' ('+timeLeft+'s bonus)';
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function timeUp(){
+  gameRunning=false;
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goTitle').textContent='Time\'s Up!';
+  document.getElementById('goScore').textContent='Score: '+score;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  carX=20;speed=0.2;score=0;streak=0;timeLeft=60;gameRunning=true;
+  document.getElementById('score').textContent=0;
+  document.getElementById('best').textContent=highScore;
+  document.getElementById('timer').textContent=60;
+  genProblem();
+  timerInterval=setInterval(()=>{timeLeft--;document.getElementById('timer').textContent=timeLeft;if(timeLeft<=0){clearInterval(timerInterval);timeUp()}},1000);
+  update();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'math-race',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='math-race'&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('best').textContent=highScore}});
+draw();
+</script>
+</body>
+</html>

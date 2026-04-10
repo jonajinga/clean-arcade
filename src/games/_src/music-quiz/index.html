@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Music Quiz</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:380px;padding:16px;position:relative;min-height:420px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.score-bar{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8;margin-bottom:8px}
+.status{text-align:center;font-size:0.95rem;margin:12px 0;min-height:28px}
+.play-melody{text-align:center;margin:16px 0}
+.play-melody button{background:#22c55e;padding:12px 28px;font-size:1.1rem}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.choice{background:#1e293b;border:2px solid #334155;padding:12px;cursor:pointer;text-align:center;font-size:0.9rem;transition:background 0.2s}
+.choice:hover{background:#334155}
+.choice.correct{background:#22c55e;border-color:#22c55e;color:#0f172a}
+.choice.wrong{background:#ef4444;border-color:#ef4444}
+.feedback{text-align:center;font-size:0.9rem;margin-top:8px;min-height:24px}
+</style>
+</head>
+<body>
+<h1>Music Quiz</h1>
+<div class="game-area">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Music Quiz</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Listen to the melody, guess the tune!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem">Quiz Complete!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="score-bar"><span>Round: <b id="round">1</b>/10</span><span>Score: <b id="score">0</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="status" id="status">Listen to the melody</div>
+<div class="play-melody"><button onclick="playCurrentMelody()">🎵 Play Melody</button></div>
+<div class="choices" id="choices"></div>
+<div class="feedback" id="feedback"></div>
+</div>
+<script>
+const MELODIES=[
+  {name:'Twinkle Twinkle',notes:[262,262,392,392,440,440,392],durs:[.3,.3,.3,.3,.3,.3,.5]},
+  {name:'Happy Birthday',notes:[262,262,294,262,349,330],durs:[.2,.2,.4,.4,.4,.6]},
+  {name:'Mary Had a Lamb',notes:[330,294,262,294,330,330,330],durs:[.3,.3,.3,.3,.3,.3,.5]},
+  {name:'Jingle Bells',notes:[330,330,330,330,330,330,330,392,262,294,330],durs:[.2,.2,.4,.2,.2,.4,.2,.2,.2,.2,.6]},
+  {name:'Ode to Joy',notes:[330,330,349,392,392,349,330,294,262,262,294,330],durs:[.3,.3,.3,.3,.3,.3,.3,.3,.3,.3,.3,.5]},
+  {name:'London Bridge',notes:[392,440,392,349,330,349,392],durs:[.3,.2,.3,.3,.3,.3,.5]},
+  {name:'Row Your Boat',notes:[262,262,262,294,330,330,294,330,349,392],durs:[.3,.3,.2,.1,.3,.2,.1,.2,.1,.5]},
+  {name:'Frere Jacques',notes:[262,294,330,262,262,294,330,262,330,349,392],durs:[.3,.3,.3,.3,.3,.3,.3,.3,.3,.3,.5]},
+  {name:'Hot Cross Buns',notes:[330,294,262,330,294,262,262,262,262,262,294,294,294,294,330,294,262],durs:[.3,.3,.5,.3,.3,.5,.15,.15,.15,.15,.15,.15,.15,.15,.3,.3,.5]},
+  {name:'Yankee Doodle',notes:[262,262,294,330,262,330,294,262,262,294,330,262],durs:[.2,.2,.2,.2,.2,.2,.2,.4,.2,.2,.2,.4]},
+  {name:'Star Spangled',notes:[392,330,262,330,392,523],durs:[.3,.3,.4,.3,.3,.6]},
+  {name:'Auld Lang Syne',notes:[262,330,330,330,392,349,330,349,392,330,330,392,440],durs:[.3,.3,.2,.3,.3,.3,.2,.2,.3,.3,.2,.3,.5]},
+];
+let audioCtx,currentRound=0,score=0,highScore=0,currentMelody=null,answered=false,rounds=[];
+
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)()}
+
+function playNote(freq,start,dur){
+  const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+  osc.connect(gain);gain.connect(audioCtx.destination);
+  osc.frequency.value=freq;osc.type='sine';
+  gain.gain.setValueAtTime(0.35,start);gain.gain.exponentialRampToValueAtTime(0.01,start+dur*0.9);
+  osc.start(start);osc.stop(start+dur);
+}
+
+function playCurrentMelody(){
+  if(!currentMelody)return;initAudio();
+  let t=audioCtx.currentTime+0.1;
+  currentMelody.notes.forEach((n,i)=>{playNote(n,t,currentMelody.durs[i]);t+=currentMelody.durs[i]+0.05});
+}
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function setupRound(){
+  if(currentRound>=10){endGame();return}
+  answered=false;
+  currentMelody=rounds[currentRound];
+  document.getElementById('round').textContent=currentRound+1;
+  document.getElementById('feedback').textContent='';
+  document.getElementById('status').textContent='Listen, then choose the song';
+  const names=MELODIES.map(m=>m.name);
+  let opts=[currentMelody.name];
+  while(opts.length<4){const n=names[Math.floor(Math.random()*names.length)];if(!opts.includes(n))opts.push(n)}
+  shuffle(opts);
+  const c=document.getElementById('choices');c.innerHTML='';
+  opts.forEach(name=>{
+    const d=document.createElement('div');d.className='choice';d.textContent=name;
+    d.onclick=()=>answer(d,name);c.appendChild(d);
+  });
+}
+
+function answer(el,name){
+  if(answered)return;answered=true;
+  const correct=name===currentMelody.name;
+  if(correct){score++;document.getElementById('score').textContent=score;el.classList.add('correct');document.getElementById('feedback').textContent='Correct!';document.getElementById('feedback').style.color='#22c55e'}
+  else{el.classList.add('wrong');document.getElementById('feedback').textContent='It was: '+currentMelody.name;document.getElementById('feedback').style.color='#ef4444';document.querySelectorAll('.choice').forEach(c=>{if(c.textContent===currentMelody.name)c.classList.add('correct')})}
+  currentRound++;
+  setTimeout(setupRound,1500);
+}
+
+function endGame(){
+  if(score>highScore){highScore=score;saveState()}
+  document.getElementById('goScore').textContent='Score: '+score+'/10';
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  initAudio();score=0;currentRound=0;
+  document.getElementById('score').textContent=0;
+  document.getElementById('best').textContent=highScore;
+  rounds=shuffle([...MELODIES]).slice(0,10);
+  setupRound();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'music-quiz',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='music-quiz'&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('best').textContent=highScore}});
+</script>
+</body>
+</html>

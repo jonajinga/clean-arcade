@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tone Memory</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center}
+.game-area{border:2px solid #6366f1;max-width:100%;width:360px;padding:16px;position:relative;min-height:400px}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(15,23,42,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;padding:20px;text-align:center}
+.overlay.hidden{display:none}
+button{background:#6366f1;color:#e2e8f0;border:none;padding:10px 24px;font-size:1rem;cursor:pointer;border-radius:0;font-family:inherit}
+button:hover{opacity:0.9}
+.pads{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+.pad{aspect-ratio:1;border:2px solid #334155;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:bold;transition:transform 0.1s}
+.pad:active{transform:scale(0.95)}
+.pad.flash{transform:scale(1.05);border-color:#fff}
+.status{text-align:center;font-size:0.9rem;margin:8px 0;min-height:24px}
+.score{display:flex;justify-content:space-between;font-size:0.85rem;color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Tone Memory</h1>
+<div class="game-area" id="gameArea">
+<div class="overlay" id="startOverlay">
+<p style="margin-bottom:12px;font-size:1.1rem">Tone Memory</p>
+<p style="margin-bottom:16px;font-size:0.85rem;color:#94a3b8">Listen to the sequence, then repeat it!</p>
+<button onclick="startGame()">Play</button>
+</div>
+<div class="overlay hidden" id="gameOverOverlay">
+<p style="margin-bottom:8px;font-size:1.2rem" id="goTitle">Game Over!</p>
+<p style="margin-bottom:8px" id="goScore"></p>
+<p style="margin-bottom:16px;color:#94a3b8" id="goHigh"></p>
+<button onclick="startGame()">Play Again</button>
+</div>
+<div class="score"><span>Round: <b id="round">0</b></span><span>Best: <b id="best">0</b></span></div>
+<div class="status" id="status">Press Play to start</div>
+<div class="pads" id="pads"></div>
+</div>
+<script>
+const NOTES=[261.63,293.66,329.63,369.99,392.00,440.00,493.88,523.25];
+const COLORS=['#ef4444','#22c55e','#3b82f6','#facc15','#6366f1','#f97316','#14b8a6','#ec4899'];
+let audioCtx,sequence=[],playerIdx=0,round=0,highScore=0,canPlay=false;
+
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)()}
+
+function playTone(idx,dur=0.3){
+  initAudio();
+  const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+  osc.connect(gain);gain.connect(audioCtx.destination);
+  osc.frequency.value=NOTES[idx];osc.type='sine';
+  gain.gain.setValueAtTime(0.4,audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01,audioCtx.currentTime+dur);
+  osc.start();osc.stop(audioCtx.currentTime+dur);
+}
+
+function flashPad(idx,dur=400){
+  const p=document.querySelectorAll('.pad')[idx];
+  p.classList.add('flash');p.style.background=COLORS[idx];
+  setTimeout(()=>{p.classList.remove('flash');p.style.background='#1e293b'},dur);
+}
+
+function buildPads(){
+  const c=document.getElementById('pads');c.innerHTML='';
+  for(let i=0;i<8;i++){
+    const d=document.createElement('div');d.className='pad';d.style.background='#1e293b';
+    d.style.color=COLORS[i];d.textContent=i+1;
+    d.onclick=()=>handleInput(i);
+    c.appendChild(d);
+  }
+}
+
+function addToSequence(){
+  sequence.push(Math.floor(Math.random()*8));
+  round=sequence.length;
+  document.getElementById('round').textContent=round;
+}
+
+async function playSequence(){
+  canPlay=false;
+  document.getElementById('status').textContent='Listen...';
+  await new Promise(r=>setTimeout(r,500));
+  for(let i=0;i<sequence.length;i++){
+    playTone(sequence[i]);flashPad(sequence[i]);
+    await new Promise(r=>setTimeout(r,Math.max(300,600-round*20)));
+  }
+  canPlay=true;playerIdx=0;
+  document.getElementById('status').textContent='Your turn!';
+}
+
+function handleInput(idx){
+  if(!canPlay)return;
+  playTone(idx,0.2);flashPad(idx,200);
+  if(idx===sequence[playerIdx]){
+    playerIdx++;
+    if(playerIdx>=sequence.length){
+      canPlay=false;
+      document.getElementById('status').textContent='Correct!';
+      if(round>highScore){highScore=round;document.getElementById('best').textContent=highScore;saveState()}
+      setTimeout(()=>{addToSequence();playSequence()},800);
+    }
+  } else {
+    gameOver();
+  }
+}
+
+function gameOver(){
+  canPlay=false;
+  if(round>highScore){highScore=round;saveState()}
+  document.getElementById('goScore').textContent='You reached round '+round;
+  document.getElementById('goHigh').textContent='Best: '+highScore;
+  document.getElementById('gameOverOverlay').classList.remove('hidden');
+}
+
+function startGame(){
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('gameOverOverlay').classList.add('hidden');
+  initAudio();sequence=[];round=0;playerIdx=0;
+  document.getElementById('best').textContent=highScore;
+  addToSequence();playSequence();
+}
+
+function saveState(){try{parent.postMessage({type:'ca-save',slug:'tone-memory',state:{highScore}},'*')}catch(e){}}
+window.addEventListener('message',e=>{if(e.data&&e.data.type==='ca-load'&&e.data.slug==='tone-memory'&&e.data.state){highScore=e.data.state.highScore||0;document.getElementById('best').textContent=highScore}});
+
+buildPads();
+</script>
+</body>
+</html>

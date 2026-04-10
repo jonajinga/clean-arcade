@@ -18,6 +18,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .pause-btn:hover{background:#60a5fa}
 .hud{width:100%;max-width:480px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
 .hidden{display:none}
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 .touch-controls{display:flex;margin-top:10px;gap:10px}
 .touch-btn{background:#3b82f6;color:#e2e8f0;border:none;padding:12px 20px;font-size:1.3rem;cursor:pointer;border-radius:0;min-width:60px;min-height:48px}
 .touch-controls{display:flex}}
@@ -29,6 +32,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <h1>Space Invaders</h1>
 <p>Defend Earth from the alien invasion!</p>
 <p style="font-size:.85rem;color:#94a3b8">Arrow keys to move, Space to shoot</p>
+<div class="diff-select">
+  <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+  <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+  <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+</div>
 <button class="btn" onclick="startGame()">Play</button>
 </div>
 <div class="overlay hidden" id="gameOverOverlay">
@@ -51,6 +59,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <button class="touch-btn" id="tright">▶</button>
 </div>
 <script>
+var difficulty='medium';
+function setDiff(d){
+  difficulty=d;
+  document.querySelectorAll('.diff-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===d);});
+}
 const SLUG='space-invaders';
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -102,12 +115,14 @@ function togglePause(){
 
 function createAliens(){
   aliens=[];
-  const cols=8,rows=4;
+  const cols=difficulty==='easy'?6:difficulty==='hard'?10:8;
+  const rows=difficulty==='easy'?3:difficulty==='hard'?5:4;
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     aliens.push({x:40+c*48,y:40+r*36,w:32,h:24,alive:true,type:r});
   }
   alienDir=1;
-  alienSpeed=0.3+level*0.15;
+  var speedMult=difficulty==='easy'?0.7:difficulty==='hard'?1.4:1;
+  alienSpeed=(0.3+level*0.15)*speedMult;
   alienTimer=0;
   alienDropTimer=0;
 }

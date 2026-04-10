@@ -15,6 +15,9 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 .btn{background:#6366f1;color:#e2e8f0;border:none;padding:.75rem 2rem;font-size:1.2rem;cursor:pointer;font-family:inherit;border-radius:0}
 .btn:hover{background:#818cf8}
 .hidden{display:none}
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 .hud{width:100%;max-width:600px;display:flex;justify-content:space-between;padding:6px 4px;font-size:.9rem;color:#facc15}
 .pause-btn{margin-top:12px;background:#334155;color:#e2e8f0;border:none;padding:.5rem 1.5rem;font-size:1.5rem;cursor:pointer;font-family:inherit;border-radius:0}
 .touch-controls{display:flex;margin-top:10px;gap:8px}
@@ -28,6 +31,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <h1>Asteroids</h1>
 <p>Destroy asteroids before they hit you!</p>
 <p style="font-size:.85rem;color:#94a3b8">Arrow keys to move, Space to shoot</p>
+<div class="diff-select">
+  <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+  <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+  <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+</div>
 <button class="btn" onclick="startGame()">Play</button>
 </div>
 <div class="overlay hidden" id="gameOverOverlay">
@@ -50,6 +58,11 @@ canvas{display:block;border:2px solid #6366f1;max-width:100%;touch-action:none}
 <button class="touch-btn" id="tfire">●</button>
 </div>
 <script>
+var difficulty='medium';
+function setDiff(d){
+  difficulty=d;
+  document.querySelectorAll('.diff-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===d);});
+}
 const SLUG='asteroids';
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
@@ -95,7 +108,8 @@ function spawnAsteroids(n){
     let x,y;
     do{x=Math.random()*W;y=Math.random()*H;}while(Math.hypot(x-ship.x,y-ship.y)<150);
     const a=Math.random()*Math.PI*2;
-    const s=.5+Math.random()*1.5;
+    const speedMult=difficulty==='easy'?0.7:difficulty==='hard'?1.5:1;
+    const s=(.5+Math.random()*1.5)*speedMult;
     const verts=[];
     const nv=8+Math.floor(Math.random()*5);
     for(let j=0;j<nv;j++){
@@ -130,7 +144,8 @@ function initGame(){
   ship={x:W/2,y:H/2,angle:-Math.PI/2,vx:0,vy:0};
   bullets=[];asteroids=[];particles=[];
   gameOver=false;paused=false;invincible=true;invTimer=120;
-  spawnAsteroids(4);
+  var startCount=difficulty==='easy'?2:difficulty==='hard'?6:4;
+  spawnAsteroids(startCount);
   document.getElementById('scoreEl').textContent=0;
   document.getElementById('livesEl').textContent=3;
   document.getElementById('hiEl').textContent=state.highScore||0;
@@ -220,7 +235,8 @@ function update(dt){
   // Next level
   if(asteroids.length===0){
     level++;
-    spawnAsteroids(3+level);
+    var nextCount=difficulty==='easy'?2+level:difficulty==='hard'?4+level:3+level;
+    spawnAsteroids(nextCount);
   }
 }
 

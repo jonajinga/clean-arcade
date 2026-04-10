@@ -91,6 +91,9 @@ canvas {
 .overlay p { color: #94a3b8; margin-bottom: 20px; font-size: 16px; }
 .overlay .btn { width: auto; padding: 12px 36px; font-size: 16px; }
 .hidden { display: none !important; }
+.diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+.diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+.diff-btn.active{background:#6366f1;border-color:#6366f1}
 
 @media (max-width: 500px) {
   .game-wrapper { flex-direction: column; align-items: center; gap: 4px; padding: 4px; }
@@ -115,6 +118,11 @@ canvas {
 <div id="start-overlay" class="overlay" onclick="startGame()">
   <h2>Tetris</h2>
   <p>Arrow keys or swipe to play</p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="setDiff('hard')">Hard</button>
+  </div>
   <button class="btn" onclick="startGame()">Play</button>
 </div>
 
@@ -167,6 +175,12 @@ canvas {
 
 <script>
 (function() {
+  var difficulty = 'medium';
+  window.setDiff = function(d) {
+    difficulty = d;
+    document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+  };
+
   var COLS = 10, ROWS = 20;
   var COLORS = ['#06b6d4','#eab308','#a855f7','#22c55e','#ef4444','#f97316','#3b82f6'];
   var SHAPES = [
@@ -289,7 +303,9 @@ canvas {
       score += pts * level;
       lines += cleared;
       level = Math.floor(lines / 10) + 1;
-      dropTime = Math.max(100, 1000 - (level - 1) * 80);
+      var baseDrop = difficulty === 'easy' ? 1400 : difficulty === 'hard' ? 600 : 1000;
+      var dropDec = difficulty === 'easy' ? 60 : difficulty === 'hard' ? 100 : 80;
+      dropTime = Math.max(100, baseDrop - (level - 1) * dropDec);
       updateUI();
     }
   }
@@ -415,7 +431,8 @@ canvas {
     if (dp) dp.innerHTML = '\u23F8';
     board = createBoard();
     score = 0; level = 1; lines = 0;
-    dropTime = 1000; gameOver = false; paused = false;
+    dropTime = difficulty === 'easy' ? 1400 : difficulty === 'hard' ? 600 : 1000;
+    gameOver = false; paused = false;
     piece = randomPiece();
     nextPiece = randomPiece();
     updateUI();

@@ -54,6 +54,9 @@
   #overlay p { font-size: 1rem; color: #94a3b8; }
   .final-score { font-size: 1.25rem; color: #6366f1; }
   .hidden { display: none !important; }
+  .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+  .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+  .diff-btn.active{background:#6366f1;border-color:#6366f1}
   .pause-wrap { display: none; text-align: center; padding: 6px 0; }
   #pauseBtn {
     width: 40px; height: 40px;
@@ -94,6 +97,11 @@
 <div id="overlay">
   <h1 id="overlayTitle">Flappy Bird</h1>
   <p class="final-score hidden" id="finalScore"></p>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="window._setDiff('easy')">Easy</button>
+    <button class="diff-btn active" onclick="window._setDiff('medium')">Medium</button>
+    <button class="diff-btn" onclick="window._setDiff('hard')">Hard</button>
+  </div>
   <p id="overlayMsg">Tap or Press Space to Play</p>
   <button class="play-again" id="startBtn" onclick="window._restart()" style="pointer-events:auto">Play</button>
   <button class="play-again hidden" id="playAgain" onclick="window._restart()">Play Again</button>
@@ -129,16 +137,24 @@
   resize();
   window.addEventListener('resize', resize);
 
+  let difficulty = 'medium';
+  window._setDiff = function(d) {
+    difficulty = d;
+    document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+  };
+
   const GRAVITY = 0.5;
   const FLAP = -8;
   const PIPE_WIDTH = 52;
-  const PIPE_GAP = 140;
-  const PIPE_SPEED = 2.5;
+  var PIPE_GAP = 140;
+  var PIPE_SPEED = 2.5;
   const BIRD_SIZE = 20;
 
   let bird, pipes, score, highScore = 0, gameState, paused, animId;
 
   function init() {
+    PIPE_GAP = difficulty === 'easy' ? 180 : difficulty === 'hard' ? 110 : 140;
+    PIPE_SPEED = difficulty === 'easy' ? 2 : difficulty === 'hard' ? 3.2 : 2.5;
     bird = { x: GW * 0.25, y: GH / 2, vy: 0 };
     pipes = [];
     score = 0;

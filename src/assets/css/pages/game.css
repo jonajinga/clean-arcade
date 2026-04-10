@@ -45,3 +45,28 @@
   background: var(--slate-600);
   color: var(--white);
 }
+
+/* Share dropdown */
+.share-dropdown {
+  position: fixed;
+  z-index: 200;
+  background: var(--navy-900);
+  border: 1px solid var(--navy-700);
+  box-shadow: var(--shadow-lg);
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+.share-dropdown a {
+  display: block;
+  padding: 8px 14px;
+  font-size: var(--text-xs);
+  color: var(--slate-300);
+  transition: background 0.1s;
+}
+
+.share-dropdown a:hover {
+  background: var(--navy-950);
+  color: var(--accent);
+}

@@ -76,6 +76,9 @@
       background: rgba(74,222,128,0.7);
       position: absolute;
     }
+    .diff-select{display:flex;gap:4px;justify-content:center;margin:8px 0}
+    .diff-btn{padding:6px 16px;font-size:0.85rem;background:#334155;color:#e2e8f0;border:1px solid #475569;cursor:pointer;border-radius:0}
+    .diff-btn.active{background:#6366f1;border-color:#6366f1}
     @media (max-width: 480px) {
       h1 { font-size: 1.2rem; }
       .controls { gap: 0.3rem; }
@@ -86,6 +89,11 @@
 <body>
 <h1 style="font-size:1.2rem;margin:0.5rem 0 0.25rem;color:#facc15;text-align:center">Checkers</h1>
   <h1>Checkers</h1>
+  <div class="diff-select">
+    <button class="diff-btn" onclick="setDifficulty('easy')">Easy</button>
+    <button class="diff-btn active" onclick="setDifficulty('medium')">Medium</button>
+    <button class="diff-btn" onclick="setDifficulty('hard')">Hard</button>
+  </div>
   <div class="controls">
     <button id="btnComputer" class="active" onclick="setMode('computer')">vs Computer</button>
     <button id="btnLocal" onclick="setMode('local')">vs Player</button>
@@ -101,6 +109,12 @@
 
   <script>
     var SIZE = 8;
+    var difficulty = 'medium';
+    function setDifficulty(d) {
+      difficulty = d;
+      document.querySelectorAll('.diff-btn').forEach(function(b) { b.classList.toggle('active', b.textContent.toLowerCase() === d); });
+    }
+
     var board, currentPlayer, gameOver, mode, selected, validMoves, mustJump, multiJumpPiece;
     var myColor;
     var scores = { red: 0, black: 0 };
@@ -403,6 +417,16 @@
     }
 
     /* --- Computer AI --- */
+    function scoreMove(m) {
+      var s = 0;
+      if (m.jumped) s += 10;
+      s += (3.5 - Math.abs(m.toC - 3.5)) * 0.5;
+      s += m.toR * 0.3;
+      if (!board[m.fromR][m.fromC].king && m.toR === 7) s += 5;
+      if (m.fromR === 0 && !board[m.fromR][m.fromC].king) s -= 2;
+      return s;
+    }
+
     function computerMove() {
       if (gameOver || currentPlayer !== 'black') return;
 
@@ -415,32 +439,52 @@
       }
       if (moves.length === 0) return;
 
-      // Prioritize: multi-jumps > single jumps > king moves > forward moves
-      // Simple scoring
-      var best = [];
-      var bestScore = -Infinity;
-      for (var i = 0; i < moves.length; i++) {
-        var m = moves[i];
-        var s = 0;
-        if (m.jumped) s += 10;
-        // Prefer center
-        s += (3.5 - Math.abs(m.toC - 3.5)) * 0.5;
-        // Prefer advancing
-        s += m.toR * 0.3;
-        // Prefer becoming king
-        if (!board[m.fromR][m.fromC].king && m.toR === 7) s += 5;
-        // Avoid back row for non-kings (keep them safe)
-        if (m.fromR === 0 && !board[m.fromR][m.fromC].king) s -= 2;
+      var chosen;
+      if (difficulty === 'easy') {
+        // Random move
+        chosen = moves[Math.floor(Math.random() * moves.length)];
+      } else if (difficulty === 'hard') {
+        // Deeper: evaluate opponent response
+        var bestScore = -Infinity;
+        var best = [];
+        for (var i = 0; i < moves.length; i++) {
+          var m = moves[i];
+          var s = scoreMove(m);
+          // Look one move ahead: simulate and check opponent's best response
+          var savedFrom = board[m.fromR][m.fromC];
+          var savedTo = board[m.toR][m.toC];
+          var savedJumped = m.jumped ? board[m.jumped.r][m.jumped.c] : null;
+          board[m.toR][m.toC] = savedFrom;
+          board[m.fromR][m.fromC] = null;
+          if (m.jumped) board[m.jumped.r][m.jumped.c] = null;
+          var oppMoves = getAllMoves('red');
+          var oppBest = -Infinity;
+          for (var j = 0; j < oppMoves.length; j++) {
+            var os = 0;
+            if (oppMoves[j].jumped) os += 10;
+            if (os > oppBest) oppBest = os;
+          }
+          s -= oppBest * 0.5;
+          // Restore
+          board[m.fromR][m.fromC] = savedFrom;
+          board[m.toR][m.toC] = savedTo;
+          if (m.jumped) board[m.jumped.r][m.jumped.c] = savedJumped;
 
-        if (s > bestScore) {
-          bestScore = s;
-          best = [m];
-        } else if (s === bestScore) {
-          best.push(m);
+          if (s > bestScore) { bestScore = s; best = [m]; }
+          else if (s === bestScore) best.push(m);
         }
+        chosen = best[Math.floor(Math.random() * best.length)];
+      } else {
+        // Medium: greedy scoring
+        var best = [];
+        var bestScore = -Infinity;
+        for (var i = 0; i < moves.length; i++) {
+          var s = scoreMove(moves[i]);
+          if (s > bestScore) { bestScore = s; best = [moves[i]]; }
+          else if (s === bestScore) best.push(moves[i]);
+        }
+        chosen = best[Math.floor(Math.random() * best.length)];
       }
-
-      var chosen = best[Math.floor(Math.random() * best.length)];
       selected = { r: chosen.fromR, c: chosen.fromC };
       validMoves = [chosen];
       render();
