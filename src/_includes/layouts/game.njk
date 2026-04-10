@@ -20,6 +20,30 @@ bodyClass: game-active
   </div>
 </section>
 
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "{{ game.title }}",
+  "description": "{{ game.description }}",
+  "url": "{{ meta.url }}/games/{{ game.slug }}/",
+  "genre": "{{ game.category }}",
+  "gamePlatform": "Web Browser",
+  "playMode": "SinglePlayer",
+  "applicationCategory": "Game",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "{{ meta.title }}"
+  }
+}
+</script>
+
 <script>
 var GAME_SLUG = "{{ game.slug }}";
 </script>

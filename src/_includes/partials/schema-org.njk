@@ -5,6 +5,24 @@
   "name": "{{ meta.title }}",
   "url": "{{ meta.url }}",
   "description": "{{ meta.description }}",
-  "inLanguage": "{{ meta.language }}"
+  "inLanguage": "{{ meta.language }}",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "{{ meta.url }}/#search={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
 }
 </script>
+{% if game %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Games", "item": "{{ meta.url }}/" },
+    { "@type": "ListItem", "position": 2, "name": "{{ game.category | capitalize }}", "item": "{{ meta.url }}/#category={{ game.category }}" },
+    { "@type": "ListItem", "position": 3, "name": "{{ game.title }}" }
+  ]
+}
+</script>
+{% endif %}
